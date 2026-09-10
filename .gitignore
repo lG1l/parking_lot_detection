@@ -4,7 +4,15 @@ Thumbs.db
 
 # Claude Code
 .claude/
+CLAUDE.md
+CLAUDE.local.md
+.mcp.json
 Task.md
+
+# Codex
+.codex/
+AGENTS.md
+AGENTS.override.md
 
 # 환경 변수 / 비밀 정보
 .env
