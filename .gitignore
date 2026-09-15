@@ -21,6 +21,12 @@ AGENTS.override.md
 *.pem
 *.key
 
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+
 # Python
 __pycache__/
 *.py[cod]
