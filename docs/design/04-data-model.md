@@ -1,9 +1,9 @@
 # 04. 데이터 모델
 
-> 마지막 수정: 2026-09-17
+> 마지막 수정: 2026-09-18
 > 표시: 🚧 미정 · ⚠️ 확인 필요 · 🔐 멘토 승인 필요
 >
-> U-21·U-22·U-23을 팀원 2가 정리해(D-24, D-25, D-26) 본문을 작성했고, 4.10의 DDL 규칙을 D-27로, 관리자 업로드 방식(U-14)을 D-28로, 차량·파손 부위 입력 방식(U-13 일부)을 D-29로, 세션 저장 방식을 D-30으로 더했다. 일곱 결정 모두 상태는 **"확정 필요"** 다. 특히 **U-23(트랙 파일 형식)과 U-13(입력 방식)은 담당이 팀장**이므로 팀장이 확인해야 확정된다. 이 장의 내용을 전제로 백엔드 구현을 시작해도 되지만, 뒤집힐 수 있다는 것을 알고 진행한다.
+> U-21·U-22·U-23을 팀원 2가 정리해(D-24, D-25, D-26) 본문을 작성했고, 4.10의 DDL 규칙을 D-27로, 관리자 업로드 방식(U-14)을 D-28로, 차량·파손 부위 입력 방식(U-13 일부)을 D-29로, 세션 저장 방식을 D-30으로, 사건 지점 고정 방식을 D-32로, 중복 저장 정리를 D-33~D-35로 더했다. 열한 결정 모두 상태는 **"확정 필요"** 다. 특히 **U-23(트랙 파일 형식)과 U-13(입력 방식)은 담당이 팀장**이므로 팀장이 확인해야 확정된다. 이 장의 내용을 전제로 백엔드 구현을 시작해도 되지만, 뒤집힐 수 있다는 것을 알고 진행한다.
 
 ## 4.1 전체 구조
 
@@ -233,17 +233,16 @@ users ──┬──< sessions        (로그인 세션)
 
 ```json
 {
-  "damage_bbox": [940, 470, 1000, 610],
-  "sides": ["right"]
+  "damage_bbox": [940, 470, 1000, 610]
 }
 ```
 
 | 키 | 뜻 |
 |---|---|
 | `damage_bbox` | 사용자가 그린 파손 부위. 원본 해상도 기준 픽셀 |
-| `sides` | `damage_bbox`가 차량 영역의 어느 쪽에 붙어 있는지 자동으로 계산한 값. `left`·`right`·`top`·`bottom` |
 
-- `sides`는 사용자가 고르는 것이 아니라 **백엔드가 두 사각형을 비교해 채운다.** 룰이 "파손 부위 쪽 인접 공간"(PRD 3.3)을 정할 때 쓴다.
+- 파손 부위가 차량의 어느 쪽인지(`sides`: `left`·`right`·`top`·`bottom`의 배열)는 **저장하지 않는다.** 2단계를 시작할 때 GPU 워커가 `damage_bbox`와 `vehicle_selections.payload.bbox`를 비교해 계산한다. 룰이 "파손 부위 쪽 인접 공간"(PRD 3.3)을 정할 때 쓴다. (D-34)
+  - 저장하면 사용자가 차량 선택만 다시 했을 때 옛 차량 기준의 값이 남는다. 두 사각형이 서로 다른 테이블에 있어 한쪽만 고쳐질 수 있기 때문이다.
 - 자유 드로잉(폴리곤)이 아니라 **사각형 하나**로 받는다. 정지 장면에는 파손이 보이지 않아 사용자가 기억으로 대략 찍는 입력이고, 룰의 근접 판정 폭에 외곽 몇 px 차이는 묻히기 때문이다. 근거와 바꿀 신호는 [11장 D-29](11-decisions.md#d-29-본인-차량과-파손-부위는-정지-장면-위에서-두-번-드래그해-입력한다).
 - ⚠️ **룰이 실제로 무엇을 입력으로 받을지는 여전히 U-13(팀장, 06장)이다.** 근접 판정 폭, 인접 영역을 어디까지로 볼지가 정해지면 `schema_version`을 올려 필요한 값을 더한다. (D-25)
 - ⚠️ **값 검증은 DB가 해 주지 않는다.** 백엔드(Pydantic)가 `schema_version`별로 검증한다. 검증 규칙은 05장 입력 저장 API에 반드시 적는다. (D-25)
@@ -256,36 +255,36 @@ users ──┬──< sessions        (로그인 세션)
 |---|---|---|
 | `id` | bigserial PK | |
 | `analysis_job_id` | bigint FK → analysis_jobs | |
-| `judged_at_sec` | double precision | 판정 시점(원본 시간) |
-| `start_sec`, `end_sec` | double precision | 후보 구간(원본 시간). 불변 조건 7 |
+| `judged_at_sec` | double precision | 판정 시점(원본 시간). 불변 조건 7 |
 | `rule_name` | text | 어느 룰이 잡았는지. 목록은 🚧 (U-13) |
 | `track_ref` | text | 근거가 된 트랙. `{청크 번호}:{track_id}` 형식 (4.8) |
 | `vlm_score` | integer | 0~100. VLM 호출 전에는 비어 있다 |
 | `rank` | integer | 점수순 정렬 결과. 1부터 |
 | `batch_no` | integer | 몇 번째 묶음인지. 1부터 |
-| `verdict` | text | `unseen`(아직 안 봄) · `not_found`(못 찾음) · `found`(찾음) |
-| `verdict_at` | timestamptz | 사용자가 판단한 시각 |
+| `verdict` | text | `unseen`(아직 안 봄) · `not_found`(못 찾음). "찾음"은 여기에 적지 않는다 (D-35) |
+| `verdict_at` | timestamptz | 사용자가 "못 찾음"을 고른 시각 |
 | `created_at` | timestamptz | |
 
 - **VLM은 후보를 지우지 않는다.** 점수를 매기기 전후로 행 수가 같다. (불변 조건 4)
-- 사건 지점(= `judged_at_sec + 5초`)과 클립 구간은 01장 1.6의 상수로 계산한다. 따로 저장하지 않는다.
+- 후보는 **판정 시점 하나만** 저장한다. 사건 지점(= `judged_at_sec + 5초`)은 01장 1.6의 상수로 계산한다. 클립 구간은 클립을 만들 때 계산해 `candidate_clips`에만 저장한다. (D-33)
+  - ⚠️ 연속된 판정을 하나로 합치는 규칙(U-13, 팀장)에 따라 후보가 "구간"을 가져야 하면, 그때 후보 구간 칼럼을 더한다.
 - 판단(`verdict`)은 클립이 아니라 후보에 붙인다. 클립은 다시 만들 수 있지만 사용자의 판단은 후보 하나에 대한 것이기 때문이다.
+- **"찾음"은 `pinned_incidents` 한 곳에만 기록한다.** "찾음"은 작업당 한 번뿐이고 그 뒤로 작업은 끝 상태(`pinned`)라, 후보마다 "찾음" 칸을 둘 필요가 없다. 두 곳에 적으면 서로 어긋날 수 있다. 찾음을 고른 후보의 `verdict`는 `unseen`으로 남는다. (D-35)
 
 ### candidate_clips
 
-후보의 마스킹본 클립. 후보 1건에 클립 1개가 원칙이지만, 다시 만들면 행이 늘어날 수 있어 1:N으로 둔다.
+후보의 마스킹본 클립. 후보 1건에 클립 1개가 원칙이지만, 다시 만들면 행이 늘어날 수 있어 1:N으로 둔다. 다시 만든 클립은 **새 행, 새 키**로 저장하고 이전 파일을 덮어쓰지 않는다. 고정된 클립이 나중에 바뀌지 않게 하기 위해서다. (D-32)
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | `id` | bigserial PK | |
-| `candidate_id` | bigint FK → candidates | |
-| `batch_no` | integer | 몇 번째 묶음에서 만들었는지 |
-| `start_sec`, `end_sec` | double precision | 원본 시간 기준 구간. 불변 조건 7 |
+| `candidate_id` | bigint FK → candidates | 몇 번째 묶음인지는 이 후보의 `batch_no`로 본다 (D-33) |
+| `start_sec`, `end_sec` | double precision | 원본 시간 기준 구간. 판정 시점 −10초 ~ +20초를 영상 경계에서 잘라낸 값 (4.7). 불변 조건 7 |
 | `masked_s3_key` | text | 마스킹본 버킷 키 (4.9) |
 | `status` | text | `pending` · `running` · `done` · `failed` |
 | `created_at` | timestamptz | 묶음별 소요 시간은 이 값으로 본다 |
 
-- 사용자에게 주는 재생 URL은 이 행의 `masked_s3_key`로만 발급한다. (불변 조건 1)
+- 사용자에게 주는 재생 URL은 이 행의 `masked_s3_key`로만 발급한다. 고정한 사건 지점도 이 행을 가리키므로 같은 키로 재생한다. (불변 조건 1, D-32)
 
 ### pinned_incidents
 
@@ -295,10 +294,40 @@ users ──┬──< sessions        (로그인 세션)
 |---|---|---|
 | `id` | bigserial PK | |
 | `analysis_job_id` | bigint FK → analysis_jobs, UNIQUE | |
-| `candidate_id` | bigint FK → candidates | |
-| `start_sec`, `end_sec` | double precision | 원본 시간 기준 시작·끝. 화면에 표시한다 |
-| `masked_s3_key` | text | 고정해 보관하는 클립 키 (4.9) |
+| `candidate_clip_id` | bigint FK → candidate_clips | 고정한 클립 |
 | `pinned_at` | timestamptz | |
+
+- **고정은 파일을 복사하지 않는다. 고정한 클립 행을 가리키기만 한다.** (D-32) 재생 URL은 그 클립의 `masked_s3_key`로, 경찰에게 넘길 원본 기준 시작·끝은 그 클립의 `start_sec`·`end_sec`로 얻는다.
+
+  ```sql
+  SELECT c.start_sec, c.end_sec, c.masked_s3_key
+    FROM pinned_incidents p
+    JOIN candidate_clips c ON c.id = p.candidate_clip_id
+   WHERE p.analysis_job_id = 42;
+  ```
+
+- 어느 후보인지는 `candidate_clips.candidate_id`로 따라간다. `candidate_id`를 따로 두지 않는다. 두 FK를 함께 두면 서로 다른 후보를 가리키는 어긋남이 생길 수 있기 때문이다.
+- 고정할 때 백엔드는 **그 클립이 요청한 작업의 클립인지, `status`가 `done`인지** 확인한다. FK는 클립이 있는지만 볼 뿐 어느 작업의 것인지는 보지 않는다. 확인하지 않으면 다른 사용자의 클립 번호로 고정해 그 재생 URL을 받을 수 있다. (D-35)
+
+  ```sql
+  SELECT 1
+    FROM candidate_clips c
+    JOIN candidates d ON d.id = c.candidate_id
+   WHERE c.id = :clip_id AND d.analysis_job_id = :job_id AND c.status = 'done';
+  ```
+
+- **전이 9(`ready` → `pinned`, "찾음")는 한 트랜잭션으로 쓴다.** 상태를 조건부로 바꾸고, 바뀐 행이 없으면(이미 고정됨) 되돌린다. 중간에 실패하면 둘 다 취소되므로 "상태는 `pinned`인데 고정 행이 없는" 경우가 생기지 않는다. (D-35)
+
+  ```sql
+  BEGIN;
+  UPDATE analysis_jobs SET status = 'pinned', updated_at = now()
+   WHERE id = :job_id AND status = 'ready';        -- 0행이면 ROLLBACK
+  -- 위의 클립 확인. 없으면 ROLLBACK
+  INSERT INTO pinned_incidents (analysis_job_id, candidate_clip_id) VALUES (:job_id, :clip_id);
+  COMMIT;
+  ```
+- `candidate_clip_id` FK에는 CASCADE를 걸지 않는다. 그래서 고정된 클립 행만 따로 지우려 하면 DB가 거부한다. 분석 작업째 지울 때는 두 행이 함께 지워진다.
+- 고정 해제(PRD 4장 ⚠️)는 이 행을 지우는 것으로 끝난다. S3에서 지울 파일이 없다.
 
 ## 4.3 분석 상태와 전이 규칙
 
@@ -332,7 +361,7 @@ users ──┬──< sessions        (로그인 세션)
 | 6 | `stage1_input_done` → `stage2_running` | 모든 청크가 `done`이고 입력이 있을 때. 워커가 이어서 2단계를 실행한다 | 워커 | `stage1_ended_at`, `stage2_started_at` |
 | 7 | `stage1_done` → `stage2_running` | 입력이 들어와 백엔드가 2단계 작업을 SQS에 넣고, 워커가 그 메시지를 꺼냈을 때 | 워커 | `input_completed_at`(백엔드), `stage2_started_at` |
 | 8 | `stage2_running` → `ready` | 첫 묶음 후보 클립이 모두 만들어졌을 때 | 워커 | `stage2_ended_at` |
-| 9 | `ready` → `pinned` | 사용자가 "찾음"을 골랐을 때 | 백엔드 | `pinned_incidents` 행 생성 |
+| 9 | `ready` → `pinned` | 사용자가 "찾음"을 골랐을 때 | 백엔드 | `pinned_incidents` 행 생성. 상태 변경과 **한 트랜잭션** (D-35) |
 | 10 | `ready` → `batch_running` | 묶음을 다 보고 "못 찾음"이며 남은 후보가 있을 때 | 백엔드→워커 | 백엔드가 `next_batch` 작업을 SQS에 넣는다 |
 | 11 | `batch_running` → `ready` | 다음 묶음 클립이 만들어졌을 때 | 워커 | |
 | 12 | `ready` → `exhausted` | 묶음을 다 보고 "못 찾음"이며 남은 후보가 없을 때 | 백엔드 | |
@@ -409,10 +438,10 @@ SELECT count(*)
 | 영상 안의 시간 | `*_sec` | double precision | **원본 영상 시작부터의 경과 초** |
 | 벽시계 시각 | `*_at` | timestamptz | UTC로 저장한다 |
 
-- 모든 후보·후보 클립·고정된 사건 지점은 원본 시간 기준 시작·끝을 가진다. **청크로 자르거나 클립으로 가공한 뒤에도 이 값이 유지된다.** (불변 조건 7)
+- 후보는 원본 시간 기준 판정 시점을, 후보 클립은 원본 시간 기준 시작·끝을 가진다. 고정된 사건 지점은 가리키는 클립의 값을 그대로 쓴다. **청크로 자르거나 클립으로 가공한 뒤에도 이 값이 유지된다.** (불변 조건 7, D-33)
   - 청크 3번이 원본 720초에서 시작하면, 그 청크의 트랙에 적히는 `t`는 0이 아니라 720.0부터다.
   - 30초짜리 클립 안의 시간(0~30초)은 DB에 저장하지 않는다. 저장하는 것은 원본 기준 `start_sec`·`end_sec`뿐이다.
-- 후보 클립 구간은 `판정 시점 −10초 ~ +20초`로 계산한다. 영상 경계를 넘으면 잘라내고, 그 결과를 `start_sec`·`end_sec`에 저장한다. 따라서 클립 길이가 30초보다 짧을 수 있다. (01장 1.6)
+- 후보 클립 구간은 `판정 시점 −10초 ~ +20초`로 계산한다. 영상 경계를 넘으면 잘라내고, 그 결과를 `candidate_clips.start_sec`·`end_sec`에 저장한다. 따라서 클립 길이가 30초보다 짧을 수 있다. (01장 1.6)
 
 ## 4.8 청크별 트랙 결과 파일 형식
 
@@ -460,11 +489,12 @@ videos/{video_id}/original.mp4
 
 ```
 videos/{video_id}/stills/{t_sec}.jpg          예: stills/43200.jpg
-videos/{video_id}/clips/{candidate_id}.mp4    예: clips/1187.mp4
-videos/{video_id}/pinned/{pinned_id}.mp4      예: pinned/9.mp4
+videos/{video_id}/clips/{candidate_clip_id}.mp4   예: clips/1187.mp4
 ```
 
 - `{t_sec}`는 소수점을 버린 정수 초로 쓴다. 정지 장면은 5분 단위라 겹치지 않는다.
+- 클립 키는 후보 번호가 아니라 **클립 행 번호**(`candidate_clips.id`)로 짓는다. 후보 번호로 지으면 클립을 다시 만들 때 같은 파일을 덮어써서, 이미 고정한 사건 지점의 영상이 바뀐다. (D-32)
+- 사건 지점을 고정해도 파일을 따로 만들지 않는다. 고정은 `clips/`의 파일을 그대로 가리킨다. (D-32)
 - 사용자에게 주는 재생 URL은 **이 버킷에서만** 발급한다.
 - 클립은 H.264 코덱 MP4로 만든다. 브라우저 `<video>` 태그가 재생해야 하기 때문이다. (D-08)
 
@@ -588,23 +618,20 @@ CREATE TABLE damage_inputs (
 CREATE TABLE candidates (
   id              bigserial PRIMARY KEY,
   analysis_job_id bigint           NOT NULL REFERENCES analysis_jobs(id) ON DELETE CASCADE,
-  judged_at_sec   double precision NOT NULL,
-  start_sec       double precision NOT NULL,
-  end_sec         double precision NOT NULL,
+  judged_at_sec   double precision NOT NULL,   -- 구간은 저장하지 않는다 (D-33)
   rule_name       text             NOT NULL,   -- 목록은 🚧 (U-13)
   track_ref       text             NOT NULL,   -- '{청크 번호}:{track_id}' (4.8)
   vlm_score       integer,                     -- 0~100. VLM 호출 전에는 비어 있다
   rank            integer,
   batch_no        integer,
-  verdict         text             NOT NULL DEFAULT 'unseen',
+  verdict         text             NOT NULL DEFAULT 'unseen',   -- 'unseen' | 'not_found'. 찾음은 pinned_incidents (D-35)
   verdict_at      timestamptz,
   created_at      timestamptz      NOT NULL DEFAULT now()
 );
 
 CREATE TABLE candidate_clips (
   id            bigserial PRIMARY KEY,
-  candidate_id  bigint           NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
-  batch_no      integer          NOT NULL,
+  candidate_id  bigint           NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,   -- 묶음 번호는 후보에서 (D-33)
   start_sec     double precision NOT NULL,
   end_sec       double precision NOT NULL,
   masked_s3_key text,                          -- 완료 후 채운다
@@ -613,13 +640,10 @@ CREATE TABLE candidate_clips (
 );
 
 CREATE TABLE pinned_incidents (
-  id              bigserial PRIMARY KEY,
-  analysis_job_id bigint           NOT NULL UNIQUE REFERENCES analysis_jobs(id) ON DELETE CASCADE,
-  candidate_id    bigint           NOT NULL REFERENCES candidates(id),
-  start_sec       double precision NOT NULL,
-  end_sec         double precision NOT NULL,
-  masked_s3_key   text             NOT NULL,
-  pinned_at       timestamptz      NOT NULL DEFAULT now()
+  id                bigserial PRIMARY KEY,
+  analysis_job_id   bigint      NOT NULL UNIQUE REFERENCES analysis_jobs(id) ON DELETE CASCADE,
+  candidate_clip_id bigint      NOT NULL REFERENCES candidate_clips(id),   -- CASCADE 없음 (D-32)
+  pinned_at         timestamptz NOT NULL DEFAULT now()
 );
 ```
 
@@ -657,6 +681,7 @@ CREATE INDEX idx_clips_candidate     ON candidate_clips (candidate_id);
 | `analysis_jobs` 아래 테이블의 FK | 모두 `ON DELETE CASCADE` | 영상 1건을 지울 때 관련 행이 함께 지워진다. S3에서 `videos/{video_id}/` 접두사 하나만 지우면 되는 것(4.9)과 짝이 맞는다 |
 | `videos → users` FK | CASCADE를 걸지 **않는다**(기본 동작) | 사용자를 지웠다고 영상과 분석 결과가 사라지면 안 된다. 참조가 남아 있으면 삭제가 거부된다 |
 | `upload_tokens → users`, `sessions → users` FK | CASCADE를 건다 | 링크와 세션은 짧게 살고 만료되는 임시 값이라 계정과 함께 사라져도 된다 (D-30) |
+| `pinned_incidents → candidate_clips` FK | CASCADE를 걸지 **않는다** | 고정한 클립 행만 따로 지워지면 사건 지점이 사라진다. 분석 작업째 지울 때는 위의 CASCADE로 함께 지워진다 (D-32) |
 | `videos → upload_tokens` FK | `ON DELETE SET NULL` | 링크 행이 지워져도 영상은 남아야 한다. 지워지면 "주인이 직접 올린 것"과 구분이 없어질 뿐이고, 영상의 주인은 `owner_user_id`가 따로 들고 있다 |
 | `updated_at` 갱신 | 트리거를 쓰지 않고 **UPDATE 문에 직접 쓴다** | 상태를 바꾸는 UPDATE는 4.4처럼 `WHERE status = ...`가 붙은 조건부 문장이다. 같은 문장에서 함께 쓰는 편이 읽기 쉽고, 트리거가 숨어서 도는 것보다 추적하기 낫다 |
 | `NOT NULL` 기준 | 행을 만드는 시점에 값을 알 수 있으면 `NOT NULL`, 나중에 채우면 NULL 허용 | `videos.duration_sec`처럼 워커가 나중에 채우는 칼럼은 NULL이어야 한다. 주석으로 "완료 후 채운다"를 적어 둔다 |
@@ -687,6 +712,10 @@ CREATE INDEX idx_clips_candidate     ON candidate_clips (candidate_id);
 - 관리자는 계정 없이 업로드 전용 일회용 링크로 올린다: D-28 (U-14 해결)
 - 차량·파손 부위는 두 번 드래그로 입력하고 본인 차량은 추적하지 않는다: D-29 (U-13 일부 해결)
 - 로그인 세션은 DB 테이블 + HttpOnly 쿠키: D-30
+- 사건 지점 고정은 파일 복사 없이 클립 행 참조: D-32
+- 후보는 판정 시점만, 구간·묶음 번호는 한 곳에만: D-33
+- 파손 부위 방향(`sides`)은 저장하지 않고 워커가 계산: D-34
+- "찾음"은 `pinned_incidents` 한 곳에만, 전이 9는 한 트랜잭션: D-35
 - 두 단계 분석과 상태 표시: D-05, [02장 2.5](02-architecture.md#25-처리-흐름-두-단계-분석)
 - DB는 백엔드 EC2의 PostgreSQL: D-17
 - 작업 전달은 SQS, 상태는 DB: D-16
