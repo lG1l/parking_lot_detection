@@ -175,8 +175,9 @@ Set-Cookie: sid=Jx3k...(랜덤 문자열); HttpOnly; Path=/; Max-Age=604800
 {"id": 1, "login_id": "demo", "name": "시연용"}
 ```
 
-- `sessions` 행을 새로 만들고, 그 `token`을 쿠키 `sid`로 내려준다. 유효 시간은 01장 1.6(7일, 연장 없음)이고 `Max-Age`도 같은 값이다.
-- 쿠키 속성: `HttpOnly`는 켜고 `Secure`는 켜지 않는다(HTTPS 없음, D-31). `SameSite`는 08장에서 정한다 🚧.
+- `sessions` 행을 새로 만든다. 행에는 토큰의 SHA-256 해시를 넣고(D-59), 평문 토큰을 쿠키 `sid`로 내려준다. 유효 시간은 01장 1.6(7일, 연장 없음)이고 `Max-Age`도 같은 값이다.
+- 쿠키 속성: `HttpOnly`는 켜고 `Secure`는 켜지 않는다(HTTPS 없음, D-31). `SameSite`는 `Lax`다 (D-60, [08장 8.5](08-auth.md#85-로그인-세션과-쿠키)).
+- 비밀번호는 bcrypt 해시로 확인한다 (D-58, [08장 8.3](08-auth.md#83-비밀번호-저장-d-58)).
 - 이미 로그인한 상태에서 다시 불러도 에러가 아니다. 새 세션을 만든다.
 - 같은 계정으로 여러 브라우저에서 동시에 로그인할 수 있다. 세션은 브라우저마다 한 행이다.
 - 응답 본문은 3번 `GET /api/auth/me`와 같다.
@@ -262,7 +263,7 @@ Set-Cookie: sid=; HttpOnly; Path=/; Max-Age=0
 ```
 
 - `upload_tokens` 행을 만든다. 주인은 로그인한 사용자, `expires_at`은 지금 + 01장 1.6(24시간)이다.
-- `token`은 추측할 수 없는 랜덤 문자열이다. 만드는 방법은 08장에서 정한다.
+- `token`은 `secrets.token_urlsafe(32)`로 만든 43자 랜덤 문자열이다. **행에는 해시만 저장하고 평문은 이 응답에만 넣는다** (D-59, [08장 8.4](08-auth.md#84-랜덤-토큰-만들기-d-59)).
 - **응답에 링크 주소 전체를 넣지 않고 `token`만 준다.** 링크 주소 모양(예: `http://<백엔드 IP>/#/upload/{token}`)은 프론트의 화면 경로라서 프론트가 지금 열린 주소를 앞에 붙여 만든다. 백엔드는 자기 퍼블릭 IP를 모르고, 켤 때마다 바뀐다 (D-12).
 - **새로 발급하면 이 사용자의 이전 링크는 무효가 된다.** 행을 만들기 전에 아래를 실행한다. 살아 있는 링크는 항상 가장 최근 것 하나뿐이다 (D-28).
 
@@ -319,12 +320,13 @@ UPDATE upload_tokens
 ```sql
 UPDATE upload_tokens
    SET used_at = now()
- WHERE token = :token
+ WHERE token_hash = :token_hash
    AND used_at IS NULL
    AND expires_at > now()
 RETURNING id, owner_user_id;
 ```
 
+   - `:token_hash`는 주소의 `token`을 `token_hash()`로 거친 값이다 (D-59). 5·7번도 같은 방법으로 행을 찾는다.
    - 1행이 나오면 이 요청이 링크를 가져갔다. 0행이면 다시 조회해 "링크를 쓸 수 없는 경우의 코드" 중 맞는 것을 돌려준다.
    - 관리자가 [업로드]를 두 번 눌러 요청이 동시에 두 번 와도 한쪽만 1행을 받는다. 다른 쪽은 `UPLOAD_TOKEN_USED`를 받는다. 프론트는 첫 요청을 보낸 뒤 버튼을 막는다.
 3. 같은 트랜잭션에서 `videos` 행을 만든다. 주인은 링크의 주인이고, `upload_token_id`·`original_filename`·`size_bytes`를 채운다. S3 키 `videos/{video_id}/original.{ext}`는 행 번호가 있어야 정해지므로, 번호를 먼저 받고(`nextval`) 키를 채워 넣는다 (04장 4.9).
@@ -825,7 +827,6 @@ SELECT count(*) FROM candidates
 |---|---|
 | `code`별 한국어 문구, 상태별 화면 문구 | 07장 (U-15) |
 | 화면 상태 조회 주기(5~10초) | U-18 → 정해지면 01장 1.6 |
-| 쿠키 `SameSite` 속성, `token` 만드는 방법, 비밀번호 해시 | 08장 |
 | 워커가 후보 0건일 때 2단계를 끝내는 방법 (상태는 D-50) | 06장 |
 | 이전 묶음을 다시 보는 조회(`?batch_no=`) | 07장에서 필요해지면 (D-37) |
 | 저장된 입력을 돌려주는 `GET .../input` | 07장에서 필요해지면 (D-49) |

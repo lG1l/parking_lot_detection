@@ -46,13 +46,13 @@ users ──┬──< sessions        (로그인 세션)
 
 ### users
 
-계정은 **피해자 것 한 종류뿐**이다. 주차장 관리자는 계정을 만들지 않고 업로드 전용 링크로만 올리므로 역할(role) 칼럼이 없다. (D-28) 비밀번호 해시 방식과 쿠키 속성의 세부는 08장에서 정한다. 🚧
+계정은 **피해자 것 한 종류뿐**이다. 주차장 관리자는 계정을 만들지 않고 업로드 전용 링크로만 올리므로 역할(role) 칼럼이 없다. (D-28) 비밀번호 해시 방식(bcrypt, D-58)과 쿠키 속성(`SameSite=Lax`, D-60)은 [08장](08-auth.md)에서 정했다.
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | `id` | bigserial PK | |
 | `login_id` | text UNIQUE | 로그인 아이디 |
-| `password_hash` | text | 평문 비밀번호를 저장하지 않는다 |
+| `password_hash` | text | bcrypt 해시 문자열 60자. 평문 비밀번호를 저장하지 않는다 (D-58, [08장 8.3](08-auth.md#83-비밀번호-저장-d-58)) |
 | `name` | text | 화면 표시용 이름 |
 | `created_at` | timestamptz | |
 
@@ -63,12 +63,12 @@ users ──┬──< sessions        (로그인 세션)
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | `id` | bigserial PK | |
-| `token` | text UNIQUE | 쿠키에 담기는 랜덤 문자열 |
+| `token_hash` | text UNIQUE | 쿠키에 담기는 랜덤 문자열(43자)의 SHA-256 해시 64자. 평문은 저장하지 않는다 (D-59, [08장 8.4](08-auth.md#84-랜덤-토큰-만들기-d-59)) |
 | `user_id` | bigint FK → users | 누구의 세션인가 |
 | `expires_at` | timestamptz | 이 시각이 지나면 만료. 연장하지 않는다 |
 | `created_at` | timestamptz | 로그인한 시각 |
 
-- 로그인에 성공하면 행을 만들고 `token`을 **HttpOnly 쿠키**로 내려준다. 요청마다 쿠키의 값으로 이 표를 찾아 `expires_at > now()`이면 통과시킨다.
+- 로그인에 성공하면 행을 만들고 평문 토큰을 **HttpOnly 쿠키**로 내려준다. 표에는 해시만 남는다. 요청마다 쿠키 값을 해시해 이 표를 찾고, `expires_at > now()`이면 통과시킨다.
 - **로그아웃은 행을 지우는 것**이다. 유출된 세션도 같은 방법으로 즉시 끊을 수 있다. HTTPS가 없는 상태(02장 2.11)에서 이것이 JWT 대신 DB 세션을 고른 이유다. (D-30)
 - `upload_tokens`와 모양이 같지만 **용도가 다르다.** 이 표는 열람 권한을 가진 로그인이고, `upload_tokens`는 업로드만 되는 1회용 링크다. 업로드 API는 쿠키를 보지 않는다.
 - 만료된 행을 지우는 정리 작업은 두지 않는다. 데모 규모에서는 쌓여도 문제가 없다.
@@ -80,7 +80,7 @@ users ──┬──< sessions        (로그인 세션)
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | `id` | bigserial PK | |
-| `token` | text UNIQUE | 링크 주소에 들어가는 랜덤 문자열. 추측할 수 없게 만든다 |
+| `token_hash` | text UNIQUE | 링크 주소에 들어가는 랜덤 문자열(43자)의 SHA-256 해시 64자. `sessions.token_hash`와 같은 방법으로 만든다 (D-59) |
 | `owner_user_id` | bigint FK → users | 이 링크로 올린 영상의 주인 |
 | `expires_at` | timestamptz | 이 시각이 지나면 쓸 수 없다. 유효 시간은 01장 1.6 |
 | `used_at` | timestamptz | 업로드를 시작한 시각. 비어 있지 않으면 다시 쓸 수 없다 |
@@ -90,7 +90,7 @@ users ──┬──< sessions        (로그인 세션)
 - 만료되거나 이미 쓴 링크는 피해자가 로그인해서 다시 발급한다. 발급 이력은 행으로 쌓인다.
 - **다시 발급하면 아직 쓰지 않은 이전 링크의 `expires_at`을 `now()`로 바꿔 무효로 만든다.** 한 사용자에게 살아 있는 링크는 하나뿐이다 (D-28, 05장 5.4).
 - `used_at`은 **업로드용 presigned URL을 발급할 때** 찍는다. 그래서 업로드가 중간에 실패하면 링크는 이미 쓴 것이 되고, 다시 발급받아야 한다. 발급이 한 번 더 필요할 뿐이라 이대로 둔다.
-- `token`은 해시하지 않고 그대로 저장한다. 비밀번호와 달리 짧게 살고 1회만 쓰며, 유출돼도 할 수 있는 일이 "그 피해자 소유로 영상 1건 올리기"뿐이다. ⚠️ 유효 시간·발급 방식의 확정은 08장(D-28)에서 한다.
+- 토큰은 **해시해서 저장한다.** 평문은 발급 응답에 한 번 넣고 버린다. DB 덤프·스냅샷·로그로 행이 새도 주운 값으로는 링크를 쓸 수 없다 (D-59). 유효 시간·발급 방식은 [08장 8.6](08-auth.md#86-업로드-전용-일회용-링크)에 있다.
 
 ### videos
 
@@ -583,7 +583,7 @@ CREATE TABLE users (
 
 CREATE TABLE sessions (
   id         bigserial PRIMARY KEY,
-  token      text        NOT NULL UNIQUE,   -- HttpOnly 쿠키에 담기는 랜덤 문자열
+  token_hash text        NOT NULL UNIQUE,   -- HttpOnly 쿠키에 담기는 랜덤 문자열의 SHA-256 (64자)
   user_id    bigint      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   expires_at timestamptz NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now()
@@ -591,7 +591,7 @@ CREATE TABLE sessions (
 
 CREATE TABLE upload_tokens (
   id            bigserial PRIMARY KEY,
-  token         text        NOT NULL UNIQUE,   -- 링크 주소에 들어가는 랜덤 문자열
+  token_hash    text        NOT NULL UNIQUE,   -- 링크 주소에 들어가는 랜덤 문자열의 SHA-256 (64자)
   owner_user_id bigint      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   expires_at    timestamptz NOT NULL,
   used_at       timestamptz,                   -- 비어 있지 않으면 이미 쓴 링크
@@ -742,7 +742,7 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 
 - 데모 규모(영상 수십 건)에서는 인덱스가 없어도 느리지 않다. **부하 테스트(09장)에서 행을 많이 넣고 재는 것이 이 인덱스들의 목적이다.**
 - `still_frames`·`vehicle_selections`·`damage_inputs`·`pinned_incidents`는 UNIQUE 제약이 만드는 인덱스로 충분하다. 모두 `analysis_job_id`로만 찾기 때문이다.
-- `sessions`와 `upload_tokens`도 마찬가지다. 찾는 방법이 `token` 하나뿐이고 여기에 UNIQUE가 걸려 있다. 요청마다 도는 조회라 인덱스가 꼭 필요한데, UNIQUE가 이미 만들어 준다.
+- `sessions`와 `upload_tokens`도 마찬가지다. 찾는 방법이 `token_hash` 하나뿐이고 여기에 UNIQUE가 걸려 있다. 요청마다 도는 조회라 인덱스가 꼭 필요한데, UNIQUE가 이미 만들어 준다.
 
 ### DDL에서 정한 것 (D-27)
 
@@ -763,8 +763,7 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 
 | 항목 | 어디서 정하나 |
 |---|---|
-| 비밀번호 해시 방식, 쿠키 속성(`SameSite` 등) | 08장 — 세션 저장 방식은 D-30(확정)으로 정했다 |
-| 업로드 링크 발급 화면·유효 시간 확정, 만료 안내 문구 | 08장, 07장 (D-28) |
+| 업로드 링크 발급 화면, 만료 안내 문구 | 07장 (D-28). 유효 시간·발급 규칙은 08장 8.6에서 정했다 |
 | 드래그와 탐지를 맞추는 기준(겹침 비율 등), 누끼를 다각형으로 딸지 사각형만 쓸지 | 누끼를 우선 빼서(D-36) 지금은 정하지 않는다. 다시 넣을 때 06장 (U-13, U-09) |
 | 룰이 실제로 받는 파손 부위 값(근접 판정 폭, 인접 영역) | 06장 (U-13) → 정해지면 `schema_version`만 올린다 |
 | `payload` 검증 규칙 | **해결** → [05장 5.7](05-api.md#57-차량파손-부위-입력-저장-api) (`schema_version` 1의 규칙 6가지) |
