@@ -68,3 +68,6 @@ my_docs/
 
 # 원본 비교용 사본 (공유 금지)
 origin_docs/
+
+# 스킬 도구 생성 파일
+skills-lock.json
