@@ -18,6 +18,7 @@
 | 작업 대기열 | AWS SQS 표준 대기열 1개 | 백엔드 → GPU 워커 작업 전달. 재전달 기본 제공, 무료 범위. DLQ는 두지 않는다 | 팀원 2, 팀장 | D-16, D-56 |
 | 파일 저장소 | AWS S3 (비공개) | 업로드·재생 모두 presigned URL로 직접 | 팀장, 팀원 2 | D-09, D-18 |
 | AWS 호출 | boto3 (AWS 공식 Python SDK) | GPU 켜기, S3 읽기·쓰기, presigned URL 발급, SQS 넣기·꺼내기, Bedrock 호출. 자격 증명은 코드에 넣지 않고 EC2 IAM 역할에서 자동으로 받는다 | 팀장, 팀원 2 | |
+| 위탁계약 암호화 | PyNaCl (`SealedBox`, 공개키 암호화) | 담당자 이름·연락처·IP를 서버가 풀 수 없게 저장한다 | 팀원 2 | D-70 |
 | 서버 | EC2: 백엔드(CPU) 1대 + GPU 1대 | | 팀장, 팀원 2 | D-10 |
 | 서버 OS·AMI | 백엔드: Ubuntu LTS ⚠️(가정, 버전 🚧 U-03). GPU: AWS Deep Learning Base AMI (Ubuntu 22.04) | GPU: NVIDIA 드라이버·CUDA가 미리 설치되어 있다. AMI 사용료 없음 | 팀장, 팀원 2 | GPU: D-21 |
 | 인프라 코드 | Terraform | | 팀원 2 | |
