@@ -1,9 +1,25 @@
 # 04. 데이터 모델
 
-> 마지막 수정: 2026-09-23
+> 마지막 수정: 2026-09-28
 > 표시: 🚧 미정 · ⚠️ 확인 필요 · 🔐 멘토 승인 필요
 >
-> U-21·U-22·U-23을 팀원 2가 정리해(D-24, D-25, D-26) 본문을 작성했고, 4.10의 DDL 규칙을 D-27로, 관리자 업로드 방식(U-14)을 D-28로, 차량·파손 부위 입력 방식(U-13 일부)을 D-29로, 세션 저장 방식을 D-30으로, 사건 지점 고정 방식을 D-32로, 중복 저장 정리를 D-33~D-35로, 누끼를 우선 빼는 안을 D-36으로, 묶음 단위 [다음]을 D-37로, 고정 해제 없음을 D-40으로, 원본 허용 형식과 코덱 불량 시 바로 `failed`를 D-43으로, 링크로만 업로드(`upload_token_id` NOT NULL)를 D-45로, SQS에 넣고 나서 커밋하는 순서(4.4)를 D-46으로 더했다. 마스킹본·분석 결과 파기(U-24)는 D-57로, 청크를 디코딩에만 쓰고 트랙을 중간 저장하는 방식(`chunks` 테이블 없음, `processed_sec`)은 D-63으로 더했다. 이 중 **D-27·D-28·D-29·D-30·D-32·D-35·D-37·D-40·D-41·D-45·D-46·D-48·D-51·D-52·D-53·D-57은 확정**이고, 나머지는 상태가 **"확정 필요"** 다. 특히 **U-23(트랙 파일 형식)은 담당이 팀장**이므로 팀장이 확인해야 확정된다. D-29는 입력 방식만 확정이고, U-13의 나머지(룰 상황 목록·근접 판정·인접 영역)는 팀장 담당으로 남는다. 확정되지 않은 결정을 전제로 백엔드 구현을 시작해도 되지만, 뒤집힐 수 있다는 것을 알고 진행한다.
+> U-21·U-22·U-23을 팀원 2가 정리해(D-24, D-25, D-26) 본문을 작성했고, 4.10의 DDL 규칙을 D-27로, 관리자 업로드 방식(U-14)을 D-28로, 차량·파손 부위 입력 방식(U-13 일부)을 D-29로, 세션 저장 방식을 D-30으로, 사건 지점 고정 방식을 D-32로, 중복 저장 정리를 D-33~D-35로, 누끼를 우선 빼는 안을 D-36으로(→ D-65로 대체), 묶음 단위 [다음]을 D-37로, 고정 해제 없음을 D-40으로, 여러 장면 고정과 [확인 끝내기]를 D-80으로, 원본 허용 형식과 코덱 불량 시 바로 `failed`를 D-43으로, 링크로만 업로드(`upload_token_id` NOT NULL)를 D-45로, SQS에 넣고 나서 커밋하는 순서(4.4)를 D-46으로 더했다. 마스킹본·분석 결과 파기(U-24)는 D-57로, 청크를 디코딩에만 쓰고 트랙을 중간 저장하는 방식(`chunks` 테이블 없음, `processed_sec`)은 D-76으로 더했다. 이 중 **D-27·D-28·D-29·D-30·D-32·D-35·D-37·D-40·D-41·D-45·D-46·D-48·D-51·D-52·D-53·D-57은 확정**이고, 나머지는 상태가 **"확정 필요"** 다. **입력 방식은 2026-09-26 D-65(탐지된 차량 고르기), 입력 수정은 D-66(한 번만 받음)으로 바뀌었다** — 둘 다 상태가 "확정 필요"이고, `still_frames.detections`와 `vehicle_selections`의 `schema_version` 2가 여기에 딸려 있다. 특히 **U-23(트랙 파일 형식)은 담당이 팀장**이므로 팀장이 확인해야 확정된다. D-29는 입력 방식만 확정이고, U-13의 나머지(룰 상황 목록·근접 판정·인접 영역)는 팀장 담당으로 남는다. 확정되지 않은 결정을 전제로 백엔드 구현을 시작해도 되지만, 뒤집힐 수 있다는 것을 알고 진행한다.
+
+> ⚠️ **D-67~D-75 반영 필요 (2026-09-27, 팀장).** 본문은 아직 고치지 않았다. 아래는 바뀌어야 할 곳과 영향만 적은 것이다. 팀원 2가 확인해 반영한다. 근거는 [11장](11-decisions.md)과 [06장](06-pipeline.md).
+>
+> | 위치 | 바뀌는 것 | 근거 |
+> |---|---|---|
+> | 4.2 `analysis_jobs` | 1단계는 정지 장면만 만든다. `stage1_*` 시각은 정지 장면 소요 시간이 되고, 처리량 측정(D-20)은 `stage2_started_at`~`stage2_ended_at`로 옮긴다 | D-67 |
+> | 4.2 `processed_sec` | 탐지·추적과 중간 저장을 1단계가 아니라 **2단계**에서 한다. 청크는 디코딩 단위라 DB에 두지 않는다(`chunks` 테이블 없음) | D-67, D-76 |
+> | 4.2 `damage_inputs` | `payload`에 **탐지 상황**(`visible`: 보임/안 보임), **텍스트 설명**(선택), **사진 S3 키**(선택)를 더한다 → `schema_version` 올림. 안 보임일 때의 입력 형태는 🚧 U-25, 통로 쪽/옆면을 사용자가 고를지는 🚧 U-26 (고르면 D-34의 "sides를 저장하지 않는다"가 바뀐다) | D-72 |
+> | 4.2 `candidates` | 어느 채널(A/B)·룰이 잡았는지, **VLM 기준점**(원본 시간, 가장 가까웠던 순간), **1차 VLM 결과**(통과/탈락)를 더한다. 1차 탈락 후보는 `vlm_score = 0`. 불변 조건 4(후보 수 유지)는 그대로다. `track_ref`는 채널 B 트랙도 가리켜야 한다 | D-71, D-73, D-74 |
+> | 4.2 `candidate_clips` | **크롭 영역**(원본 좌표 사각형)을 더한다. 2단계 끝에 상위 **20개**를 만든다 | D-68, D-70 |
+> | 4.3 상태 | 입력은 항상 1단계 뒤에 들어오므로 `stage1_running`·`stage1_input_done`이 필요 없다. 전이 3~7은 "`stills_running` → `stage1_done`(입력 대기) → 입력 저장 → `stage2_running`" 한 줄로 줄어든다. `stage2_running`은 약 30분(추정)이 된다 | D-67 |
+> | 4.3 전이 8·10·11 | 8은 "첫 **두** 묶음이 준비됐을 때". [다음]은 이미 준비된 묶음을 바로 보여주고 그다음 묶음 준비를 SQS에 넣는다. `batch_running`은 사용자가 준비 속도보다 빨리 눌렀을 때만 보인다. "지금 보여줄 묶음"과 "준비된 묶음"을 구분할 방법이 필요하다 | D-68 |
+> | 4.4 중복 방지 | "1단계 끝 vs 입력 저장" 경쟁이 없어진다. 입력 저장 조건부 UPDATE만 남는다 | D-67 |
+> | 4.6 SQS | 2단계 메시지가 가장 오래 걸린다(약 30분). 가시성 연장 대상이 2단계로 바뀐다 (U-18) | D-67 |
+> | 4.8 트랙 파일 | 2단계에서 만든다. 채널 B 트랙(클래스 없음)이 들어간다 🚧 (U-23, 팀장) | D-71 |
+> | 4.9 S3 키 | 파손 사진 키가 필요하다. 예: 원본 버킷 `videos/{video_id}/inputs/photo.jpg` 🚧. 사진도 파기 대상이다(원본과 같이) | D-72 |
 
 ## 4.1 전체 구조
 
@@ -22,7 +38,7 @@ users ──┬──< sessions        (로그인 세션)
                                   ├──1:1── vehicle_selections  (본인 차량 선택)
                                   ├──1:1── damage_inputs       (파손 부위 입력)
                                   ├──< candidates ──< candidate_clips
-                                  └──1:1── pinned_incidents    (사건 지점 고정)
+                                  └──< pinned_incidents    (사건 지점 고정, 여러 개)
 ```
 
 - `──<` 는 1:N, `──1:1──` 은 1:1을 뜻한다.
@@ -38,7 +54,6 @@ users ──┬──< sessions        (로그인 세션)
 | `still_frames` | 정지 장면(마스킹본 이미지)이 어느 원본 시간의 것이고 비식별화가 끝났는지 알아야 화면에 보여줄 수 있다. 불변 조건 2 |
 | `upload_tokens` | 관리자는 로그인하지 않고 **업로드 전용 일회용 링크**로만 올린다. 그 링크의 주인·만료·사용 여부를 기록한다 (D-28) |
 | `access_logs` | 개인영상정보에 닿는 요청을 한 행씩 남긴다. 표준 개인정보 보호지침 제44조⑤(열람 기록)·제42조(이용·파기 기록)와 고시 제8조①(접속기록 1년)이 요구하는 법정 기록이다 (D-53) |
-| `consignment_agreements` | 관리자가 업로드 전에 동의한 **개인정보 처리위탁 계약** 기록이다. 위탁은 문서가 필수라(법 제26조①) 누가 언제 어느 문구에 동의했는지 남긴다 (D-64) |
 
 ## 4.2 테이블과 필드
 
@@ -92,31 +107,6 @@ users ──┬──< sessions        (로그인 세션)
 - `used_at`은 **업로드용 presigned URL을 발급할 때** 찍는다. 그래서 업로드가 중간에 실패하면 링크는 이미 쓴 것이 되고, 다시 발급받아야 한다. 발급이 한 번 더 필요할 뿐이라 이대로 둔다.
 - 토큰은 **해시해서 저장한다.** 평문은 발급 응답에 한 번 넣고 버린다. DB 덤프·스냅샷·로그로 행이 새도 주운 값으로는 링크를 쓸 수 없다 (D-59). 유효 시간·발급 방식은 [08장 8.6](08-auth.md#86-업로드-전용-일회용-링크)에 있다.
 
-### consignment_agreements
-
-관리자가 업로드 전에 동의한 **개인정보 처리위탁 계약** 1건. 업로드 링크 1개당 최대 1행이다. (D-64)
-
-| 필드 | 타입 | 설명 |
-|---|---|---|
-| `id` | bigserial PK | |
-| `upload_token_id` | bigint FK → upload_tokens, UNIQUE | 어느 링크로 동의했는지. 영상은 `videos.upload_token_id`로 이어진다 |
-| `agreement_version` | text | 동의한 계약 문구의 버전. 예: `2026-09-24`. 백엔드 상수 값을 그대로 넣는다 |
-| `facility_name` | text | 시설 이름. 예: OO아파트 지하주차장 |
-| `facility_address` | text | 시설 주소 (CCTV 설치 장소) |
-| `manager_name` | bytea | 담당자 이름. **공개키로 암호화한 값** (D-70) |
-| `manager_contact` | bytea | 담당자 연락처 한 칸. 전화번호나 이메일. 형식은 검사하지 않는다. **공개키로 암호화한 값** (D-70) |
-| `agreed_ip` | bytea | 동의한 요청의 IP. **공개키로 암호화한 값** (D-70) |
-| `agreed_at` | timestamptz | 동의 시각. 보관 기간 계산 기준 |
-
-- **행은 6번(업로드 URL 발급)에서 링크 사용 표시·`videos` 행과 같은 트랜잭션으로 만든다** (05장 5.4). 그래서 업로드된 영상에는 반드시 계약 행이 있다.
-- **확인 체크 3개(안내판 설치, 제공 여부는 관리자가 판단, 재위탁 동의)는 칸을 두지 않는다.** 셋 다 체크해야 행이 생기므로 행이 있다는 것이 곧 동의다. 문구를 바꾸면 백엔드의 버전 상수를 올린다.
-- **`agreed_at`에서 90일이 지나면 행째 지운다**(01장 1.6). D-52·D-57과 같은 주기 작업이 지우고 `access_logs`에 `delete_agreement`를 남긴다. 담당자 이름·연락처가 들어 있어 기한 없이 둘 수 없다.
-- 담당자 이름·연락처는 **관리자 본인의 개인정보**다. 계약 이행에 필요한 정보라 별도 동의 없이 받고(법 제15조①4호), 화면에서 항목·목적·보관 기간을 알린다 (07장).
-- **담당자 이름·연락처·IP는 암호문으로만 저장한다** (D-70). 백엔드는 공개키만 갖고 봉인(`SealedBox`)해서 넣는다. 푸는 개인키는 서버에 두지 않고 운영자가 보관한다. 그래서 서버나 DB가 통째로 새도 이 세 칸은 읽을 수 없다.
-  - 백엔드는 이 값을 다시 읽지 않는다. 90일 파기는 `agreed_at`만 본다.
-  - 읽어야 할 때(비식별화 누락·유출을 관리자에게 알릴 때, D-65)는 운영자가 행을 꺼내 개인키가 있는 자기 PC에서 푼다.
-  - 시설 이름·주소는 개인정보가 아니고 위탁자를 찾을 때 바로 봐야 하므로 평문으로 둔다.
-
 ### videos
 
 업로드한 원본 영상 1건. 행은 **업로드용 presigned URL을 발급할 때** 만든다(그때 S3 키가 정해지기 때문이다). 업로드가 끝나지 않았으면 `upload_completed_at`이 비어 있다. (D-18)
@@ -133,17 +123,14 @@ users ──┬──< sessions        (로그인 세션)
 | `fps` | double precision | 원본 fps. 워커가 채운다. 샘플링 fps와 다르다 |
 | `width`, `height` | integer | 원본 해상도. 워커가 채운다 |
 | `created_at` | timestamptz | URL 발급 시각 |
-| `warmup_at` | timestamptz | 업로드가 끝나갈 때 GPU 미리 켜기 신호를 받은 시각. 비어 있으면 아직 받지 않았다. 한 영상당 한 번만 받는다 (05장 6-1번, D-62) |
 | `upload_completed_at` | timestamptz | 업로드 완료 알림을 받은 시각. 비어 있으면 미완료 |
-| `last_activity_at` | timestamptz | 마지막 사용자 조작 시각. 원본 파기 시점 계산에 쓴다 (D-52) |
-| `raw_deleted_at` | timestamptz | 원본을 S3에서 지운 시각. 비어 있으면 원본이 아직 있다 (D-52) |
-| `masked_deleted_at` | timestamptz | 마스킹본·분석 결과를 S3에서 지운 시각. 비어 있으면 아직 있다 (D-57) |
+| `raw_deleted_at` | timestamptz | 원본 영상**과 트랙 파일**을 S3에서 지운 시각. 비어 있으면 아직 있다 (D-52, D-64) |
+| `masked_deleted_at` | timestamptz | 마스킹본(정지 장면, 후보 클립)을 전부 지운 시각. 비어 있으면 아직 있다 (D-57, D-64) |
 
 - `duration_sec`·`fps`·`width`·`height`는 업로드 시점에 알 수 없다. 워커가 1단계 시작 때 원본을 열어 채운다.
-- **`warmup_at`은 GPU 켜기를 한 번만 받기 위한 자물쇠다.** 업로드가 끝나갈 때 프론트가 보내는 신호(05장 6-1번)를 받은 시각이다. 이 칸이 비어 있을 때만 신호를 받아들이므로, 링크를 가진 사람이 신호를 반복해 보내도 GPU가 여러 번 켜지지 않는다 (4.4, D-62). 시각 값 자체를 읽는 곳은 없다.
-- **`last_activity_at`은 사용자가 무언가를 한 순간마다 갱신한다.** 갱신하는 지점은 업로드 완료 알림, 차량·파손 부위 입력 저장, 후보 묶음 조회, [다음], [찾음]이다. 상태 조회(폴링)로는 갱신하지 않는다 — 화면을 켜 두기만 해도 파기가 밀리면 안 된다.
-- **`raw_deleted_at`이 차 있으면 원본은 없다.** 재분석은 Non-Scope이므로 이 값이 다시 비워지는 일은 없다.
-- **`masked_deleted_at`이 차 있으면 정지 장면·후보 클립·트랙 파일도 없다.** 기준은 `last_activity_at`이 아니라 `upload_completed_at`이다. 열람할 때마다 기한이 밀리면 수집일에서 30일을 넘겨 표준지침 제41조②에 어긋나기 때문이다. (D-57)
+- **파기 시점은 하나다** (D-64, D-80). `upload_completed_at`에서 30일이 지나면 원본, 트랙 파일, 마스킹본을 **한 번에** 지우고 `raw_deleted_at`·`masked_deleted_at`을 같은 값으로 찍는다. 끝 상태(`finished`·`exhausted`·`failed`)에 이르러도 지우지 않는다. 사용자가 여러 장면을 고정할 수 있어, 고정한 클립만 남기는 부분 삭제를 두지 않는다. `last_activity_at`은 쓰지 않으므로 칼럼을 두지 않는다.
+- **`raw_deleted_at`이 차 있으면 원본과 트랙 파일이 없다.** 둘은 언제나 함께 지워진다. 재분석은 Non-Scope이므로 이 값이 다시 비워지는 일은 없다. (D-64)
+- 기준이 `upload_completed_at`인 이유: 열람할 때마다 기한이 밀리면 수집일에서 30일을 넘겨 표준지침 제41조②에 어긋난다. (D-57)
 
 ### analysis_jobs
 
@@ -160,15 +147,15 @@ users ──┬──< sessions        (로그인 세션)
 | `stage2_ended_at` | timestamptz | 2단계 종료 |
 | `input_completed_at` | timestamptz | 차량·파손 부위 입력이 끝난 시각. 2단계 시작 조건에 쓴다 |
 | `error_message` | text | 실패했을 때 마지막 오류. 평소에는 비어 있다 |
-| `processed_sec` | double precision | 1단계 탐지·추적을 중간 저장한 지점(원본 시간). 처음에는 0. 워커가 구간을 저장할 때마다 갱신한다 (D-63) |
+| `processed_sec` | double precision | 2단계 탐지·추적을 중간 저장한 지점(원본 시간). 처음에는 0. 워커가 구간을 저장할 때마다 갱신한다 (D-76) |
 | `created_at` | timestamptz | 대기 순서 계산의 기준 (4.5) |
 | `updated_at` | timestamptz | 상태를 바꿀 때마다 갱신 |
 
 - 시각 칼럼 4개는 09장 처리량 측정을 위한 것이다. `영상 길이 ÷ (stage1_ended_at − stage1_started_at)`로 "GPU 1대가 1시간에 처리하는 영상 시간"을 바로 계산한다. (D-20)
 - **재시도가 일어나면 시각이 덮어써진다.** 마지막 시도 기준 값만 남는다. 재시도·실패 이력을 행으로 남기지 않기로 했다. 이유와 바꿀 시점은 D-24에 적었다.
 - 인덱스: `(status, created_at)` — 4.5의 대기 순서 계산에 쓴다.
-- **`processed_sec`는 이어서 하기와 진행 확인에 쓴다.** 1단계를 다시 시작하면 이 지점부터 이어 간다. 저장 순서는 구간 파일 → 추적기 상태 → `processed_sec`라, 이 값은 파일이 다 올라간 지점만 가리킨다 (4.8, D-63). `processed_sec ÷ videos.duration_sec`가 진행률이다. 화면에는 지금 보여주지 않는다(상태 표시는 4.3의 `status`뿐).
-- 디코딩 청크는 워커 안에서만 쓰는 단위라 DB에 기록하지 않는다 (D-63).
+- **`processed_sec`는 이어서 하기와 진행 확인에 쓴다.** 2단계를 다시 시작하면 이 지점부터 이어 간다. 저장 순서는 구간 파일 → 추적기 상태 → `processed_sec`라, 이 값은 파일이 다 올라간 지점만 가리킨다 (4.8, D-76). `processed_sec ÷ videos.duration_sec`가 진행률이다. 화면에는 지금 보여주지 않는다(상태 표시는 4.3의 `status`뿐).
+- 디코딩 청크는 워커 안에서만 쓰는 단위라 DB에 기록하지 않는다 (D-76).
 
 ### still_frames
 
@@ -180,13 +167,21 @@ users ──┬──< sessions        (로그인 세션)
 | `analysis_job_id` | bigint FK → analysis_jobs, UNIQUE | 작업 1건당 1행 (D-48) |
 | `t_sec` | double precision | 원본 시간. 시작 장면이라 `0.0`이다 |
 | `masked_s3_key` | text | 비식별화가 끝난 이미지 키 (4.9) |
+| `detections` | jsonb | **이 장면에서 탐지된 차량 목록.** 사용자가 이 중 하나를 골라 본인 차량으로 지목한다 (D-65) |
 | `created_at` | timestamptz | |
 
 - 원본 이미지는 저장하지 않는다. 비식별화된 것만 남긴다. (불변 조건 2)
 - **원본 해상도 그대로 저장한다.** 사용자가 드래그한 좌표를 원본 해상도 픽셀로 받기 때문이다 (05장 5.1, 5.6).
-- **정지 장면에서 차량을 탐지하지 않는다.** 누끼 없이 드래그한 사각형을 그대로 쓰기 때문이다. (D-36)
+- **정지 장면에서 차량을 탐지한다.** 사용자가 탐지된 차량 중에서 본인 차를 고르기 때문이다. 1단계가 정지 장면을 만들 때 함께 채운다 (06장). (D-65 — D-36에서 뺐던 것을 되살렸다)
+  - `detections`의 형식. `bbox`는 원본 해상도 기준 픽셀이다. **다각형(누끼)은 담지 않는다** — 탐지 bbox만 쓴다 (D-65).
+    ```json
+    [{"det_id": 1, "bbox": [810, 440, 960, 620], "conf": 0.91},
+     {"det_id": 2, "bbox": [950, 435, 1120, 625], "conf": 0.88}]
+    ```
+  - `det_id`는 **이 장면 안에서만** 유일한 번호다. 1단계 트랙의 `track_id`와 관계없다.
+  - 탐지가 0건이면 빈 배열 `[]`이다. 이때 화면은 **재업로드 안내**로 간다 — 본인 차량을 찾지 못했을 때의 기존 안내와 같다. 차량을 드래그하는 폴백은 두지 않는다 (D-65).
 - **여러 시점의 장면을 다시 받으려면** UNIQUE를 `(analysis_job_id, t_sec)`으로 되돌리면 된다. 칼럼과 S3 키 구조는 그대로다. 절차는 [11장 D-48 "되살릴 방법"](11-decisions.md#d-48-차량-선택용-정지-장면은-원본-영상-시작-장면-1장만-만든다).
-- **확장**: 누끼를 다시 넣으면 탐지된 차량 목록 `detections` 칼럼(jsonb)을 더한다. 예시와 절차는 [11장 D-36 "확장 방법"](11-decisions.md#d-36-우선-누끼-없이-드래그한-차량-사각형을-그대로-본인-차량-영역으로-쓴다).
+- **확장**: 겹친 차량을 픽셀 단위로 가르려면 `polygon`(차량 외곽) 키를 더한다. segmentation 모델이 필요하고(U-09) 프론트가 다각형 hit-test를 해야 한다 🚧 (D-65 "대신 잃는 것").
   ```json
   [{"det_id": 1, "bbox": [810, 440, 960, 620], "conf": 0.91,
     "polygon": [[812, 441], [958, 445], [956, 618], [814, 615]]}]
@@ -203,27 +198,31 @@ users ──┬──< sessions        (로그인 세션)
 | `still_frame_id` | bigint FK → still_frames | 어느 정지 장면에서 골랐는지. 장면이 1장뿐이라 지금은 `analysis_job_id`에서 바로 나오지만, 05장 11번의 검사와 장면을 늘릴 여지를 위해 둔다 (D-48) |
 | `schema_version` | integer | `payload` 형식 번호. 형식이 바뀌면 올린다 |
 | `payload` | jsonb | 선택 내용 |
-| `created_at`, `updated_at` | timestamptz | 다시 입력하면 같은 행을 덮어쓴다 |
+| `created_at`, `updated_at` | timestamptz | 입력은 한 번뿐이라 두 값이 같다. `updated_at`은 다른 테이블과 모양을 맞추려고 둔다 (D-66) |
 
-사용자는 정지 장면에서 **본인 차량을 드래그로 지목한다.** 드래그한 사각형을 **탐지와 맞추지 않고 그대로** 본인 차량 영역으로 쓴다. (D-29, D-36)
+사용자는 정지 장면에서 **탐지된 차량 중 하나를 골라** 본인 차량으로 지목한다. 고른 차량의 탐지 `bbox`가 그대로 본인 차량 영역이다. (D-65)
 
-`schema_version` 1:
+`schema_version` 2:
 
 ```json
 {
-  "bbox": [800, 430, 970, 630]
+  "det_id": 1,
+  "bbox": [810, 440, 960, 620]
 }
 ```
 
 | 키 | 뜻 |
 |---|---|
-| `bbox` | **본인 차량 영역.** 사용자가 그린 사각형. 원본 해상도 기준 픽셀. 2단계 룰이 쓰는 값 |
+| `det_id` | 사용자가 고른 `still_frames.detections`의 번호 |
+| `bbox` | **본인 차량 영역.** 고른 탐지 결과의 bbox를 백엔드가 복사한 값. 원본 해상도 기준 픽셀. 2단계 룰이 쓰는 값 |
+
+- **`bbox`의 뜻은 `schema_version` 1과 같다.** 그래서 룰과 `sides` 계산(D-34)은 고치지 않는다. 바뀐 것은 이 값이 어디서 왔는지뿐이다. (D-25)
+- `bbox`를 `det_id`와 함께 적어 두는 이유는 **룰이 `still_frames`를 다시 읽지 않게** 하기 위해서다. 한 값이 두 곳에 있지만, 정지 장면의 탐지 결과는 만들어진 뒤 바뀌지 않으므로 어긋날 일이 없다.
+- 차량을 드래그하는 경로는 없다. 형태는 이 하나뿐이다 (D-65).
+- `schema_version` 1(`{"bbox": [...]}` 하나)은 D-65 이전 형식이다. 저장된 옛 데이터는 버린다 (D-25).
 
 - **본인 차량은 추적하지 않는다.** 주차된 차라 영상 내내 자리가 같으므로 고정된 영역으로 다룬다. 2단계 룰은 "다른 트랙이 이 영역 근처에 왔는가"를 본다. 그래서 `track_id`를 이어 붙일 필요가 없다. (D-29)
-- **확장**: 누끼를 다시 넣으면 `schema_version`을 2로 올려 아래처럼 키를 더한다. **`bbox`의 뜻("본인 차량 영역")은 바꾸지 않으므로** 룰과 `sides` 계산(D-34)은 고치지 않는다. 절차는 [11장 D-36 "확장 방법"](11-decisions.md#d-36-우선-누끼-없이-드래그한-차량-사각형을-그대로-본인-차량-영역으로-쓴다).
-  ```json
-  {"drag_bbox": [800, 430, 970, 630], "det_id": 1, "bbox": [810, 440, 960, 620], "matched": true}
-  ```
+- **확장**: 겹친 차량을 픽셀 단위로 가르려면 `schema_version`을 3으로 올려 `polygon`(고른 차량의 외곽)을 더한다. `bbox`의 뜻은 그대로 두므로 룰은 고치지 않는다 🚧 (D-65, U-09).
 
 ### damage_inputs
 
@@ -237,7 +236,7 @@ users ──┬──< sessions        (로그인 세션)
 | `payload` | jsonb | 입력 내용 |
 | `created_at`, `updated_at` | timestamptz | |
 
-드래그한 본인 차량 위에서 **파손 부위를 한 번 더 드래그해** 지정한다. 차량 선택과 파손 부위는 **한 요청으로 함께 저장한다** (D-29, D-36). 두 행을 한 트랜잭션에서 쓴다.
+고른 본인 차량 영역 **안에서 파손 부위를 드래그해** 지정한다 (D-65). 차량 선택과 파손 부위는 **한 요청으로 함께 저장한다** (D-29, D-36). 두 행을 한 트랜잭션에서 쓴다.
 
 ```json
 {
@@ -265,7 +264,7 @@ users ──┬──< sessions        (로그인 세션)
 | `analysis_job_id` | bigint FK → analysis_jobs | |
 | `judged_at_sec` | double precision | 판정 시점(원본 시간). 불변 조건 7 |
 | `rule_name` | text | 어느 룰이 잡았는지. 목록은 🚧 (U-13) |
-| `track_id` | integer | 근거가 된 트랙. 영상 안에서 유일하다 (4.8, D-63) |
+| `track_id` | integer | 근거가 된 트랙. 영상 안에서 유일하다 (4.8, D-76) |
 | `vlm_score` | integer | 0~100. VLM 호출 전에는 비어 있다 |
 | `rank` | integer | 점수순 정렬 결과. 1부터 |
 | `batch_no` | integer | 몇 번째 묶음인지. 1부터 |
@@ -278,7 +277,7 @@ users ──┬──< sessions        (로그인 세션)
   - ⚠️ 연속된 판정을 하나로 합치는 규칙(U-13, 팀장)에 따라 후보가 "구간"을 가져야 하면, 그때 후보 구간 칼럼을 더한다.
 - "못 찾음"은 후보마다 따로 받지 않는다. 사용자가 묶음 아래 [다음]을 누르면 그 묶음 후보 전부를 한 번에 `not_found`로 바꾼다. (D-37)
 - 판단(`verdict`)은 클립이 아니라 후보에 붙인다. 클립은 다시 만들 수 있지만 사용자의 판단은 후보 하나에 대한 것이기 때문이다.
-- **"찾음"은 `pinned_incidents` 한 곳에만 기록한다.** "찾음"은 작업당 한 번뿐이고 그 뒤로 작업은 끝 상태(`pinned`)라, 후보마다 "찾음" 칸을 둘 필요가 없다. 두 곳에 적으면 서로 어긋날 수 있다. 찾음을 고른 후보의 `verdict`는 `unseen`으로 남는다. (D-35)
+- **"찾음"은 `pinned_incidents` 한 곳에만 기록한다.** 후보마다 "찾음" 칸을 두지 않는다. 두 곳에 적으면 서로 어긋날 수 있다. 찾음을 고른 후보의 `verdict`는 그대로 둔다(`unseen`, 또는 [다음]으로 넘긴 뒤 고정했으면 `not_found`). 확정 여부는 언제나 `pinned_incidents`로 본다. (D-35, D-80)
 
 ### candidate_clips
 
@@ -292,21 +291,19 @@ users ──┬──< sessions        (로그인 세션)
 | `masked_s3_key` | text | 마스킹본 버킷 키 (4.9) |
 | `status` | text | `pending` · `running` · `done` · `failed` |
 | `created_at` | timestamptz | 묶음별 소요 시간은 이 값으로 본다 |
-| `blocked_at` | timestamptz | 비식별화 누락 신고로 재생을 막은 시각. 비어 있으면 재생할 수 있다 (D-65) |
 
 - **클립 생성에 실패하면(`failed`) 그 후보는 이번 묶음에서 빠진다.** 05장 12번이 `done`인 클립만 목록에 넣기 때문이다. 워커는 다시 만들지 않고, `verdict`도 건드리지 않는다. 드문 경우라 받아들인다 (D-51).
 - 사용자에게 주는 재생 URL은 이 행의 `masked_s3_key`로만 발급한다. 고정한 사건 지점도 이 행을 가리키므로 같은 키로 재생한다. (불변 조건 1, D-32)
-- **`blocked_at`이 차 있으면 재생 URL을 발급하지 않는다.** 사용자가 가려지지 않은 사람·번호판을 신고한 클립이다(05장 16번). 파일은 지우지 않고 D-57의 30일 파기를 따른다. 신고를 되돌리는 기능은 없다 (D-65).
 
 ### pinned_incidents
 
-사용자가 "찾음"을 고른 사건 지점. 작업 1건당 1행이다. (PRD 3.6)
+사용자가 "찾음"을 고른 사건 지점. **작업 1건에 여러 행**이다. 사용자가 여러 장면을 원할 수 있기 때문이다. (PRD 3.6, D-80)
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | `id` | bigserial PK | |
-| `analysis_job_id` | bigint FK → analysis_jobs, UNIQUE | |
-| `candidate_clip_id` | bigint FK → candidate_clips | 고정한 클립 |
+| `analysis_job_id` | bigint FK → analysis_jobs | |
+| `candidate_clip_id` | bigint FK → candidate_clips | 고정한 클립. `(analysis_job_id, candidate_clip_id)` UNIQUE |
 | `pinned_at` | timestamptz | |
 
 - **고정은 파일을 복사하지 않는다. 고정한 클립 행을 가리키기만 한다.** (D-32) 재생 URL은 그 클립의 `masked_s3_key`로, 경찰에게 넘길 원본 기준 시작·끝은 그 클립의 `start_sec`·`end_sec`로 얻는다.
@@ -328,19 +325,20 @@ users ──┬──< sessions        (로그인 세션)
    WHERE c.id = :clip_id AND d.analysis_job_id = :job_id AND c.status = 'done';
   ```
 
-- **전이 9(`ready` → `pinned`, "찾음")는 한 트랜잭션으로 쓴다.** 상태를 조건부로 바꾸고, 바뀐 행이 없으면(이미 고정됨) 되돌린다. 중간에 실패하면 둘 다 취소되므로 "상태는 `pinned`인데 고정 행이 없는" 경우가 생기지 않는다. (D-35)
+- **"찾음"은 상태를 바꾸지 않는다.** 행 하나를 넣을 뿐이다. 작업 상태가 `ready`·`batch_running`일 때만 받고, 끝 상태에서는 받지 않는다. 같은 클립을 다시 고르면 UNIQUE에 걸려 새 행이 생기지 않는다. (D-80)
 
   ```sql
-  BEGIN;
-  UPDATE analysis_jobs SET status = 'pinned', updated_at = now()
-   WHERE id = :job_id AND status = 'ready';        -- 0행이면 ROLLBACK
-  -- 위의 클립 확인. 없으면 ROLLBACK
-  INSERT INTO pinned_incidents (analysis_job_id, candidate_clip_id) VALUES (:job_id, :clip_id);
-  COMMIT;
+  INSERT INTO pinned_incidents (analysis_job_id, candidate_clip_id)
+  SELECT :job_id, :clip_id
+    FROM analysis_jobs
+   WHERE id = :job_id AND status IN ('ready', 'batch_running')   -- 0행이면 상태를 다시 읽어 판단
+  ON CONFLICT (analysis_job_id, candidate_clip_id) DO NOTHING;
   ```
+
+  - 상태 확인과 INSERT가 한 문장이라, [확인 끝내기](전이 9·15)와 동시에 들어와도 끝 상태가 된 작업에 행이 붙지 않는다.
 - `candidate_clip_id` FK에는 CASCADE를 걸지 않는다. 그래서 고정된 클립 행만 따로 지우려 하면 DB가 거부한다. 분석 작업째 지울 때는 두 행이 함께 지워진다.
-- **고정 해제는 두지 않는다.** `pinned`는 끝 상태이고, 실수는 고정 전 확인창이 막는다. (D-40)
-  - **확장**: 해제가 필요해지면 이 행을 지우고 상태를 `pinned` → `ready`로 되돌리는 전이를 한 트랜잭션으로 더한다. S3에서 지울 파일은 없다. 절차는 [11장 D-40](11-decisions.md#d-40-사건-지점-고정은-해제하지-않는다-고정-전-확인으로-실수를-막는다).
+- **고정 해제는 두지 않는다.** 실수는 고정 전 확인창이 막는다. 여러 장면을 고정할 수 있으므로 잘못 고른 것이 하나 섞여도 사용자가 그 시각을 쓰지 않으면 된다. (D-40, D-80)
+  - **확장**: 해제가 필요해지면 끝 상태 전에 이 행을 지우는 API를 더한다. 상태는 바꾸지 않고 S3에서 지울 파일도 없다.
 
 ### access_logs
 
@@ -363,11 +361,9 @@ users ──┬──< sessions        (로그인 세션)
 | `issue_upload_link` | 업로드 링크 발급 (5.4) | 수집 경로 기록 |
 | `view_still` | 정지 장면 조회 (5.6) | **열람** |
 | `view_clip` | 후보 클립 재생 URL 발급 (5.8) | **열람** |
-| `pin_incident` | 사건 지점 고정 (5.9) | 이용 기록 (표준지침 제42조) |
-| `report_masking` | 비식별화 누락 신고 (5.9, 16번) | 누락 인지 기록. 운영자가 이 행을 보고 위탁자에게 알린다 (D-65) |
+| `pin_incident` | 사건 지점 고정 (5.9). 고정 한 건마다 한 행 | 이용 기록 (표준지침 제42조) |
 | `delete_raw` | 원본 파기 주기 작업 (D-52) | 파기 기록 (표준지침 제42조) |
 | `delete_masked` | 마스킹본·분석 결과 파기 주기 작업 (D-57) | 파기 기록 (표준지침 제42조) |
-| `delete_agreement` | 위탁계약 기록 파기 주기 작업 (D-64) | 파기 기록 (법 제21조). `video_id`는 그 링크로 올라온 영상, 없으면 NULL |
 
 - **재생 URL을 발급할 때마다 한 행씩 남는다.** 같은 클립을 다시 보면 행이 또 생긴다. 재생 URL은 조회할 때마다 새로 발급하므로(D-41) 발급 = 열람으로 본다.
 - `action` 값도 `status`처럼 **코드 enum으로 관리하고 DB CHECK를 걸지 않는다** (D-27과 같은 이유).
@@ -384,17 +380,18 @@ users ──┬──< sessions        (로그인 세션)
 | `queued` | SQS에 1단계 작업이 들어갔고 워커가 아직 잡지 않았다. 화면에 "앞에 N건"을 함께 보여준다 (4.5) | 불가 | |
 | `stills_running` | 워커가 1단계를 시작해 정지 장면을 비식별화하는 중 | 불가 | |
 | `stage1_running` | 정지 장면이 준비됐고 객체탐지·추적이 진행 중 | **가능** | |
-| `stage1_input_done` | 입력이 끝났고 1단계가 아직 진행 중. 1단계가 끝나면 2단계가 자동으로 시작된다 | 수정 가능 | |
+| `stage1_input_done` | 입력이 끝났고 1단계가 아직 진행 중. 1단계가 끝나면 2단계가 자동으로 시작된다 | **불가** (입력은 한 번뿐, D-66) | |
 | `stage1_done` | 1단계가 끝났고 입력을 기다린다 | **가능** | |
 | `stage2_running` | 룰·VLM·후보 클립 비식별화 진행 중 | 불가 | |
 | `ready` | 후보 묶음이 준비됐다. 사용자가 확인할 수 있다 | | |
 | `batch_running` | "못 찾음" 뒤 다음 묶음을 만드는 중 | | |
-| `pinned` | 사건 지점을 고정했다 | | ✅ |
-| `exhausted` | 모든 후보를 "못 찾음"으로 확인했다. 사건이 없다는 뜻이 아니다 (PRD 3.6) | 이전 묶음에서 "찾음"만 (D-69) | ✅ (전이 16만 예외) |
+| `finished` | 사용자가 [확인 끝내기]를 눌렀다. 고정한 사건 지점은 `pinned_incidents`에 있다(0개일 수도 있다) | | ✅ |
+| `exhausted` | 모든 후보를 "못 찾음"으로 확인했다. 사건이 없다는 뜻이 아니다 (PRD 3.6) | | ✅ |
 | `failed` | 워커가 되풀이해도 소용없는 오류를 만났다. `error_message`에 오류가 있다 (D-43) | | ✅ |
 
 - 화면이 보는 상태는 이 목록에 **`uploading`·`upload_failed` 두 개가 더 있다.** 업로드가 끝나지 않아 아직 작업 행이 없는 영상을 위해 조회 API가 만들어 주는 값이고, DB에는 없다 (D-47, 05장 5.5).
 - **`stage1_done`은 `status`만으로 입력 가능 여부가 갈리지 않는다.** 입력을 기다리는 중일 수도 있고, 입력을 받아 2단계 작업을 넣어 둔 중일 수도 있다(전이 7에서 상태를 바꾸는 쪽은 워커다). 그래서 상태 조회 API가 `input_completed_at`이 차 있는지를 `input_done`으로 함께 돌려준다. 저장하는 칼럼이 아니라 조회할 때 계산하는 값이다 (D-49, 05장 5.5·5.7).
+- **입력은 한 번만 받는다.** `input_completed_at`이 차 있으면 상태를 가리지 않고 **409 `INVALID_STATE`** 로 거절한다. 저장 전에 화면이 확인창을 띄우고, 저장한 뒤에는 고칠 수 없다 (D-66, 05장 5.7 / 07장). 그래서 위 표에서 입력이 **가능**한 칸은 `input_done`이 `false`일 때만이다.
 - 초안 목록보다 `stills_running`·`stage1_done`·`batch_running` 3개가 늘었다. 화면이 `status` 하나만 보고 "지금 입력할 수 있는지"를 판단할 수 있게 하기 위해서다. 정지 장면이 준비되기 전에는 입력 화면을 열 수 없다. (D-15)
 
 **전이 표**
@@ -403,26 +400,25 @@ users ──┬──< sessions        (로그인 세션)
 |---|---|---|---|---|
 | 1 | (행 생성) → `queued` | 업로드 완료 알림을 받고 1단계 작업을 SQS에 넣을 때 | 백엔드 | `created_at` |
 | 2 | `queued` → `stills_running` | 워커가 1단계 메시지를 꺼냈을 때 | 워커 | `stage1_started_at` |
-| 3 | `stills_running` → `stage1_running` | 정지 장면 비식별화가 끝났을 때 | 워커 | `still_frames` 행 생성 (1행) |
+| 3 | `stills_running` → `stage1_running` | 정지 장면 비식별화와 **차량 탐지**가 끝났을 때 (D-65) | 워커 | `still_frames` 행 생성 (1행, `detections` 포함) |
 | 4 | `stage1_running` → `stage1_input_done` | 사용자가 차량·파손 부위 입력을 저장했을 때 | 백엔드 | `input_completed_at` |
-| 5 | `stage1_running` → `stage1_done` | 탐지·추적이 영상 끝까지 가고 마지막 구간 파일을 저장했는데 입력이 없을 때 (D-63) | 워커 | `stage1_ended_at` |
+| 5 | `stage1_running` → `stage1_done` | 탐지·추적이 영상 끝까지 가고 마지막 구간 파일을 저장했는데 입력이 없을 때 (D-76) | 워커 | `stage1_ended_at` |
 | 6 | `stage1_input_done` → `stage2_running` | 탐지·추적이 영상 끝까지 가고 마지막 구간 파일을 저장했고 입력이 있을 때. 워커가 이어서 2단계를 실행한다 | 워커 | `stage1_ended_at`, `stage2_started_at` |
 | 7 | `stage1_done` → `stage2_running` | 입력이 들어와 백엔드가 2단계 작업을 SQS에 넣고, 워커가 그 메시지를 꺼냈을 때 | 워커 | `input_completed_at`(백엔드), `stage2_started_at` |
 | 8 | `stage2_running` → `ready` | 첫 묶음 후보 클립이 모두 만들어졌을 때 | 워커 | `stage2_ended_at` |
-| 9 | `ready` → `pinned` | 사용자가 "찾음"을 골랐을 때 | 백엔드 | `pinned_incidents` 행 생성. 상태 변경과 **한 트랜잭션** (D-35) |
+| 9 | `ready` → `finished` | 사용자가 [확인 끝내기]를 눌렀을 때 (D-80) | 백엔드 | 없음. "찾음"은 상태를 바꾸지 않고 `pinned_incidents` 행만 넣는다 |
 | 10 | `ready` → `batch_running` | 사용자가 [다음]을 눌렀고(묶음 전체 "못 찾음", D-37) 남은 후보가 있을 때 | 백엔드→워커 | 백엔드가 `next_batch` 작업을 SQS에 넣는다 |
 | 11 | `batch_running` → `ready` | 다음 묶음 클립이 만들어졌을 때 | 워커 | |
 | 12 | `ready` → `exhausted` | 사용자가 [다음]을 눌렀고(묶음 전체 "못 찾음", D-37) 남은 후보가 없을 때 | 백엔드 | |
 | 14 | `stage2_running` → `exhausted` | 2단계가 끝났는데 룰이 후보를 하나도 만들지 못했을 때 (후보 0건) | 워커 | `stage2_ended_at`. 클립을 만들 것이 없으므로 `ready`를 거치지 않는다 (D-50) |
 | 13 | 어떤 상태 → `failed` | 1단계 시작 직후 워커가 읽을 수 없는 코덱을 발견했을 때(다시 해도 같으므로 바로, D-43 ⚠️ 팀장 확인). 그 밖에 워커가 되풀이해도 소용없는 오류를 만났을 때 | 워커 | `error_message`. 어떤 오류를 이렇게 볼지는 🚧 (06장) |
-| 15 | `batch_running` → `pinned` | 다음 묶음을 만드는 동안 사용자가 이전 묶음의 후보에서 "찾음"을 골랐을 때 (D-69) | 백엔드 | 9번과 같다. 만들던 묶음은 버려진다. 워커의 전이 11은 `WHERE status = 'batch_running'`이라 0행이 되고, 4.4 규칙대로 메시지를 지우고 끝난다 |
-| 16 | `exhausted` → `pinned` | 후보를 전부 넘긴 뒤 사용자가 이전 묶음으로 돌아가 "찾음"을 골랐을 때 (D-69) | 백엔드 | 9번과 같다. 후보가 0건이라 이른 `exhausted`(전이 14)에서는 고를 클립이 없어 일어나지 않는다 |
+| 15 | `batch_running` → `finished` | 다음 묶음을 만드는 동안 사용자가 [확인 끝내기]를 눌렀을 때 (D-79, D-80) | 백엔드 | 9번과 같다. 만들던 묶음은 버려진다. 워커의 전이 11은 `WHERE status = 'batch_running'`이라 0행이 되고, 4.4 규칙대로 메시지를 지우고 끝난다 |
 
 - 7번에서 백엔드는 상태를 바꾸지 않는다. 입력을 저장하고 SQS에만 넣는다. 상태를 바꾸는 쪽을 워커 하나로 모아야 4.4의 중복 방지가 한 곳에서 걸린다.
 - **`exhausted`에 이르는 길은 둘이다.** 사용자가 [다음]으로 후보를 전부 넘긴 경우(전이 12)와, 후보가 애초에 0건인 경우(전이 14)다. 화면 문구가 달라야 하므로 상태 조회 API가 `candidate_total`을 함께 돌려준다 (D-50, 05장 5.5). 09장 KPI 집계도 이 둘을 구분해서 센다.
-- 끝 상태(`pinned`, `exhausted`, `failed`)에서는 더 전이하지 않는다. **예외는 전이 16(`exhausted` → `pinned`) 하나다.** 이미 만든 마스킹본 클립을 고르는 것뿐이라 워커도 원본도 필요 없다 (D-69). 다시 분석하려면 새 작업을 만든다. (재분석 기능은 Non-Scope)
-- **워커가 `failed`로 바꿀 때도 조건을 붙인다**(전이 13). 자기가 맡은 상태일 때만 바꾼다(예: `WHERE status = 'batch_running'`). 전이 15로 이미 `pinned`가 된 작업을 워커가 `failed`로 덮어쓰면 안 된다
-- **끝 상태에 이르면 원본 영상이 파기 대상이 된다.** 상태 전이가 아니라 백엔드 주기 작업이 하루 1회 찾아서 지우고 `videos.raw_deleted_at`을 찍는다. 끝 상태에 이르지 못해도 `last_activity_at`에서 3일이 지나면 같이 지운다. (D-52)
+- 끝 상태(`finished`, `exhausted`, `failed`)에서는 더 전이하지 않고, "찾음"도 받지 않는다. 다시 분석하려면 새 작업을 만든다. (재분석 기능은 Non-Scope)
+- **워커가 `failed`로 바꿀 때도 조건을 붙인다**(전이 13). 자기가 맡은 상태일 때만 바꾼다(예: `WHERE status = 'batch_running'`). 전이 15로 이미 `finished`가 된 작업을 워커가 `failed`로 덮어쓰면 안 된다
+- **끝 상태는 파기와 상관없다.** 상태와 관계없이 `upload_completed_at`에서 30일이 지나면 백엔드 주기 작업(하루 1회)이 원본, 트랙 파일, 마스킹본을 한 번에 지운다. 끝 상태가 된 뒤에도 30일까지는 고정한 사건 지점을 다시 볼 수 있다. (D-52, D-57, D-64, D-80)
 
 ## 4.4 두 번 실행되지 않게 하는 방법
 
@@ -447,8 +443,8 @@ UPDATE analysis_jobs
 
 같은 방법을 1단계 시작(전이 2, `WHERE status = 'queued'`)과 다음 묶음(전이 11)에도 쓴다. **상태를 바꾸는 모든 UPDATE에는 `WHERE status = ...`를 반드시 붙인다.** 이것이 D-16 "반드시 지킬 것" 2번(멱등성)을 구현하는 방법이다.
 
-- **상태 칼럼이 아닌 곳에도 같은 방법을 쓴다.** 업로드 링크의 `used_at`(05장 6번), 업로드 완료의 `upload_completed_at`(05장 7번), GPU 미리 켜기의 `warmup_at`(05장 6-1번)이 모두 "비어 있을 때만 채운다"는 조건부 UPDATE다. 1행이면 이 요청이 맡고, 0행이면 이미 처리된 것이라 아무것도 하지 않는다.
-- 1단계가 중간부터 다시 시작되면 `processed_sec`부터 이어 간다. 그 앞의 구간 파일과 추적기 상태가 S3에 있으므로 다시 탐지하지 않는다 (D-63). ⚠️ 다만 `stage1_running`에서 재전달된 메시지는 위 규칙대로 0행이라 지워지므로, 무엇이 다시 시작시킬지는 🚧 (D-63 한계, D-56 한계).
+- **상태 칼럼이 아닌 곳에도 같은 방법을 쓴다.** 업로드 링크의 `used_at`(05장 6번), 업로드 완료의 `upload_completed_at`(05장 7번)이 모두 "비어 있을 때만 채운다"는 조건부 UPDATE다. 1행이면 이 요청이 맡고, 0행이면 이미 처리된 것이라 아무것도 하지 않는다.
+- 2단계가 중간부터 다시 시작되면 `processed_sec`부터 이어 간다. 그 앞의 구간 파일과 추적기 상태가 S3에 있으므로 다시 탐지하지 않는다 (D-76). ⚠️ 다만 `stage2_running`에서 재전달된 메시지는 위 규칙대로 0행이라 지워지므로, 무엇이 다시 시작시킬지는 🚧 (D-76 한계, D-56 한계).
 
 ## 4.5 "대기 중 (앞에 N건)"의 N 계산
 
@@ -500,7 +496,7 @@ SELECT count(*)
 
 ## 4.8 트랙 결과 파일 형식
 
-**중간 저장 구간 하나당 JSONL 파일 하나**를 만든다. 구간 파일을 번호순으로 이어 붙이면 영상 전체의 트랙이다. 한 줄에 JSON 객체 하나를 쓰고, 줄 하나가 "어떤 시각에 어떤 객체가 어디에 있었는지"를 나타낸다. (D-26, D-63)
+**중간 저장 구간 하나당 JSONL 파일 하나**를 만든다. 구간 파일을 번호순으로 이어 붙이면 영상 전체의 트랙이다. 한 줄에 JSON 객체 하나를 쓰고, 줄 하나가 "어떤 시각에 어떤 객체가 어디에 있었는지"를 나타낸다. (D-26, D-76)
 
 ```
 {"t":720.0,"track_id":31,"cls":"car","bbox":[810,440,960,620],"conf":0.91}
@@ -519,7 +515,7 @@ SELECT count(*)
 **규칙**
 
 - 줄은 `t` 오름차순으로 쓴다. 같은 `t`의 객체들은 이어서 쓴다.
-- `track_id`는 영상 안에서 유일하다. 탐지·추적을 영상 처음부터 끝까지 한 줄로 하고, 이어서 할 때도 추적기 상태(다음 ID 번호 포함)를 불러 오기 때문이다. 구간 경계를 넘는 트랙은 앞뒤 파일에서 같은 `track_id`를 가진다. `candidates.track_id`가 이 값이다. (D-63)
+- `track_id`는 영상 안에서 유일하다. 탐지·추적을 영상 처음부터 끝까지 한 줄로 하고, 이어서 할 때도 추적기 상태(다음 ID 번호 포함)를 불러 오기 때문이다. 구간 경계를 넘는 트랙은 앞뒤 파일에서 같은 `track_id`를 가진다. `candidates.track_id`가 이 값이다. (D-76)
 - 구간 번호는 `시작 시간 ÷ 중간 저장 간격`이다(간격은 🚧 U-06). 이어서 할 때 같은 구간을 다시 쓰면 같은 파일을 덮어쓴다.
 - 2단계 룰은 구간 파일을 번호순으로 한 줄씩 읽어 `track_id`별로 모은 뒤 좌표를 비교한다. 파일을 통째로 메모리에 올리지 않는다.
 - 크기 추정: 줄당 80~120바이트로 잡으면 24시간·5fps·동시 객체 20개 기준 약 **0.7~1GB**다(추정, 실측 대상). 시연은 짧은 영상으로만 하므로 수 MB 수준이다.
@@ -538,7 +534,7 @@ videos/{video_id}/original.{ext}     예: original.mp4, original.avi
 ```
 
 - 여기에는 **업로드용 presigned URL만** 발급한다. 재생 URL은 어떤 경우에도 발급하지 않는다. (불변 조건 1, D-23)
-- **이 버킷의 객체는 오래 살지 않는다.** 백엔드 주기 작업이 끝 상태 또는 3일 무입력이면 지운다. 그 위에 S3 수명 주기 규칙으로 30일 삭제를 안전망으로 건다. (D-52, 02장 2.9)
+- **이 버킷의 객체는 오래 살지 않는다.** 백엔드 주기 작업이 `upload_completed_at`에서 30일이 지나면 지운다. 그 위에 S3 수명 주기 규칙으로 30일 삭제를 안전망으로 건다. (D-52, D-64, 02장 2.9)
 - `ext`는 업로드한 파일의 확장자를 소문자로 바꾼 것이다. 허용 확장자는 `.mp4` `.avi` `.mkv` `.mov`이고 코덱은 H.264·H.265다 (D-43, 01장 1.6).
 
 ### 마스킹본 버킷 `<prefix>-masked`
@@ -552,7 +548,9 @@ videos/{video_id}/clips/{candidate_clip_id}.mp4   예: clips/1187.mp4
 - 클립 키는 후보 번호가 아니라 **클립 행 번호**(`candidate_clips.id`)로 짓는다. 후보 번호로 지으면 클립을 다시 만들 때 같은 파일을 덮어써서, 이미 고정한 사건 지점의 영상이 바뀐다. (D-32)
 - 사건 지점을 고정해도 파일을 따로 만들지 않는다. 고정은 `clips/`의 파일을 그대로 가리킨다. (D-32)
 - 사용자에게 주는 재생 URL은 **이 버킷에서만** 발급한다.
-- **이 버킷의 객체도 오래 살지 않는다.** 백엔드 주기 작업이 `upload_completed_at`에서 30일이 지난 영상의 `videos/{video_id}/` 전체를 지우고, 그 위에 S3 수명 주기 규칙 30일 삭제를 안전망으로 건다. (D-57, 02장 2.9)
+- **이 버킷의 객체도 오래 살지 않는다.** 원본과 같은 때 지운다 (D-64, D-80).
+  - `upload_completed_at`에서 30일이 지나면 `videos/{video_id}/` 전체를 지운다 (D-57). 끝 상태가 돼도 먼저 지우지 않는다. 고정한 클립이 여러 개일 수 있기 때문이다.
+  - 그 위에 S3 수명 주기 규칙 30일 삭제를 안전망으로 건다. (02장 2.9)
 - 클립은 H.264 코덱 MP4로 만든다. 브라우저 `<video>` 태그가 재생해야 하기 때문이다. (D-08)
 
 ### 분석 결과 버킷 `<prefix>-analysis`
@@ -562,7 +560,7 @@ videos/{video_id}/tracks/part_0003.jsonl
 videos/{video_id}/tracks/tracker_state
 ```
 
-- **들어가는 것은 1단계 트랙 구간 파일과 추적기 상태뿐이다** (4.8, D-63). 추적기 상태는 이어서 하기용이고 구간을 저장할 때마다 덮어쓴다. 형식은 🚧 06장. 후보는 `candidates` 행으로 DB에, 후보 클립은 마스킹본 버킷에 있다. 차량·파손 부위 입력도 DB(`vehicle_selections`·`damage_inputs`)다.
+- **들어가는 것은 2단계 트랙 구간 파일과 추적기 상태뿐이다** (4.8, D-76). 추적기 상태는 이어서 하기용이고 구간을 저장할 때마다 덮어쓴다. 형식은 🚧 06장. 후보는 `candidates` 행으로 DB에, 후보 클립은 마스킹본 버킷에 있다. 차량·파손 부위 입력도 DB(`vehicle_selections`·`damage_inputs`)다.
 - 구간 번호는 0을 채운 4자리로 쓴다(`part_0003`). 이름순 정렬이 곧 시간순이 된다.
 - 이 버킷은 사용자에게 어떤 URL도 발급하지 않는다. GPU 워커만 읽고 쓴다.
 - 마스킹본과 **같은 시점에 함께 지운다** (D-57).
@@ -604,19 +602,6 @@ CREATE TABLE upload_tokens (
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 
--- 관리자의 위탁계약 동의. agreed_at에서 90일 뒤 행째 지운다 (D-64)
-CREATE TABLE consignment_agreements (
-  id                bigserial PRIMARY KEY,
-  upload_token_id   bigint      NOT NULL UNIQUE REFERENCES upload_tokens(id),  -- CASCADE 없음
-  agreement_version text        NOT NULL,
-  facility_name     text        NOT NULL,
-  facility_address  text        NOT NULL,
-  manager_name      bytea       NOT NULL,   -- 공개키 암호문 (D-70)
-  manager_contact   bytea       NOT NULL,   -- 공개키 암호문 (D-70)
-  agreed_ip         bytea,                  -- 공개키 암호문 (D-70)
-  agreed_at         timestamptz NOT NULL DEFAULT now()
-);
-
 CREATE TABLE videos (
   id                  bigserial PRIMARY KEY,
   owner_user_id       bigint      NOT NULL REFERENCES users(id),
@@ -630,9 +615,8 @@ CREATE TABLE videos (
   height              integer,
   created_at          timestamptz NOT NULL DEFAULT now(),
   upload_completed_at timestamptz,             -- 비어 있으면 업로드 미완료
-  last_activity_at    timestamptz NOT NULL DEFAULT now(),  -- 마지막 사용자 조작. 원본 파기 계산 (D-52)
-  raw_deleted_at      timestamptz,             -- 원본을 지운 시각. 비어 있으면 원본이 있다 (D-52)
-  masked_deleted_at   timestamptz              -- 마스킹본·분석 결과를 지운 시각 (D-57)
+  raw_deleted_at      timestamptz,             -- 원본과 트랙을 지운 시각. 비어 있으면 있다 (D-52, D-64)
+  masked_deleted_at   timestamptz              -- 마스킹본을 전부 지운 시각. raw_deleted_at과 같은 때 찍는다 (D-57, D-64)
 );
 
 CREATE TABLE analysis_jobs (
@@ -645,7 +629,7 @@ CREATE TABLE analysis_jobs (
   stage2_ended_at    timestamptz,
   input_completed_at timestamptz,
   error_message      text,
-  processed_sec      double precision NOT NULL DEFAULT 0,   -- 중간 저장한 지점 (D-63)
+  processed_sec      double precision NOT NULL DEFAULT 0,   -- 중간 저장한 지점 (D-76)
   created_at         timestamptz NOT NULL DEFAULT now(),
   updated_at         timestamptz NOT NULL DEFAULT now()
 );
@@ -655,6 +639,7 @@ CREATE TABLE still_frames (
   analysis_job_id bigint           NOT NULL UNIQUE REFERENCES analysis_jobs(id) ON DELETE CASCADE,   -- 작업당 1장 (D-48)
   t_sec           double precision NOT NULL,   -- 시작 장면이라 0.0
   masked_s3_key   text             NOT NULL,   -- 마스킹본만 저장한다 (불변 조건 2)
+  detections      jsonb            NOT NULL,   -- 탐지된 차량 목록. 0건이면 [] (D-65)
   created_at      timestamptz      NOT NULL DEFAULT now()
 );
 
@@ -682,7 +667,7 @@ CREATE TABLE candidates (
   analysis_job_id bigint           NOT NULL REFERENCES analysis_jobs(id) ON DELETE CASCADE,
   judged_at_sec   double precision NOT NULL,   -- 구간은 저장하지 않는다 (D-33)
   rule_name       text             NOT NULL,   -- 목록은 🚧 (U-13)
-  track_id        integer          NOT NULL,   -- 영상 안에서 유일 (4.8, D-63)
+  track_id        integer          NOT NULL,   -- 영상 안에서 유일 (4.8, D-76)
   vlm_score       integer,                     -- 0~100. VLM 호출 전에는 비어 있다
   rank            integer,
   batch_no        integer,
@@ -698,15 +683,15 @@ CREATE TABLE candidate_clips (
   end_sec       double precision NOT NULL,
   masked_s3_key text,                          -- 완료 후 채운다
   status        text             NOT NULL DEFAULT 'pending',
-  created_at    timestamptz      NOT NULL DEFAULT now(),
-  blocked_at    timestamptz                  -- 누락 신고로 재생을 막은 시각 (D-65)
+  created_at    timestamptz      NOT NULL DEFAULT now()
 );
 
 CREATE TABLE pinned_incidents (
   id                bigserial PRIMARY KEY,
-  analysis_job_id   bigint      NOT NULL UNIQUE REFERENCES analysis_jobs(id) ON DELETE CASCADE,
+  analysis_job_id   bigint      NOT NULL REFERENCES analysis_jobs(id) ON DELETE CASCADE,
   candidate_clip_id bigint      NOT NULL REFERENCES candidate_clips(id),   -- CASCADE 없음 (D-32)
-  pinned_at         timestamptz NOT NULL DEFAULT now()
+  pinned_at         timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (analysis_job_id, candidate_clip_id)                              -- 작업당 여러 개 (D-80)
 );
 
 -- 법정 기록. 지우지 않는다 (D-53)
@@ -731,9 +716,8 @@ CREATE INDEX idx_cand_job_batch_rank ON candidates (analysis_job_id, batch_no, r
 CREATE INDEX idx_cand_job_verdict    ON candidates (analysis_job_id, verdict);
 CREATE INDEX idx_clips_candidate     ON candidate_clips (candidate_id);
 CREATE INDEX idx_access_video        ON access_logs (video_id, created_at DESC);
-CREATE INDEX idx_videos_raw_alive    ON videos (last_activity_at) WHERE raw_deleted_at IS NULL;
+CREATE INDEX idx_videos_raw_alive    ON videos (upload_completed_at) WHERE raw_deleted_at IS NULL;
 CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE masked_deleted_at IS NULL;
-CREATE INDEX idx_agreements_agreed   ON consignment_agreements (agreed_at);
 ```
 
 | 인덱스 | 어떤 조회에 쓰나 |
@@ -744,12 +728,11 @@ CREATE INDEX idx_agreements_agreed   ON consignment_agreements (agreed_at);
 | `candidates (analysis_job_id, verdict)` | 전이 10·12의 "남은 후보가 있는가" |
 | `candidate_clips (candidate_id)` | 후보의 클립을 찾을 때 |
 | `access_logs (video_id, created_at DESC)` | "이 영상에 누가 언제 닿았나" (D-53) |
-| `videos (last_activity_at) WHERE raw_deleted_at IS NULL` | 원본 파기 주기 작업이 "지울 것"을 찾을 때. 부분 인덱스라 이미 지운 영상은 아예 들어오지 않는다 (D-52) |
+| `videos (upload_completed_at) WHERE raw_deleted_at IS NULL` | 파기 주기 작업이 보관 상한(30일)이 지난 "지울 것"을 찾을 때. 부분 인덱스라 이미 지운 영상은 아예 들어오지 않는다 (D-52, D-64) |
 | `videos (upload_completed_at) WHERE masked_deleted_at IS NULL` | 같은 주기 작업이 마스킹본 파기 대상을 찾을 때 (D-57) |
-| `consignment_agreements (agreed_at)` | 같은 주기 작업이 90일 지난 계약 기록을 찾을 때 (D-64) |
 
 - 데모 규모(영상 수십 건)에서는 인덱스가 없어도 느리지 않다. **부하 테스트(09장)에서 행을 많이 넣고 재는 것이 이 인덱스들의 목적이다.**
-- `still_frames`·`vehicle_selections`·`damage_inputs`·`pinned_incidents`는 UNIQUE 제약이 만드는 인덱스로 충분하다. 모두 `analysis_job_id`로만 찾기 때문이다.
+- `still_frames`·`vehicle_selections`·`damage_inputs`·`pinned_incidents`는 UNIQUE 제약이 만드는 인덱스로 충분하다. 모두 `analysis_job_id`로만 찾기 때문이다. `pinned_incidents`의 UNIQUE는 `(analysis_job_id, candidate_clip_id)`라 앞 칼럼만으로도 이 인덱스를 쓴다.
 - `sessions`와 `upload_tokens`도 마찬가지다. 찾는 방법이 `token_hash` 하나뿐이고 여기에 UNIQUE가 걸려 있다. 요청마다 도는 조회라 인덱스가 꼭 필요한데, UNIQUE가 이미 만들어 준다.
 
 ### DDL에서 정한 것 (D-27)
@@ -763,7 +746,6 @@ CREATE INDEX idx_agreements_agreed   ON consignment_agreements (agreed_at);
 | `pinned_incidents → candidate_clips` FK | CASCADE를 걸지 **않는다** | 고정한 클립 행만 따로 지워지면 사건 지점이 사라진다. 분석 작업째 지울 때는 위의 CASCADE로 함께 지워진다 (D-32) |
 | `access_logs`의 FK 2개 | `ON DELETE SET NULL` | 법정 기록이라 사용자나 영상이 지워져도 행이 남아야 한다. CASCADE면 함께 지워지고, 기본 동작(RESTRICT)이면 영상을 못 지운다. 둘 다 곤란해서 SET NULL을 쓴다 (D-53) |
 | `videos → upload_tokens` FK | CASCADE를 걸지 **않는다**(기본 동작) | 영상은 링크로만 올라오므로(D-45) 영상이 가리키는 링크 행은 지울 수 없어야 한다. 만료 링크 정리 작업을 만들면 쓰지 않은 링크(`used_at IS NULL`)만 지운다 |
-| `consignment_agreements → upload_tokens` FK | CASCADE를 걸지 **않는다**(기본 동작) | 계약 기록은 90일 파기 작업으로만 지운다. 링크 행을 지운다고 함께 사라지면 안 된다 (D-64) |
 | `updated_at` 갱신 | 트리거를 쓰지 않고 **UPDATE 문에 직접 쓴다** | 상태를 바꾸는 UPDATE는 4.4처럼 `WHERE status = ...`가 붙은 조건부 문장이다. 같은 문장에서 함께 쓰는 편이 읽기 쉽고, 트리거가 숨어서 도는 것보다 추적하기 낫다 |
 | `NOT NULL` 기준 | 행을 만드는 시점에 값을 알 수 있으면 `NOT NULL`, 나중에 채우면 NULL 허용 | `videos.duration_sec`처럼 워커가 나중에 채우는 칼럼은 NULL이어야 한다. 주석으로 "완료 후 채운다"를 적어 둔다 |
 | 금액·좌표 타입 | 좌표·시간은 `double precision`, 픽셀 bbox는 JSONB 안의 정수 배열 | 4.2·4.8의 표와 같다. 소수 오차가 문제 되는 계산(금액 등)은 이 프로젝트에 없다 |
@@ -773,44 +755,47 @@ CREATE INDEX idx_agreements_agreed   ON consignment_agreements (agreed_at);
 | 항목 | 어디서 정하나 |
 |---|---|
 | 업로드 링크 발급 화면, 만료 안내 문구 | 07장 (D-28). 유효 시간·발급 규칙은 08장 8.6에서 정했다 |
-| 드래그와 탐지를 맞추는 기준(겹침 비율 등), 누끼를 다각형으로 딸지 사각형만 쓸지 | 누끼를 우선 빼서(D-36) 지금은 정하지 않는다. 다시 넣을 때 06장 (U-13, U-09) |
+| 드래그와 탐지를 맞추는 기준(겹침 비율 등) | **없어졌다** → D-65에서 사용자가 직접 고르므로 맞출 것이 없다 |
+| 누끼를 다각형으로 딸지 (겹친 차량을 픽셀 단위로 가르기) | 06장 (U-09). D-65는 탐지 bbox만 쓴다 🚧 |
+| 탐지 0건·본인 차 없음일 때의 폴백 | **두지 않는다** → 재업로드 안내로 간다 (D-65, 2026-09-26 팀장 결정) |
 | 룰이 실제로 받는 파손 부위 값(근접 판정 폭, 인접 영역) | 06장 (U-13) → 정해지면 `schema_version`만 올린다 |
-| `payload` 검증 규칙 | **해결** → [05장 5.7](05-api.md#57-차량파손-부위-입력-저장-api) (`schema_version` 1의 규칙 6가지) |
+| `payload` 검증 규칙 | **해결** → [05장 5.7](05-api.md#57-차량파손-부위-입력-저장-api). D-65로 `schema_version` 2가 되어 규칙을 고쳐야 한다 ⚠️ 팀원 2 |
 | 디코딩 청크 길이, 중간 저장 간격, 샘플링 fps | U-06, 실측 후 |
 | 상태별 화면 문구 | 07장 (U-15) |
-| 청크 경계를 넘는 트랙 이어 붙이기 | **해결** → D-63 (탐지·추적을 영상 전체에 한 줄로 해 끊기지 않는다) |
-| 1단계 도중 죽은 작업을 누가 다시 시작시키나 | 🚧 팀장·팀원 2 (D-63 한계, D-56 한계) |
-| 추적기 상태 파일 형식 | 06장 (D-63) |
+| 청크 경계를 넘는 트랙 이어 붙이기 | **해결** → D-76 (탐지·추적을 영상 전체에 한 줄로 해 끊기지 않는다) |
+| 1단계 도중 죽은 작업을 누가 다시 시작시키나 | 🚧 팀장·팀원 2 (D-76 한계, D-56 한계) |
+| 추적기 상태 파일 형식 | 06장 (D-76) |
 | 워커가 어떤 오류를 `failed`로 볼지 (전이 13) | 06장 (D-43) |
 | 마이그레이션 도구(Alembic 등), `0001_init.sql`을 둘 위치 | 03장, 10장 (U-03, U-12) |
-| 마스킹본·분석 결과의 보관 기간과 파기 방법 | **해결** → D-57 (업로드 완료 30일 뒤 파기, `masked_deleted_at`). 확정 |
+| 마스킹본·분석 결과의 보관 기간과 파기 방법 | **해결** → D-57 (업로드 완료 30일 뒤 파기, `masked_deleted_at`). 파기 시점은 D-64·D-80으로 조정 (업로드 완료 30일 뒤 원본·트랙·마스킹본을 한 번에) |
 | `status`에 CHECK 제약을 더할지 | D-24가 확정되고 상태 목록이 굳은 뒤 (D-27) |
 
 ## 관련 결정·조건
 
 - 상태 구조는 `analysis_jobs` 한 행 + 시각 칼럼: D-24
 - 입력값은 JSONB + `schema_version`: D-25
-- 트랙 파일은 JSONL: D-26. 중간 저장 구간당 1개, `track_id`는 영상 안에서 유일: D-63
+- 트랙 파일은 JSONL: D-26. 중간 저장 구간당 1개, `track_id`는 영상 안에서 유일: D-76
 - DDL 규칙(status에 CHECK를 걸지 않음, FK CASCADE 범위): D-27
 - 관리자는 계정 없이 업로드 전용 일회용 링크로 올린다: D-28 (U-14 해결)
-- 차량·파손 부위는 두 번 드래그로 입력하고 본인 차량은 추적하지 않는다: D-29 (U-13 일부 해결)
+- 차량·파손 부위 입력, 본인 차량은 추적하지 않는다: D-29 (U-13 일부 해결) → **탐지된 차량을 고른다: D-65**
 - 로그인 세션은 DB 테이블 + HttpOnly 쿠키: D-30
 - 사건 지점 고정은 파일 복사 없이 클립 행 참조: D-32
 - 후보는 판정 시점만, 구간·묶음 번호는 한 곳에만: D-33
 - 파손 부위 방향(`sides`)은 저장하지 않고 워커가 계산: D-34
-- "찾음"은 `pinned_incidents` 한 곳에만, 전이 9는 한 트랜잭션: D-35
-- 우선 누끼 없이 드래그한 차량 사각형을 그대로 씀, 차량·파손 부위는 한 번에 저장: D-36
+- "찾음"은 `pinned_incidents` 한 곳에만: D-35 → **여러 개 고정, 상태를 바꾸지 않음, [확인 끝내기]로 `finished`: D-80**
+- 우선 누끼 없이 드래그한 차량 사각형을 그대로 씀: D-36 (D-65로 대체) / 차량·파손 부위는 한 번에 저장: D-36
 - 후보마다 [찾음]만, 묶음 단위 [다음]이 "못 찾음": D-37
-- 고정 해제 없음, `pinned`는 끝 상태: D-40
+- 고정 해제 없음: D-40
 - 원본 키 확장자, 코덱 불량 시 재시도 없이 `failed`: D-43 (코덱 검사는 팀장 확인)
 - 영상은 업로드 링크로만 올라온다, `upload_token_id` NOT NULL: D-45
 - SQS에 넣고 나서 커밋, 작업 행이 없는 메시지는 지우지 않음(4.4): D-46
-- 입력 수정은 1단계가 끝나기 전까지, 상태 조회에 `input_done`: D-49
+- 입력 수정은 1단계가 끝나기 전까지, 상태 조회에 `input_done`: D-49 → 입력은 한 번만, 저장 전 확인창: D-66
+- 본인 차량은 탐지된 차량 중에서 고른다(`still_frames.detections`, `vehicle_selections` `schema_version` 2): D-65
 - 후보 0건이면 `exhausted`로 보내고 `candidate_total`로 구분: D-50
 - 클립 생성에 실패한 후보는 이번 묶음에서 빠지고, 다시 만들지 않는다: D-51
-- 원본은 끝 상태 또는 3일 무입력이면 파기, `raw_deleted_at`: D-52
+- 원본과 트랙은 업로드 완료 30일 뒤에 파기, `raw_deleted_at`: D-52, D-64, D-80
 - 열람·발급·파기 기록을 `access_logs`에 남긴다: D-53
-- 마스킹본·분석 결과는 업로드 완료 30일 뒤 파기, `masked_deleted_at`: D-57 (U-24 해결)
+- 마스킹본도 원본과 같이 업로드 완료 30일 뒤에 전부 파기, `masked_deleted_at`: D-57, D-64, D-80 (U-24 해결)
 - 두 단계 분석과 상태 표시: D-05, [02장 2.5](02-architecture.md#25-처리-흐름-두-단계-분석)
 - DB는 백엔드 EC2의 PostgreSQL: D-17
 - 작업 전달은 SQS, 상태는 DB: D-16
@@ -818,4 +803,4 @@ CREATE INDEX idx_agreements_agreed   ON consignment_agreements (agreed_at);
 - 대기 순서 표시, 무상태 API: D-19
 - 불변 조건 1·7: [02장 2.4](02-architecture.md#24-이중-경로와-불변-조건)
 - S3 사용: D-09. 영역은 비공개 버킷 3개로 분리: D-23
-- 청크는 디코딩만 나누고 탐지·추적은 한 줄로, 중간 저장, `chunks` 테이블 없음: D-63, [02장 2.6](02-architecture.md#26-청크-분할과-병렬-처리)
+- 청크는 디코딩만 나누고 탐지·추적은 한 줄로, 중간 저장, `chunks` 테이블 없음: D-76, [02장 2.6](02-architecture.md#26-청크-분할과-병렬-처리)
