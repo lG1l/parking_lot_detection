@@ -3,20 +3,9 @@
 > 마지막 수정: 2026-09-28
 > 표시: 🚧 미정 · ⚠️ 확인 필요 · 🔐 멘토 승인 필요
 >
-> 5.2의 엔드포인트 17개를 모두 썼다. 근거가 되는 결정 중 **D-28·D-29·D-30·D-31·D-32·D-35·D-37·D-38·D-39·D-40·D-41·D-42·D-44·D-45·D-46·D-47·D-48·D-49·D-51·D-52·D-53·D-57·D-80은 확정**이고, 나머지(D-25·D-34·D-43·D-50·D-56·D-62·D-64·**D-65·D-66**)는 상태가 아직 **"확정 필요"** 다. **D-36은 D-65로, D-49의 수정 허용 구간은 D-66으로 대체됐다** — 10번과 11번이 그에 맞춰 바뀌었으니 팀원 2가 확인해야 한다. 14·15번과 새 17번은 D-80(여러 장면 고정, [확인 끝내기])에 맞춰 바뀌었다. 이 장을 전제로 백엔드·프론트 구현을 시작해도 되지만, 확정되지 않은 것은 뒤집힐 수 있다는 것을 알고 진행한다. 남은 항목은 [5.10](#510-이-장에서-미정으로-남는-것)에 모아 두었다. 프론트에서 화면·기능 요구사항을 뽑을 때는 [5.11](#511-전체-그림)의 요약부터 본다.
+> 5.2의 엔드포인트 18개를 모두 썼다. 근거가 되는 결정 중 **D-28·D-29·D-30·D-31·D-32·D-35·D-37·D-38·D-39·D-40·D-41·D-42·D-44·D-45·D-46·D-47·D-48·D-49·D-51·D-52·D-53·D-57·D-80은 확정**이고, 나머지(D-25·D-34·D-43·D-50·D-56·D-62·D-64·**D-65·D-66**)는 상태가 아직 **"확정 필요"** 다. **D-36은 D-65로, D-49의 수정 허용 구간은 D-66으로 대체됐다** — 10번과 11번이 그에 맞춰 바뀌었으니 팀원 2가 확인해야 한다. 14·15번과 새 17번은 D-80(여러 장면 고정, [확인 끝내기])에 맞춰 바뀌었다. 이 장을 전제로 백엔드·프론트 구현을 시작해도 되지만, 확정되지 않은 것은 뒤집힐 수 있다는 것을 알고 진행한다. 남은 항목은 [5.10](#510-이-장에서-미정으로-남는-것)에 모아 두었다. 프론트에서 화면·기능 요구사항을 뽑을 때는 [5.11](#511-전체-그림)의 요약부터 본다.
 
-> ⚠️ **D-67~D-75 반영 필요 (2026-09-27, 팀장).** 본문은 아직 고치지 않았다. 아래는 바뀌어야 할 곳과 영향만 적은 것이다. 팀원 2가 확인해 반영한다. 근거는 [11장](11-decisions.md)과 [06장](06-pipeline.md).
->
-> | 위치 | 바뀌는 것 | 근거 |
-> |---|---|---|
-> | 7번 업로드 완료 알림 | 넣는 1단계 작업이 정지 장면만 만든다. 응답 형식은 그대로 | D-67 |
-> | 16번 GPU 켜기 | 바뀌지 않는다. 다만 입력 저장(11번) 때도 GPU를 켜야 하는 경우가 흔해진다(업로드 뒤 15분 넘게 입력하지 않으면 꺼짐) | D-67, D-15 |
-> | 9번 상태 조회 | 4.3 상태 정리(`stage1_running`·`stage1_input_done` 삭제)를 따른다. 입력 뒤 약 30분 대기를 보여줄 진행률이나 예상 시간을 줄지 🚧 | D-67 |
-> | 10번 정지 장면 | 바뀌지 않는다 | |
-> | 11번 입력 저장 | 요청에 **탐지 상황**(보임/안 보임), **텍스트 설명**(선택), **사진**(선택)을 더한다. 안 보임이면 `damage_bbox` 대신 파손 쪽 위치를 받는다 🚧 U-25. 사진은 JSON 본문에 넣지 않고 **presigned PUT으로 S3에 직접** 올리는 방식을 권장한다(업로드와 같은 방식, D-18) — 사진용 URL 발급 API가 하나 더 필요할 수 있다 🚧. 저장이 끝나면 2단계 작업을 SQS에 넣고 GPU를 켠다(1단계 완료를 기다리는 분기 없음) | D-72, D-67 |
-> | 12번 묶음 조회 | 클립이 크롭된 영상이다. 응답에 크롭 영역을 줄지(화면에서 전체 화면 속 위치를 보여줄지) 🚧. 점수는 여전히 돌려주지 않는다 | D-70 |
-> | 13번 [다음] | 다음 묶음이 이미 준비돼 있으면 바로 `ready`로 보이고, 그다음 묶음 준비 작업을 SQS에 넣는다 | D-68 |
-> | 5.10, 5.11 | 위 변경에 맞춰 미정 목록과 전체 그림(화면 흐름, 상태별 화면)을 고친다 | |
+> **D-67~D-75(2026-09-27, 팀장)를 반영했다.** 11번은 입력이 항상 1단계 뒤에 들어오므로 저장하면 곧바로 2단계 작업을 넣고 GPU를 켠다(D-81). 요청은 탐지 상황·텍스트 설명·사진 키가 더해진 `schema_version` 3이고, 사진은 새 18번이 주는 presigned URL로 올린다(D-83). 9번은 입력을 마치고 2단계를 기다릴 때도 `queue_ahead`를 준다(D-81). 12·13번은 `current_batch_no`로 지금 보여줄 묶음을 가린다(D-82). 넷 다 상태가 **"확정 필요"** 다.
 
 ## 5.1 공통 규칙
 
@@ -167,9 +156,10 @@ GPU EC2 켜기 요청
 | 8 | `GET /api/videos` | 내 영상 목록과 각 상태 | |
 | 9 | `GET /api/videos/{video_id}` | 상태 한 건. **화면이 주기적으로 조회하는 대상**이다. "앞에 N건", 입력을 마쳤는지(`input_done`) 포함 | 4.5, U-18, D-47, D-49 |
 | 10 | `GET /api/videos/{video_id}/still` | 정지 장면(원본 영상 시작 장면 1장, 1단계에서 만들어 둔 것)과 재생용 URL (5.6) | D-41, D-48 |
-| 11 | `PUT /api/videos/{video_id}/input` | 차량·파손 부위 입력 저장. **한 번만 받는다** — 두 번째 요청은 409다 (5.7) | 전이 4·7, D-25, D-65, D-66 |
-| 12 | `GET /api/videos/{video_id}/batch` | 묶음의 후보 클립과 재생용 URL, 남은 후보 수. `?batch_no=`로 이전 묶음 | D-37, D-41, D-79 |
-| 13 | `POST /api/videos/{video_id}/batch/next` | [다음] = 묶음 전체 "못 찾음" | 전이 10·12, D-37 |
+| 18 | `POST /api/videos/{video_id}/input/photo` | 파손 사진 업로드용 presigned URL 발급. 사진을 넣을 때만 11번 전에 부른다 (5.7) | D-41, D-83 |
+| 11 | `PUT /api/videos/{video_id}/input` | 차량·파손 부위 입력 저장. **한 번만 받는다** — 두 번째 요청은 409다. 저장하면 2단계 작업을 넣고 GPU를 켠다 (5.7) | 전이 7, D-25, D-65, D-66, D-83 |
+| 12 | `GET /api/videos/{video_id}/batch` | 묶음의 후보 클립과 재생용 URL, 남은 후보 수. `?batch_no=`로 이전 묶음 | D-37, D-41, D-79, D-82 |
+| 13 | `POST /api/videos/{video_id}/batch/next` | [다음] = 묶음 전체 "못 찾음" | 전이 10·12, D-37, D-82 |
 | 14 | `POST /api/videos/{video_id}/pin` | 사건 지점 고정. 여러 개 가능, 상태는 바뀌지 않는다 | D-35, D-79, D-80 |
 | 15 | `GET /api/videos/{video_id}/pin` | 고정된 사건 지점 목록과 재생용 URL, 원본 기준 시작·끝 시간 | D-32, D-80 |
 | 17 | `POST /api/videos/{video_id}/finish` | [확인 끝내기]. 후보 확인을 끝낸다 | 전이 9·15, D-80 |
@@ -177,7 +167,7 @@ GPU EC2 켜기 요청
 - 피해자가 원본을 직접 올리는 API는 없다. 업로드는 5~7·16번뿐이다 (D-45).
 - 16번은 번호만 뒤에 붙었고 부르는 순서는 6번과 7번 사이다. 기존 번호를 밀지 않으려고 이렇게 뒀다.
 - 고정 해제 API는 없다 (D-40).
-- 17번은 16번 뒤에 새로 더해 번호가 끝에 붙었다.
+- 17번은 16번 뒤에 새로 더해 번호가 끝에 붙었다. 18번도 같은 이유로 끝에 붙었고, 부르는 순서는 10번과 11번 사이다.
 
 ## 5.3 계정 API
 
@@ -521,7 +511,7 @@ END
 
 | 키 | 언제 들어가나 |
 |---|---|
-| `queue_ahead` | `status`가 `queued`일 때만. 나보다 먼저 들어왔고 아직 1단계가 끝나지 않은 작업 수다 (04장 4.5) |
+| `queue_ahead` | `status`가 `queued`일 때, 그리고 `stage1_done`이면서 `input_done`이 `true`일 때(입력을 마치고 2단계를 기다리는 중). 나보다 먼저 줄에 섰고 아직 GPU 차례가 끝나지 않은 작업 수다 (04장 4.5, D-81) |
 | `input_done` | 항상. 차량·파손 부위 입력이 저장됐는지(`analysis_jobs.input_completed_at`이 차 있는지)다. 저장하지 않고 조회할 때 본다 |
 | `candidate_total` | `status`가 `exhausted`일 때만. 지금까지 만들어진 후보 총 수다. `0`이면 후보가 한 번도 만들어지지 않았다는 뜻이다 (04장 `candidates`를 세서 계산한다) |
 | `raw_deleted` | 항상. 원본 영상**과 트랙 파일**이 파기됐는지(`videos.raw_deleted_at`이 차 있는지)다. 저장하지 않고 조회할 때 본다 (D-52, D-64) |
@@ -535,7 +525,8 @@ END
   - 두 값은 같은 때 `true`가 된다. 파기 작업이 원본과 마스킹본을 지우는 도중 멈추면 잠깐 어긋날 수 있어 둘 다 둔다.
   - `status`에 `expired` 같은 값을 더하지 않은 이유는 D-52에 적었다. 상태 목록·전이 표·KPI 집계를 건드리지 않기 위해서다.
 - **`candidate_total`이 따로 있는 이유**: `exhausted`는 "사용자가 후보를 전부 넘겼다"(전이 12)와 "후보가 0건이었다"(전이 14) 둘 다에서 나온다. 앞은 "모든 후보를 확인했습니다", 뒤는 "후보 구간이 탐지되지 않았습니다"여야 한다(PRD 3.5·3.6). `exhausted`일 때 12번은 409라 화면이 빈 배열로 알아낼 수도 없다. 그래서 여기서 구분값을 준다 (D-50, 07장).
-- 이 API는 무거운 일을 하지 않는다. 읽는 것은 `videos` 1행, `analysis_jobs` 1행, `queued`일 때 count 1번, `exhausted`일 때 count 1번뿐이다 (D-19).
+- 이 API는 무거운 일을 하지 않는다. 읽는 것은 `videos` 1행, `analysis_jobs` 1행, `queue_ahead`를 줄 때 count 1번, `exhausted`일 때 count 1번뿐이다 (D-19).
+- 🚧 2단계는 24시간 영상에 약 30분(추정)이다. 그동안 진행률(`processed_sec ÷ duration_sec`)이나 예상 시간을 줄지는 07장 화면이 정해지면 정한다 (D-67).
 
 실패
 
@@ -594,10 +585,43 @@ END
 
 ## 5.7 차량·파손 부위 입력 저장 API
 
-사용자가 **고른 차량**(`det_id`)과 **파손 부위 사각형**을 한 요청으로 받아 저장한다. 방향(`sides`)은 계산하지 않는다 — 2단계 시작 때 워커가 한다 (D-34).
+사용자가 **고른 차량**(`det_id`)과 **파손 입력**(탐지 상황, 파손 부위 사각형, 텍스트 설명, 사진)을 한 요청으로 받아 저장한다. 방향(`sides`)은 계산하지 않는다 — 2단계 시작 때 워커가 한다 (D-34).
 
 - 차량은 10번이 내려 준 `detections`에서 고른다. 백엔드가 그 `det_id`의 `bbox`를 찾아 함께 저장한다 (D-65). 탐지와 맞추는 계산은 없다.
 - **입력은 한 번만 받는다.** `input_completed_at`이 차 있으면 상태를 가리지 않고 409다. 화면이 저장 전에 확인창을 띄운다 (D-66, 07장).
+- 사진을 넣을 때는 **18번으로 URL을 받아 S3에 먼저 올리고**, 받은 `photo_key`를 11번에 담는다. 사진은 JSON 본문에 넣지 않는다 (D-83).
+
+### 18. `POST /api/videos/{video_id}/input/photo` 파손 사진 업로드 URL 발급
+
+요청
+
+```json
+{"filename": "IMG_0012.HEIC", "size_bytes": 3200000}
+```
+
+성공: `200`
+
+```json
+{"upload_url": "https://<prefix>-raw.s3.ap-northeast-2.amazonaws.com/videos/17/inputs/photo.heic?X-Amz-Algorithm=AWS4-HMAC-SHA256&...&X-Amz-Expires=900&X-Amz-Signature=...",
+ "photo_key": "videos/17/inputs/photo.heic"}
+```
+
+- **입력을 저장하기 전의 `stage1_done`에서만 받는다.** 그 밖의 상태이거나 `input_completed_at`이 차 있으면 409 `INVALID_STATE`다. 행을 잠글 필요는 없다. 늦게 발급돼도 11번이 이미 저장을 마쳤으면 올린 사진은 쓰이지 않고 30일에 함께 지워진다.
+- 키는 `videos/{video_id}/inputs/photo.{ext}`다 (04장 4.9). `ext`는 `filename`의 마지막 `.` 뒤를 소문자로 바꾼 것이다. 원본 버킷 `PutObject`, 유효 시간은 01장 1.6(15분)이다 (D-41).
+- **다시 부르면 같은 키의 URL을 새로 준다.** 사용자가 사진을 바꾸면 덮어쓴다. 확장자가 달라 키가 달라지면 앞 파일은 쓰이지 않고 남았다가 30일에 함께 지워진다. DB에는 아무것도 쓰지 않는다.
+- 올리는 방법은 6번과 같다. **HTTP `PUT`으로 본문에 파일 바이트를 그대로** 보낸다.
+- 서명에 `ContentLength`를 넣어, 알려준 크기와 다른 파일은 S3가 거절하게 한다. 20MB 제한을 S3에서도 지키기 위해서다 ⚠️ 구현 때 확인.
+- 새 IAM 권한은 필요 없다. 백엔드는 이미 원본 버킷에 `PutObject` 권한이 있다 (02장, 08장).
+
+실패
+
+| HTTP | `code` | 언제 |
+|---|---|---|
+| 404 | `VIDEO_NOT_FOUND` | 없는 영상이거나 남의 영상 |
+| 409 | `INVALID_STATE` | 입력을 받는 상태가 아니거나 입력이 이미 있다 |
+| 422 | `UNSUPPORTED_FILE_TYPE` | 확장자가 `.jpg` `.jpeg` `.png` `.heic`가 아님. 확장자가 없는 경우도 포함 (01장 1.6) |
+| 422 | `FILE_TOO_LARGE` | `size_bytes`가 20MB(01장 1.6)보다 큼 |
+| 422 | `VALIDATION_FAILED` | `filename`이 비었거나 `size_bytes`가 0 이하 |
 
 ### 11. `PUT /api/videos/{video_id}/input` 차량·파손 부위 저장
 
@@ -606,64 +630,74 @@ END
 ```json
 {
   "still_frame_id": 305,
-  "schema_version": 2,
+  "schema_version": 3,
   "vehicle": {"det_id": 1},
-  "damage": {"damage_bbox": [940, 470, 1000, 610]}
+  "damage": {
+    "visible": true,
+    "damage_bbox": [940, 470, 1000, 610],
+    "description": "조수석 뒷문 아래가 긁혔어요",
+    "photo_key": "videos/17/inputs/photo.heic"
+  }
 }
 ```
 
 | 키 | 뜻 |
 |---|---|
 | `still_frame_id` | 어느 정지 장면 위에서 골랐는지. 10번 응답의 값을 그대로 보낸다 |
-| `schema_version` | 아래 두 객체의 형식 번호. 지금은 `2`다 (D-25, D-65) |
+| `schema_version` | 아래 두 객체의 형식 번호. 지금은 `3`이다 (D-25, D-83) |
 | `vehicle` | 사용자가 고른 차량. `{"det_id": N}` 하나다. 백엔드가 `bbox`를 채워 `vehicle_selections.payload`에 저장한다 (04장) |
-| `damage` | `damage_inputs.payload`에 **그대로** 저장할 객체 (04장) |
+| `damage` | `damage_inputs.payload`에 **그대로** 저장할 객체 (04장). `description`·`photo_key`는 선택이라 없으면 키를 뺀다 |
 
 `vehicle`은 이 한 형태뿐이다. **차량 사각형을 직접 보내는 경로는 없다** (D-65).
 
 성공: `200`
 
 ```json
-{"status": "stage1_input_done", "input_done": true}
+{"status": "stage1_done", "input_done": true}
 ```
 
-- `status`는 저장 뒤의 상태다. 화면은 이 값으로 다시 그리고 9번을 따로 부르지 않아도 된다.
+- `status`는 저장 뒤의 상태다. 화면은 이 값으로 다시 그리고 9번을 따로 부르지 않아도 된다. 상태는 워커가 2단계 메시지를 꺼낼 때 `stage2_running`으로 바뀐다 (전이 7).
 - **PUT인 이유**: 같은 요청을 다시 보내면 같은 결과가 된다. 두 테이블 모두 작업 1건당 1행이라(04장) 덮어쓰기다.
 
-**`schema_version` 2의 검증 규칙** (D-25, D-65)
+**`schema_version` 3의 검증 규칙** (D-25, D-65, D-83)
 
 DB는 `payload`의 내용을 검사하지 않는다. 아래를 백엔드(Pydantic)가 검사하고, 하나라도 어긋나면 **아무것도 저장하지 않고** 422 `VALIDATION_FAILED`를 돌려준다. `message`에 어느 값이 왜 틀렸는지 적는다.
 
 | # | 검사 | 어긋나면 |
 |---|---|---|
-| 1 | `schema_version`이 `2`다 | 422. 모르는 형식을 저장하면 2단계 룰이 읽지 못한다 |
-| 2 | `vehicle`은 `det_id` 키 하나, `damage`는 `damage_bbox` 키 하나만 가진다 (`extra="forbid"`) | 422. 오타 난 키가 조용히 저장되는 것을 막는다 |
+| 1 | `schema_version`이 `3`이다 | 422. 모르는 형식을 저장하면 2단계 룰이 읽지 못한다 |
+| 2 | `vehicle`은 `det_id` 키 하나, `damage`는 `visible`·`damage_bbox`·`description`·`photo_key` 밖의 키를 갖지 않는다 (`extra="forbid"`) | 422. 오타 난 키가 조용히 저장되는 것을 막는다 |
 | 3 | `det_id`가 **이 `still_frame_id`의 `detections`에 있다** | 422. 없는 차량을 고를 수 없다. 이 검사가 D-29의 "맞추는 기준"을 대신한다 |
 | 4 | `det_id`는 정수다 | 422 |
-| 5 | `damage_bbox`는 **정수 4개** `[x1, y1, x2, y2]`이고 `x1 < x2`, `y1 < y2` | 422 |
-| 6 | `damage_bbox`가 **본인 차량 영역 안(경계 포함)** 에 있다. 본인 차량 영역은 `det_id`로 찾은 탐지 `bbox`다 (D-29, D-65) | 422 |
-| 7 | `still_frame_id`가 **이 작업의** `still_frames` 행이다 | 422 |
+| 5 | `visible`은 참/거짓 값이고 반드시 있다 | 422 |
+| 6 | `visible`이 `true`면 `damage_bbox`가 있고, **정수 4개** `[x1, y1, x2, y2]`이며 `x1 < x2`, `y1 < y2` | 422 |
+| 7 | `damage_bbox`가 **본인 차량 영역 안(경계 포함)** 에 있다. 본인 차량 영역은 `det_id`로 찾은 탐지 `bbox`다 (D-29, D-65) | 422 |
+| 8 | `still_frame_id`가 **이 작업의** `still_frames` 행이다 | 422 |
+| 9 | `description`이 있으면 문자열이고 1~500자다 (01장 1.6) | 422 |
+| 10 | `photo_key`가 있으면 **이 영상의 사진 키** `videos/{video_id}/inputs/photo.{ext}`(18번이 준 값)와 같다 | 422. 남의 파일이나 원본 영상 키를 가리키지 못하게 한다 |
 
+- 🚧 `visible`이 `false`일 때 `damage_bbox` 대신 받을 위치는 U-25(팀장)가 정해지면 이 표에 더한다.
 - 좌표는 원본 해상도 기준 픽셀이다 (5.1). 정지 장면 이미지도 원본 해상도로 저장하므로(5.6) 프론트는 화면 좌표를 이미지 원본 크기로 되돌려 보낸다.
-- **해상도 안인지는 따로 검사하지 않는다.** 6번이 `damage_bbox`를 탐지 `bbox` 안으로 가두고, 탐지 `bbox`는 워커가 원본 프레임에서 만든 값이라 이미 해상도 안이다. `videos.width`·`height`를 읽을 필요가 없어졌다 (D-65).
-- 6번은 화면이 먼저 막는다(07장). 여기서 다시 막는 것은 프론트를 거치지 않은 요청 때문이다.
-- 7번은 남의 작업의 장면 번호를 저장하지 않기 위한 검사다. `still_frame_id`는 `video_id`와 달리 주소에 없지만 순차 번호라 추측할 수 있다 (D-39와 같은 이유).
-- **저장하는 값은 `{"det_id": N, "bbox": [...]}`이다** (04장). `bbox`는 백엔드가 3번에서 찾은 탐지 결과를 복사한 것이다. 룰은 `bbox`만 읽는다 (D-65).
-- U-13(룰이 실제로 받는 값)이 정해져 형식이 바뀌면 `schema_version`을 3으로 올리고 이 표에 3의 규칙을 더한다. 저장된 옛 데이터는 버린다 (D-25).
+- **해상도 안인지는 따로 검사하지 않는다.** 7번이 `damage_bbox`를 탐지 `bbox` 안으로 가두고, 탐지 `bbox`는 워커가 원본 프레임에서 만든 값이라 이미 해상도 안이다. `videos.width`·`height`를 읽을 필요가 없어졌다 (D-65).
+- 7번은 화면이 먼저 막는다(07장). 여기서 다시 막는 것은 프론트를 거치지 않은 요청 때문이다.
+- 8번은 남의 작업의 장면 번호를 저장하지 않기 위한 검사다. `still_frame_id`는 `video_id`와 달리 주소에 없지만 순차 번호라 추측할 수 있다 (D-39와 같은 이유).
+- **10번은 S3에 파일이 있는지 보지 않는다.** 키 모양만 본다. 사용자가 올리다 실패했으면 워커가 사진을 읽지 못하고 사진 없이 진행한다 (06장 6.6 "없으면 뺀다").
+- **저장하는 값은 `vehicle_selections`에 `{"det_id": N, "bbox": [...]}`, `damage_inputs`에 `damage` 그대로다** (04장). `bbox`는 백엔드가 3번에서 찾은 탐지 결과를 복사한 것이다. 룰은 `bbox`만 읽는다 (D-65). 두 행 모두 `schema_version` 3으로 저장한다.
+- U-13(룰이 실제로 받는 값)이 정해져 형식이 바뀌면 `schema_version`을 올리고 이 표에 새 번호의 규칙을 더한다. 저장된 옛 데이터는 버린다 (D-25).
 
-**상태별로 하는 일** (전이 4·7, D-15, D-49, D-66)
+**상태별로 하는 일** (전이 7, D-66, D-81)
 
 | 지금 `status` | 입력이 이미 있나 | 하는 일 |
 |---|---|---|
-| `stage1_running` | 없음 | 두 행을 만들고 `input_completed_at`을 찍는다. `stage1_input_done`으로 바꾼다 (전이 4). SQS에 넣지 않는다 — 1단계가 끝날 때 워커가 이어서 2단계를 한다 (전이 6) |
-| `stage1_done` | 없음 | 두 행을 만들고 `input_completed_at`을 찍는다. **2단계 작업을 SQS에 넣는다** (전이 7). 상태는 워커가 바꾼다 |
+| `stage1_done` | 없음 | 두 행을 만들고 `input_completed_at`을 찍는다. **2단계 작업을 SQS에 넣고 GPU를 켠다** (전이 7). 상태는 워커가 바꾼다 |
 | 아무 상태 | **있음** | 409 `INVALID_STATE`. 입력은 한 번뿐이다 (D-66) |
 | 그 밖 | 없음 | 409 `INVALID_STATE` |
 
-- **입력은 한 번만 받는다. 저장한 뒤에는 고칠 수 없다** (D-66). `input_completed_at`이 차 있으면 상태를 가리지 않고 거절한다. D-49의 "`stage1_input_done`에서 덮어쓰기"는 빠졌다 — 고칠 수 있는 구간이 닫히는 시점(워커가 1단계를 끝낼 때)을 화면이 알 수 없어, 진행도를 계속 지켜봐야 했기 때문이다.
+- **입력은 한 번만 받는다. 저장한 뒤에는 고칠 수 없다** (D-66). `input_completed_at`이 차 있으면 상태를 가리지 않고 거절한다.
 - 대신 **화면이 저장 전에 확인창**을 띄운다. 고른 차량과 그린 파손 부위를 다시 보여주고 "저장한 뒤에는 고칠 수 없습니다"를 알린다 (07장, U-15).
 - `PUT`이지만 같은 요청을 두 번 보내면 두 번째는 409다. 되풀이해도 **DB가 바뀌지 않는다**는 뜻에서는 그대로다.
 - 화면은 9번 응답의 `input_done`이 `true`면 입력 화면을 열지 않는다 (5.5, 07장). [다시 입력] 버튼은 없다.
+- **GPU를 항상 켜는 이유**: 입력은 정지 장면이 나온 뒤 사용자가 언제든 하므로, 그사이 GPU가 유휴로 꺼졌을 수 있다(D-15). 이미 켜져 있으면 켜기 요청은 아무 일도 하지 않는다.
 
 **백엔드가 하는 일** (D-46)
 
@@ -672,23 +706,21 @@ DB는 `payload`의 내용을 검사하지 않는다. 아래를 백엔드(Pydanti
   1) SELECT status, input_completed_at FROM analysis_jobs
       WHERE video_id = :video_id FOR UPDATE          -- 행을 잠근다
      → input_completed_at이 차 있으면 롤백하고 409 INVALID_STATE (D-66)
-     → status가 stage1_running·stage1_done이 아니면 롤백하고 409 INVALID_STATE (message에 현재 상태)
+     → status가 stage1_done이 아니면 롤백하고 409 INVALID_STATE (message에 현재 상태)
   2) SELECT detections FROM still_frames WHERE id = :still_frame_id AND analysis_job_id = :job_id
-     → 행이 없으면 422 (검증 7)
+     → 행이 없으면 422 (검증 8)
      → det_id를 보냈는데 detections에 없으면 422 (검증 3). 있으면 그 bbox를 꺼낸다
-     → damage_bbox가 그 bbox 안이 아니면 422 (검증 6)
+     → damage_bbox가 그 bbox 안이 아니면 422 (검증 7)
   3) INSERT INTO vehicle_selections (..., payload) VALUES (..., :payload)   -- 덮어쓰기 없음 (D-66)
   4) INSERT INTO damage_inputs ...  (같은 방법)
-  5) UPDATE analysis_jobs SET input_completed_at = now(), updated_at = now(),
-            status = CASE WHEN status = 'stage1_running' THEN 'stage1_input_done' ELSE status END
+  5) UPDATE analysis_jobs SET input_completed_at = now(), updated_at = now()
       WHERE id = :job_id
-  6) 1)에서 상태가 stage1_done이었으면
-       SQS에 {"job_id": 42, "kind": "stage2"} 넣기 → 실패하면 롤백하고 500 INTERNAL_ERROR
+  6) SQS에 {"job_id": 42, "kind": "stage2"} 넣기 → 실패하면 롤백하고 500 INTERNAL_ERROR
 커밋
-7) 6)을 했으면 GPU EC2 켜기를 요청한다. 실패해도 200이다 (D-15, D-42)
+7) GPU EC2 켜기를 요청한다. 실패해도 200이다 (D-15, D-42)
 ```
 
-- 1)의 `FOR UPDATE`가 이 API의 핵심이다. 워커도 같은 행의 상태를 조건부로 바꾸므로(4.4), 잠그지 않으면 "1단계가 끝나는 순간에 저장"이 워커의 전이와 엇갈려 2단계가 두 번 시작되거나 한 번도 시작되지 않을 수 있다. 잠그면 둘 중 하나가 먼저 끝나고, 나중 쪽은 바뀐 상태를 보고 위 표대로 판단한다.
+- 1)의 `FOR UPDATE`는 **같은 입력이 동시에 두 번 오는 경우**를 막는다(저장 버튼 두 번 누름, 탭 두 개). 잠그지 않으면 둘 다 "입력 없음"을 보고 2단계 작업을 두 번 넣는다. 잠그면 나중 요청은 `input_completed_at`이 찬 것을 보고 409가 된다.
 - 두 입력을 **한 트랜잭션에서** 쓰므로 "차량만 저장되고 파손 부위가 없는" 행이 남지 않는다 (D-36).
 - 2)가 **탐지와 맞추는 계산을 대신한다.** 사용자가 고른 번호가 실제 탐지 결과에 있는지만 보면 되므로 겹침 비율 같은 기준이 없다 (D-65).
 - `ON CONFLICT`가 필요 없다. 1)에서 이미 입력이 있으면 거절하므로 3)·4)의 INSERT는 항상 새 행이다 (D-66). UNIQUE 제약과 부딪히면 그것은 경합이고, `FOR UPDATE`가 막는다.
@@ -736,7 +768,7 @@ DB는 `payload`의 내용을 검사하지 않는다. 아래를 백엔드(Pydanti
 | 키 | 뜻 |
 |---|---|
 | `batch_no` | 이 응답이 담은 묶음 번호. 1부터 |
-| `latest_batch_no` | 볼 수 있는 마지막 묶음 번호. `batch_no`와 같고 `status`가 `ready`일 때만 [다음 묶음 받기]를 보이고, 13번에 이 값을 보낸다 |
+| `latest_batch_no` | 볼 수 있는 마지막 묶음 번호. `batch_no`와 같고 `status`가 `ready`일 때만 [다음 묶음 받기]를 보이고, 13번에 이 값을 보낸다. 미리 준비해 둔 다음 묶음은 여기에 들지 않는다 (D-82) |
 | `candidate_clip_id` | 고정할 때 14번에 보내는 번호 (D-35) |
 | `rank` | 점수순 순위. 배열은 이 순서로 정렬돼 있다 |
 | `start_sec`·`end_sec` | 클립이 원본 영상의 어느 구간인지 (04장 4.7) |
@@ -747,6 +779,7 @@ DB는 `payload`의 내용을 검사하지 않는다. 아래를 백엔드(Pydanti
 - **VLM 점수는 돌려주지 않는다.** 배열 순서가 곧 점수순이다. 점수를 보여주면 사용자가 영상 대신 숫자를 보고 판단하게 되는데, 이 화면의 목적은 사용자가 직접 확인하는 것이다(PRD 3.5). KPI 집계(09장)는 DB에서 읽는다.
 - **후보 번호(`candidates.id`)도 돌려주지 않는다.** 고정 API가 클립 번호만 받기 때문이다 (D-35).
 - `incident_at_sec`는 `judged_at_sec + 5초`(01장 1.6)를 백엔드가 계산한 값이다. 프론트가 상수를 알 필요가 없다. 판정 시점은 돌려주지 않는다.
+- 🚧 클립은 본인 차량 주변을 크롭한 영상이다(D-70). 크롭 영역(`candidate_clips.crop_bbox`)을 돌려줘 전체 화면 속 위치를 보여줄지는 07장 화면이 정해지면 정한다.
 - 후보 하나에 클립이 여러 개면(다시 만든 경우, D-32) **가장 최근 것 하나**를 준다.
 
 ```sql
@@ -760,11 +793,12 @@ SELECT DISTINCT ON (d.id)
 ```
 
 - **클립을 만들지 못한 후보는 목록에서 빠진다.** 위 SQL이 `c.status = 'done'`인 클립만 고르기 때문이다. 묶음이 10건이 아니라 9건으로 보일 수 있다. 워커는 다시 만들지 않고, 응답에도 따로 알리지 않는다. 드문 경우라 받아들인다 (D-51).
-- `remaining`은 아직 묶음에 들어가지 않은 후보 수다. 이번 묶음의 후보는 세지 않는다.
+- `remaining`은 지금 보여주는 묶음 뒤에 남은 후보 수다. 미리 준비해 둔 묶음과 아직 묶음에 들어가지 않은 후보를 함께 센다. 이번 묶음의 후보는 세지 않는다 (D-82).
 
 ```sql
 SELECT count(*) FROM candidates
- WHERE analysis_job_id = :job_id AND verdict = 'unseen' AND batch_no IS NULL;
+ WHERE analysis_job_id = :job_id AND verdict = 'unseen'
+   AND (batch_no IS NULL OR batch_no > :current_batch_no);
 ```
 
 - **이 API는 빈 배열을 돌려주지 않는다.** 후보가 0건이면 워커가 `ready`를 거치지 않고 바로 `exhausted`로 보내므로(04장 전이 14), 이 API는 409를 돌려준다. 화면은 9번의 `status`와 `candidate_total`을 보고 "후보 구간이 탐지되지 않았다"를 띄운다. 사건이 없다는 뜻이 아니다 (PRD 3.5, D-50).
@@ -773,18 +807,11 @@ SELECT count(*) FROM candidates
 
 | `status` | 부를 수 있나 | `latest_batch_no` |
 |---|---|---|
-| `ready` | 예 | `max(batch_no)`. 지금 묶음 |
-| `batch_running` | 예 (이전 묶음만) | 이미 넘긴 묶음 중 마지막. 만드는 중인 묶음은 클립이 덜 만들어져 보여주지 않는다 |
+| `ready` | 예 | `current_batch_no`. 지금 묶음 |
+| `batch_running` | 예 (이전 묶음만) | `current_batch_no − 1`. 이미 넘긴 묶음 중 마지막. 만드는 중인 묶음(`current_batch_no`)은 클립이 덜 만들어져 보여주지 않는다 |
 | 그 밖 | 아니오. 409 `INVALID_STATE`. 끝 상태(`finished`·`exhausted`)에서는 후보 확인을 받지 않고, 고정한 사건 지점은 15번으로 본다 (D-80) | |
 
-```sql
--- ready: 지금 묶음. batch_running: 사용자가 [다음]으로 넘긴 묶음 중 마지막
-SELECT max(batch_no) FROM candidates
- WHERE analysis_job_id = :job_id
-   AND (:status = 'ready' OR verdict = 'not_found');
-```
-
-- `batch_running` 동안에는 워커가 새 묶음 후보에 `batch_no`를 이미 적었을 수 있어 `max(batch_no)`를 그대로 쓰면 안 된다. 사용자가 넘긴 묶음은 13번이 모두 `not_found`로 바꿨으므로 `verdict`로 가른다. 워커가 번호를 언제 적는지(06장)와 상관없이 맞는다.
+- `max(batch_no)`를 쓰면 안 된다. 워커가 항상 한 묶음 앞서 번호를 매겨 두므로(D-68) 준비 중인 묶음이 보이게 된다. `analysis_jobs.current_batch_no`가 "지금 보여주는 묶음"이라 행 하나만 읽으면 된다 (04장, D-82).
 - **이전 묶음을 볼 때도 `access_logs`에 `view_clip`을 남긴다.** 재생 URL을 발급하는 것은 같기 때문이다 (08장).
 
 실패
@@ -807,39 +834,48 @@ SELECT max(batch_no) FROM candidates
 성공: `200`
 
 ```json
-{"status": "batch_running", "remaining": 13}
+{"status": "ready", "remaining": 13}
 ```
 
+- **보통 `ready`가 온다.** 워커가 다음 묶음을 미리 만들어 두므로 곧바로 12번으로 다음 묶음을 연다 (D-68). 준비가 끝나기 전에 누르면 `batch_running`이 오고, 화면은 9번으로 `ready`가 될 때까지 기다린다.
 - 남은 후보가 없었으면 `{"status": "exhausted", "remaining": 0}`이다. 화면은 "후보 전부 확인 완료"를 보여준다 (PRD 3.6).
 - **요청에 지금 보고 있는 묶음 번호를 함께 보낸다.** 화면이 오래돼 이미 다음 묶음으로 넘어간 뒤에 [다음]을 누르면, 사용자가 보지도 않은 묶음이 "못 찾음"이 된다. 번호가 다르면 409로 막는다.
 - **화면은 마지막 묶음(`batch_no` = `latest_batch_no`)을 볼 때만 이 버튼([다음 묶음 받기])을 보인다.** 이전 묶음을 보는 중에 [다음]은 이미 받은 묶음으로 옮기는 것일 뿐 이 API를 부르지 않는다 (07장, D-79).
 - **마지막 묶음에서 `remaining`이 `0`이면 화면은 보내기 전에 확인창을 띄운다.** 넘기면 `exhausted`(끝 상태)가 되어 더는 [찾음]을 누를 수 없다 (D-79, D-80, 07장).
 
-**백엔드가 하는 일** (전이 10·12, D-37, D-46)
+**백엔드가 하는 일** (전이 10·12, D-37, D-46, D-82)
 
 ```
 트랜잭션 시작
   0) 원본이 파기됐으면(videos.raw_deleted_at이 차 있음) 롤백하고 409 RAW_EXPIRED   (D-52)
-  1) SELECT status FROM analysis_jobs WHERE video_id = :video_id FOR UPDATE
+  1) SELECT status, current_batch_no FROM analysis_jobs WHERE video_id = :video_id FOR UPDATE
      → ready가 아니면 롤백하고 409 INVALID_STATE
-     → 요청의 batch_no가 max(batch_no)와 다르면 롤백하고 409 INVALID_STATE
+     → 요청의 batch_no(= n)가 current_batch_no와 다르면 롤백하고 409 INVALID_STATE
   2) UPDATE candidates SET verdict = 'not_found', verdict_at = now()
-      WHERE analysis_job_id = :job_id AND batch_no = :batch_no AND verdict = 'unseen'
-  3) 남은 후보 수를 센다 (12번의 count 쿼리)
-     > 0 → UPDATE analysis_jobs SET status = 'batch_running', updated_at = now()  (전이 10)
-           SQS에 {"job_id": 42, "kind": "next_batch"} 넣기
-             → 실패하면 롤백하고 500 INTERNAL_ERROR
-     = 0 → UPDATE analysis_jobs SET status = 'exhausted', updated_at = now()      (전이 12)
+      WHERE analysis_job_id = :job_id AND batch_no = :n AND verdict = 'unseen'
+  3) 묶음 n+1을 본다
+     있고 준비됐다     → current_batch_no = n+1. 상태는 ready 그대로
+     만드는 중이거나,
+     없는데 번호 없는 후보가 남았다
+                       → current_batch_no = n+1, status = 'batch_running'   (전이 10)
+     둘 다 아니다      → status = 'exhausted'                               (전이 12)
+     (셋 다 updated_at = now())
+  4) 번호 없는 후보(batch_no IS NULL)가 남았으면
+       SQS에 {"job_id": 42, "kind": "next_batch"} 넣기 → 실패하면 롤백하고 500 INTERNAL_ERROR
 커밋
-4) batch_running이면 GPU EC2 켜기를 요청한다. 실패해도 200이다 (D-42)
+5) 4)를 했으면 GPU EC2 켜기를 요청한다. 실패해도 200이다 (D-42)
 ```
+
+- **"준비됐다"는 묶음 n+1 후보의 클립 중 `pending`·`running`이 하나도 없다는 뜻이다.** `failed`는 준비된 것으로 본다(D-51). 워커는 후보에 `batch_no`를 매기는 트랜잭션에서 `pending` 클립 행을 함께 만들므로, 번호가 매겨졌는데 클립 행이 없는 순간은 없다 (04장 4.4).
+- 4)는 3)의 결과와 상관없이 한다. 묶음 n+1이 준비됐으면 워커는 n+2를 만들고, n+1이 아직이면 워커가 "이미 앞서 있음"으로 보고 메시지를 지운다(04장 4.4). 메시지가 남아도 해가 없게 해 두어, 백엔드가 워커의 진행을 따지지 않아도 된다.
+- `batch_running`에서 `ready`로 되돌리는 것은 워커다(전이 11). 묶음 k를 다 만들었을 때 `current_batch_no`가 k일 때만 바꾼다.
 
 - 2)의 `verdict_at`은 묶음 후보 전부가 같은 값이다 (04장 `candidates`). 클립을 만들지 못해 화면에 나오지 않은 후보도 같이 `not_found`가 된다. 그 후보만 골라 남길 방법이 없고, 남겨 두면 `remaining`이 줄지 않아 `exhausted`에 이르지 못한다 (D-51).
 - 같은 묶음 번호로 요청이 동시에 두 번 와도 1)의 `FOR UPDATE`와 `WHERE status = 'ready'` 조건 때문에 한쪽만 처리된다. 다른 쪽은 409를 받고 다시 조회한다. 프론트는 첫 요청을 보낸 뒤 버튼을 막는다.
 - **0)이 필요한 이유는 프론트를 믿을 수 없기 때문이다.** 화면은 9번의 `raw_deleted`를 보고 버튼을 감추지만, 그 값은 마지막 조회 시점의 것이다. 화면을 열어 둔 사이에 원본이 파기되면 낡은 화면에 버튼이 남아 있다. 서버가 막지 않으면 SQS에 작업이 들어가고, 워커가 원본을 찾지 못해 `failed`가 된다 — 보관 기간이 지난 것이 "분석 실패"로 보인다.
   - 이 검사에 추가 조회는 없다. `videos` 행은 소유자 확인(5.1)을 위해 이미 읽은 상태다.
 - `next_batch` 메시지에 묶음 번호를 넣지 않는다. 워커가 `max(batch_no) + 1`을 계산한다 (04장 4.6).
-- [다음]을 누른 뒤 다음 묶음이 바로 나오지 않는다. `batch_running` 동안 클립을 비식별화하고, GPU가 꺼져 있었으면 부팅이 더해진다. 화면은 9번으로 `ready`가 될 때까지 기다린다 (07장).
+- [다음]을 누르면 보통 다음 묶음이 바로 나온다. 미리 만든 묶음이 준비되기 전에 누르면 `batch_running`이 되고, 그동안 클립을 비식별화하고 GPU가 꺼져 있었으면 부팅이 더해진다. 화면은 9번으로 `ready`가 될 때까지 기다린다 (07장).
 
 실패
 
@@ -973,7 +1009,11 @@ UPDATE analysis_jobs SET status = 'finished', updated_at = now()
 | 화면 상태 조회 주기(5~10초) | U-18 → 정해지면 01장 1.6 |
 | 워커가 후보 0건일 때 2단계를 끝내는 방법 (상태는 D-50) | 06장 |
 | 저장된 입력을 돌려주는 `GET .../input` | **두지 않는다** → 저장 뒤 수정이 없어졌다 (D-66) |
-| `schema_version` 3의 검증 규칙 | U-13이 정해진 뒤 (D-25). 2는 D-65로 정해졌다 |
+| `schema_version` 3의 검증 규칙 | **해결** → 5.7 (D-83). U-13이 정해져 형식이 바뀌면 번호를 다시 올린다 (D-25) |
+| 파손이 안 보일 때 받을 위치 입력 | 🚧 U-25 (팀장). 정해지면 11번 검증 규칙에 더한다 |
+| 통로 쪽/옆면을 사용자가 고를지 | 🚧 U-26 (팀장). 고르면 11번 요청에 값이 더해지고 D-34가 바뀐다 |
+| 2단계(약 30분) 동안 진행률·예상 시간을 줄지 | 🚧 07장 (D-67). 주면 9번에 키를 더한다 |
+| 12번이 크롭 영역(`crop_bbox`)을 줄지 | 🚧 07장 (D-70, D-84) |
 | 탐지 0건·본인 차 없음일 때의 폴백 | **두지 않는다** → 화면이 재업로드 안내를 보여준다 (D-65, 2026-09-26 팀장 결정) |
 | `detections`가 많을 때 화면 표시 방식 | 07장 (U-15). API는 전부 내려 준다 |
 | 16번의 이름·응답 형식, 임계값 기본 3분 (D-62) | 이름·응답 형식은 **해결**(팀원 2 확인). 임계값은 부팅 실측 후 (U-18) |
@@ -998,7 +1038,7 @@ flowchart TD
   LINK -.->|"링크를 관리자에게 보여준다"| ADMIN["관리자 업로드 화면<br/>5 · 6 · S3 PUT · 16 · 7 (5.4)"]
 
   LIST --> DETAIL["영상 상태 화면 · 대기 안내<br/>9. GET /api/videos/id<br/>5~10초 주기로 다시 부른다"]
-  DETAIL --> INPUT["차량·파손 부위 입력 화면<br/>10. GET .../still<br/>11. PUT .../input"]
+  DETAIL --> INPUT["차량·파손 부위 입력 화면<br/>10. GET .../still<br/>18. POST .../input/photo → S3 PUT (사진이 있을 때)<br/>11. PUT .../input"]
   INPUT --> DETAIL
   DETAIL --> BATCH["후보 확인 화면<br/>12. GET .../batch"]
   BATCH -->|"이전·다음 = 이미 받은 묶음으로 옮기기<br/>12. GET .../batch?batch_no=N"| BATCH
@@ -1029,15 +1069,13 @@ flowchart TD
   ST -->|"uploading"| A["업로드 중 — 아직 열 수 없다"]
   ST -->|"upload_failed"| B["업로드가 확인되지 않음<br/>실패로 단정하지 않는다"]
   ST -->|"queued"| C["대기 중 · 앞에 queue_ahead건"]
-  ST -->|"stills_running"| D["분석 준비 중 — 입력 불가"]
-  ST -->|"stage1_running"| E["입력 화면 (10 → 11)<br/>차량 고르기 → 파손 부위 드래그 → 확인창"]
-  ST -->|"stage1_input_done"| F["입력 완료 · 1단계 진행 중<br/>고칠 수 없다"]
+  ST -->|"stills_running"| D["정지 장면 준비 중 — 수십 초"]
   ST -->|"stage1_done"| G{"input_done"}
-  G -->|"false"| E
-  G -->|"true"| H["2단계 대기 — 고칠 수 없다"]
+  G -->|"false"| E["입력 화면 (10 → 18 → 11)<br/>차량 고르기 → 탐지 상황 → 파손 부위 드래그<br/>→ 사진·설명(선택) → 확인창"]
+  G -->|"true"| H["2단계 대기 · 앞에 queue_ahead건<br/>고칠 수 없다"]
   ST -->|"stage2_running"| I["분석 중"]
   ST -->|"ready"| J["후보 확인 화면 (12)"]
-  ST -->|"batch_running"| K["다음 묶음 만드는 중 안내<br/>이전 묶음은 12로 보고 찾음(14)을 쓸 수 있다"]
+  ST -->|"batch_running"| K["다음 묶음 만드는 중 안내 (드묾)<br/>이전 묶음은 12로 보고 찾음(14)을 쓸 수 있다"]
   ST -->|"finished"| N["결과 화면 (15)"]
   ST -->|"exhausted"| O{"candidate_total"}
   O -->|"1건 이상"| O1["모든 후보를 확인했습니다<br/>고정한 것이 있으면 목록 (15)"]
@@ -1050,7 +1088,7 @@ flowchart TD
 | 키 | 화면이 이 값으로 정하는 것 | 근거 |
 |---|---|---|
 | `status` | 어느 화면을 보여줄지 | 04장 4.3, 5.5 |
-| `queue_ahead` | "앞에 N건" 문구. `queued`일 때만 온다 | 04장 4.5 |
+| `queue_ahead` | "앞에 N건" 문구. `queued`일 때와, `stage1_done`이면서 `input_done`이 `true`일 때 온다 | 04장 4.5, D-81 |
 | `input_done` | 입력 화면을 열지, 대기 화면을 보여줄지. `true`면 고칠 수 없다 | D-49, D-66 |
 | `candidate_total` | `exhausted`의 두 문구 중 어느 쪽인지 | D-50 |
 | `masked_deleted` | 10·12·15번을 부를지, 보관 기간 종료 안내로 대체할지 | D-57 |
@@ -1068,7 +1106,7 @@ flowchart TD
 | 업로드 링크 발급 | **없음** | 4 — [링크 다시 발급]을 눌렀을 때만 | |
 | 관리자 업로드 (링크) | 5 | 6 → S3 `PUT` → (남은 시간 3분) 16 → 7 | |
 | 영상 상태·대기 | 9 | | **9번, 5~10초** 🚧 (U-18) |
-| 차량·파손 부위 입력 | 10 | 11 | 9 |
+| 차량·파손 부위 입력 | 10 | 18 → S3 `PUT` (사진을 넣을 때), 11 | 9 |
 | 후보 확인 | 12, 15 ("확정됨" 표시) | 12 [이전]·[다음] (`?batch_no=`), 13 [다음 묶음 받기], 14 [찾음], 17 [확인 끝내기] | 9 |
 | 완료 (`exhausted`) | 9, 15 (고정한 것이 있으면 목록) | | |
 | 결과 (`finished`) | 15 | | |
@@ -1082,17 +1120,17 @@ flowchart TD
 
 | `code` | HTTP | 나오는 API | 프론트가 하는 일 |
 |---|---|---|---|
-| `UNAUTHENTICATED` | 401 | 쿠키를 쓰는 모든 API (3·4·8~16·17) | 로그인 화면으로 |
+| `UNAUTHENTICATED` | 401 | 쿠키를 쓰는 모든 API (3·4·8~16·17·18) | 로그인 화면으로 |
 | `LOGIN_FAILED` | 401 | 1 | "아이디 또는 비밀번호가 틀렸다" 안내. 로그인 화면에 머문다 |
-| `VIDEO_NOT_FOUND` | 404 | 9~15·17 | 목록으로 |
-| `INVALID_STATE` | 409 | 7·10·11·12·13·14·16·17 | 9번을 다시 불러 화면을 새로 그린다 |
-| `VALIDATION_FAILED` | 422 | 1·6·11·12·13 | 입력을 다시 받는다. 12번이면 쿼리 없이 다시 부른다 |
+| `VIDEO_NOT_FOUND` | 404 | 9~15·17·18 | 목록으로 |
+| `INVALID_STATE` | 409 | 7·10·11·12·13·14·16·17·18 | 9번을 다시 불러 화면을 새로 그린다 |
+| `VALIDATION_FAILED` | 422 | 1·6·11·12·13·18 | 입력을 다시 받는다. 12번이면 쿼리 없이 다시 부른다 |
 | `INTERNAL_ERROR` | 500 | 7·11·13 | 아무것도 바뀌지 않았다. 잠시 후 다시 보낸다 |
 | `UPLOAD_TOKEN_NOT_FOUND` | 404 | 5·6·7·16 | 링크 주소를 다시 확인하라는 안내 |
 | `UPLOAD_TOKEN_USED` | 410 | 5·6 | 이미 쓴 링크. 새 링크를 받으라는 안내 |
 | `UPLOAD_TOKEN_EXPIRED` | 410 | 5·6 | 만료된 링크. 새 링크를 받으라는 안내 |
-| `UNSUPPORTED_FILE_TYPE` | 422 | 6 | 다른 파일을 고르게 한다. 프론트가 먼저 막는다 (D-43) |
-| `FILE_TOO_LARGE` | 422 | 6 | 같다. 5GB는 프론트가 먼저 막는다 (D-22) |
+| `UNSUPPORTED_FILE_TYPE` | 422 | 6·18 | 다른 파일을 고르게 한다. 프론트가 먼저 막는다 (D-43, D-83) |
+| `FILE_TOO_LARGE` | 422 | 6·18 | 같다. 5GB(6번)·20MB(18번)는 프론트가 먼저 막는다 (D-22, D-83) |
 | `CLIP_NOT_FOUND` | 404 | 14·16 | 12번(결과 화면이면 15번)을 다시 불러 화면을 새로 그린다 |
 | `RAW_EXPIRED` | 409 | 13 | 9번을 다시 불러 화면을 새로 그린다. 마스킹본도 함께 파기돼 보관 기간 종료 안내가 나온다 |
 | `MASKED_EXPIRED` | 409 | 10·12·15 | 9번을 다시 불러 보관 기간 종료(30일) 안내로 바꾼다 (D-57, D-64) |
@@ -1106,12 +1144,13 @@ flowchart TD
 |---|---|
 | API는 상대경로 `/api/...`로 부른다. 백엔드 주소를 코드에 넣지 않는다 | D-11 |
 | 업로드 링크 주소는 프론트가 만든다. 4번은 `token`만 준다 | 5.4, D-12 |
-| S3 업로드는 `PUT`에 파일 바이트를 그대로 싣는다. `multipart/form-data`로 감싸면 영상이 깨진다 | 5.4 |
+| S3 업로드는 `PUT`에 파일 바이트를 그대로 싣는다. `multipart/form-data`로 감싸면 영상이 깨진다. 파손 사진(18번)도 같다 | 5.4, 5.7 |
 | 재생·이미지 URL이 만료돼 S3가 403을 주면 그 화면의 조회 API(10·12·15)를 다시 불러 이어 재생한다. 만료 시각을 계산하지 않는다 | D-41 |
 | 드래그 좌표는 원본 해상도 기준 픽셀 정수 `[x1, y1, x2, y2]`로 보낸다. 화면이 축소해 보여주면 `naturalWidth`·`naturalHeight`로 되돌린다 | 5.6, 5.7 |
 | 본인 차량은 10번의 `detections`를 이미지 위에 겹쳐 그리고 **하나를 눌러 고른다.** 차량을 드래그하지 않는다 | D-65, 5.6 |
 | 파손 부위 사각형은 고른 차량의 `bbox` 안(경계 포함)에서만 받는다. 밖이면 백엔드가 422로 거절한다 | D-29, D-65, 5.7 |
-| 고르기와 드래그 사이에는 서버를 부르지 않는다. 11번 한 번으로 같이 저장한다 | D-36 |
+| 고르기와 드래그 사이에는 서버를 부르지 않는다. 11번 한 번으로 같이 저장한다. 사진만 18번으로 먼저 올리고 받은 `photo_key`를 11번에 담는다 | D-36, D-83 |
+| 텍스트 설명은 500자, 사진은 20MB·`.jpg` `.jpeg` `.png` `.heic`까지다. 프론트가 먼저 막는다 | 01장 1.6, D-83 |
 | **저장 전에 확인창을 띄운다. 저장 뒤에는 고칠 수 없고 [다시 입력]은 없다.** `input_done`이 `true`면 입력 화면을 열지 않는다 | D-66 |
 | 6·13·14·17번은 보내는 즉시 버튼을 막는다. 두 번 눌러도 한쪽만 처리된다(14번은 두 번째도 200) | 5.4, 5.8, 5.9 |
 | 고정(14번) 전에 확인창을 띄운다. 고정 해제 API는 없다 | D-40 |
@@ -1141,6 +1180,9 @@ flowchart TD
 - 주소는 `video_id` 하나, 남의 영상은 404: D-39
 - 회원가입 없음(계정은 스크립트로): D-44 / 업로드는 링크로만: D-45
 - SQS에 넣는 API는 트랜잭션 안에서 넣고 커밋: D-46
+- 1단계는 정지 장면만, 입력 뒤 곧바로 2단계와 GPU 켜기, 2단계 대기에도 `queue_ahead`: D-67, **D-81**
+- 한 묶음 앞서 준비, `current_batch_no`로 지금 묶음을 가림: D-68, **D-82**
+- 탐지 상황·사진·텍스트 입력, 사진은 18번 presigned PUT: D-72, **D-83** / 클립 크롭: D-70, **D-84**
 - 대기 상태에 멈춘 작업은 5초 점검이 SQS에 다시 넣는다(DLQ·재시도 상한 없음): D-56
 - 업로드 중·업로드 실패 상태는 조회할 때 계산: D-47
 - 정지 장면은 시작 장면 1장, 1단계에서 만든다: D-48

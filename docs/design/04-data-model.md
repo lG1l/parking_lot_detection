@@ -4,22 +4,8 @@
 > 표시: 🚧 미정 · ⚠️ 확인 필요 · 🔐 멘토 승인 필요
 >
 > U-21·U-22·U-23을 팀원 2가 정리해(D-24, D-25, D-26) 본문을 작성했고, 4.10의 DDL 규칙을 D-27로, 관리자 업로드 방식(U-14)을 D-28로, 차량·파손 부위 입력 방식(U-13 일부)을 D-29로, 세션 저장 방식을 D-30으로, 사건 지점 고정 방식을 D-32로, 중복 저장 정리를 D-33~D-35로, 누끼를 우선 빼는 안을 D-36으로(→ D-65로 대체), 묶음 단위 [다음]을 D-37로, 고정 해제 없음을 D-40으로, 여러 장면 고정과 [확인 끝내기]를 D-80으로, 원본 허용 형식과 코덱 불량 시 바로 `failed`를 D-43으로, 링크로만 업로드(`upload_token_id` NOT NULL)를 D-45로, SQS에 넣고 나서 커밋하는 순서(4.4)를 D-46으로 더했다. 마스킹본·분석 결과 파기(U-24)는 D-57로, 청크를 디코딩에만 쓰고 트랙을 중간 저장하는 방식(`chunks` 테이블 없음, `processed_sec`)은 D-76으로 더했다. 이 중 **D-27·D-28·D-29·D-30·D-32·D-35·D-37·D-40·D-41·D-45·D-46·D-48·D-51·D-52·D-53·D-57은 확정**이고, 나머지는 상태가 **"확정 필요"** 다. **입력 방식은 2026-09-26 D-65(탐지된 차량 고르기), 입력 수정은 D-66(한 번만 받음)으로 바뀌었다** — 둘 다 상태가 "확정 필요"이고, `still_frames.detections`와 `vehicle_selections`의 `schema_version` 2가 여기에 딸려 있다. 특히 **U-23(트랙 파일 형식)은 담당이 팀장**이므로 팀장이 확인해야 확정된다. D-29는 입력 방식만 확정이고, U-13의 나머지(룰 상황 목록·근접 판정·인접 영역)는 팀장 담당으로 남는다. 확정되지 않은 결정을 전제로 백엔드 구현을 시작해도 되지만, 뒤집힐 수 있다는 것을 알고 진행한다.
-
-> ⚠️ **D-67~D-75 반영 필요 (2026-09-27, 팀장).** 본문은 아직 고치지 않았다. 아래는 바뀌어야 할 곳과 영향만 적은 것이다. 팀원 2가 확인해 반영한다. 근거는 [11장](11-decisions.md)과 [06장](06-pipeline.md).
 >
-> | 위치 | 바뀌는 것 | 근거 |
-> |---|---|---|
-> | 4.2 `analysis_jobs` | 1단계는 정지 장면만 만든다. `stage1_*` 시각은 정지 장면 소요 시간이 되고, 처리량 측정(D-20)은 `stage2_started_at`~`stage2_ended_at`로 옮긴다 | D-67 |
-> | 4.2 `processed_sec` | 탐지·추적과 중간 저장을 1단계가 아니라 **2단계**에서 한다. 청크는 디코딩 단위라 DB에 두지 않는다(`chunks` 테이블 없음) | D-67, D-76 |
-> | 4.2 `damage_inputs` | `payload`에 **탐지 상황**(`visible`: 보임/안 보임), **텍스트 설명**(선택), **사진 S3 키**(선택)를 더한다 → `schema_version` 올림. 안 보임일 때의 입력 형태는 🚧 U-25, 통로 쪽/옆면을 사용자가 고를지는 🚧 U-26 (고르면 D-34의 "sides를 저장하지 않는다"가 바뀐다) | D-72 |
-> | 4.2 `candidates` | 어느 채널(A/B)·룰이 잡았는지, **VLM 기준점**(원본 시간, 가장 가까웠던 순간), **1차 VLM 결과**(통과/탈락)를 더한다. 1차 탈락 후보는 `vlm_score = 0`. 불변 조건 4(후보 수 유지)는 그대로다. `track_ref`는 채널 B 트랙도 가리켜야 한다 | D-71, D-73, D-74 |
-> | 4.2 `candidate_clips` | **크롭 영역**(원본 좌표 사각형)을 더한다. 2단계 끝에 상위 **20개**를 만든다 | D-68, D-70 |
-> | 4.3 상태 | 입력은 항상 1단계 뒤에 들어오므로 `stage1_running`·`stage1_input_done`이 필요 없다. 전이 3~7은 "`stills_running` → `stage1_done`(입력 대기) → 입력 저장 → `stage2_running`" 한 줄로 줄어든다. `stage2_running`은 약 30분(추정)이 된다 | D-67 |
-> | 4.3 전이 8·10·11 | 8은 "첫 **두** 묶음이 준비됐을 때". [다음]은 이미 준비된 묶음을 바로 보여주고 그다음 묶음 준비를 SQS에 넣는다. `batch_running`은 사용자가 준비 속도보다 빨리 눌렀을 때만 보인다. "지금 보여줄 묶음"과 "준비된 묶음"을 구분할 방법이 필요하다 | D-68 |
-> | 4.4 중복 방지 | "1단계 끝 vs 입력 저장" 경쟁이 없어진다. 입력 저장 조건부 UPDATE만 남는다 | D-67 |
-> | 4.6 SQS | 2단계 메시지가 가장 오래 걸린다(약 30분). 가시성 연장 대상이 2단계로 바뀐다 (U-18) | D-67 |
-> | 4.8 트랙 파일 | 2단계에서 만든다. 채널 B 트랙(클래스 없음)이 들어간다 🚧 (U-23, 팀장) | D-71 |
-> | 4.9 S3 키 | 파손 사진 키가 필요하다. 예: 원본 버킷 `videos/{video_id}/inputs/photo.jpg` 🚧. 사진도 파기 대상이다(원본과 같이) | D-72 |
+> **D-67~D-75(2026-09-27, 팀장)를 반영했다.** 1단계가 정지 장면만 만들어 `stage1_running`·`stage1_input_done`이 없어졌고(D-81), 한 묶음 앞서 준비하려고 `current_batch_no`를 더했다(D-82). 파손 사진·텍스트 설명·탐지 상황은 `damage_inputs` `schema_version` 3으로(D-83), 채널·1차 VLM 결과·크롭 영역은 `candidates`·`candidate_clips` 칼럼으로 더했다(D-84). 넷 다 상태가 **"확정 필요"** 다.
 
 ## 4.1 전체 구조
 
@@ -141,25 +127,34 @@ users ──┬──< sessions        (로그인 세션)
 | `id` | bigserial PK | SQS 메시지의 `job_id`가 이 값이다 (4.6) |
 | `video_id` | bigint FK → videos, UNIQUE | |
 | `status` | text | 진행 상태. 값 목록은 [4.3](#43-분석-상태와-전이-규칙) |
-| `stage1_started_at` | timestamptz | 1단계 시작 |
-| `stage1_ended_at` | timestamptz | 1단계 종료 |
+| `stage1_started_at` | timestamptz | 1단계(정지 장면) 시작 |
+| `stage1_ended_at` | timestamptz | 1단계 종료. 정지 장면을 저장한 시각 |
 | `stage2_started_at` | timestamptz | 2단계 시작 |
 | `stage2_ended_at` | timestamptz | 2단계 종료 |
 | `input_completed_at` | timestamptz | 차량·파손 부위 입력이 끝난 시각. 2단계 시작 조건에 쓴다 |
 | `error_message` | text | 실패했을 때 마지막 오류. 평소에는 비어 있다 |
 | `processed_sec` | double precision | 2단계 탐지·추적을 중간 저장한 지점(원본 시간). 처음에는 0. 워커가 구간을 저장할 때마다 갱신한다 (D-76) |
+| `current_batch_no` | integer | 사용자에게 **지금 보여주는** 묶음 번호. `ready`가 될 때 1이 되고 [다음]마다 1씩 오른다. 그 전에는 비어 있다 (D-82) |
 | `created_at` | timestamptz | 대기 순서 계산의 기준 (4.5) |
 | `updated_at` | timestamptz | 상태를 바꿀 때마다 갱신 |
 
-- 시각 칼럼 4개는 09장 처리량 측정을 위한 것이다. `영상 길이 ÷ (stage1_ended_at − stage1_started_at)`로 "GPU 1대가 1시간에 처리하는 영상 시간"을 바로 계산한다. (D-20)
+- 시각 칼럼 4개는 09장 처리량 측정을 위한 것이다. `영상 길이 ÷ (stage2_ended_at − stage2_started_at)`로 "GPU 1대가 1시간에 처리하는 영상 시간"을 바로 계산한다. 2단계 전체(탐지·추적, VLM, 클립 20개)를 잰 값이다. 1단계 시각은 정지 장면을 준비하는 데 걸린 시간이다. (D-20, D-67)
 - **재시도가 일어나면 시각이 덮어써진다.** 마지막 시도 기준 값만 남는다. 재시도·실패 이력을 행으로 남기지 않기로 했다. 이유와 바꿀 시점은 D-24에 적었다.
 - 인덱스: `(status, created_at)` — 4.5의 대기 순서 계산에 쓴다.
 - **`processed_sec`는 이어서 하기와 진행 확인에 쓴다.** 2단계를 다시 시작하면 이 지점부터 이어 간다. 저장 순서는 구간 파일 → 추적기 상태 → `processed_sec`라, 이 값은 파일이 다 올라간 지점만 가리킨다 (4.8, D-76). `processed_sec ÷ videos.duration_sec`가 진행률이다. 화면에는 지금 보여주지 않는다(상태 표시는 4.3의 `status`뿐).
 - 디코딩 청크는 워커 안에서만 쓰는 단위라 DB에 기록하지 않는다 (D-76).
+- **`current_batch_no`는 "보여주는 묶음"과 "미리 준비해 둔 묶음"을 가른다.** 워커는 항상 한 묶음 앞서 클립을 만들어 두므로(D-68), `candidates.batch_no`의 최댓값은 보여주는 묶음보다 1 크다. 후보 35개일 때의 예:
+
+  | 시점 | `status` | `current_batch_no` | 번호가 매겨진 묶음 |
+  |---|---|---|---|
+  | 2단계 끝 | `ready` | 1 | 1, 2 (클립 완료) |
+  | [다음] (묶음 2가 준비돼 있음) | `ready` | 2 | 1, 2, 3 (만드는 중) |
+  | 묶음 3이 끝나기 전에 [다음] | `batch_running` | 3 | 1, 2, 3 (만드는 중) |
+  | 묶음 3 완료 | `ready` | 3 | 1, 2, 3, 4 (만드는 중) |
 
 ### still_frames
 
-차량 선택용 정지 장면. **원본 영상 시작 장면(첫 프레임) 1장이고, 작업 1건당 1행이다.** 1단계에서 가장 먼저 만든다 (D-48). 다른 시점 장면은 만들지 않는다.
+차량 선택용 정지 장면. **원본 영상 시작 장면(첫 프레임) 1장이고, 작업 1건당 1행이다.** 1단계가 만드는 유일한 산출물이다 (D-48, D-67). 다른 시점 장면은 만들지 않는다.
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
@@ -178,7 +173,7 @@ users ──┬──< sessions        (로그인 세션)
     [{"det_id": 1, "bbox": [810, 440, 960, 620], "conf": 0.91},
      {"det_id": 2, "bbox": [950, 435, 1120, 625], "conf": 0.88}]
     ```
-  - `det_id`는 **이 장면 안에서만** 유일한 번호다. 1단계 트랙의 `track_id`와 관계없다.
+  - `det_id`는 **이 장면 안에서만** 유일한 번호다. 2단계 트랙의 `track_id`와 관계없다.
   - 탐지가 0건이면 빈 배열 `[]`이다. 이때 화면은 **재업로드 안내**로 간다 — 본인 차량을 찾지 못했을 때의 기존 안내와 같다. 차량을 드래그하는 폴백은 두지 않는다 (D-65).
 - **여러 시점의 장면을 다시 받으려면** UNIQUE를 `(analysis_job_id, t_sec)`으로 되돌리면 된다. 칼럼과 S3 키 구조는 그대로다. 절차는 [11장 D-48 "되살릴 방법"](11-decisions.md#d-48-차량-선택용-정지-장면은-원본-영상-시작-장면-1장만-만든다).
 - **확장**: 겹친 차량을 픽셀 단위로 가르려면 `polygon`(차량 외곽) 키를 더한다. segmentation 모델이 필요하고(U-09) 프론트가 다각형 hit-test를 해야 한다 🚧 (D-65 "대신 잃는 것").
@@ -202,7 +197,7 @@ users ──┬──< sessions        (로그인 세션)
 
 사용자는 정지 장면에서 **탐지된 차량 중 하나를 골라** 본인 차량으로 지목한다. 고른 차량의 탐지 `bbox`가 그대로 본인 차량 영역이다. (D-65)
 
-`schema_version` 2:
+`schema_version` 2·3 (둘의 형식이 같다):
 
 ```json
 {
@@ -220,9 +215,10 @@ users ──┬──< sessions        (로그인 세션)
 - `bbox`를 `det_id`와 함께 적어 두는 이유는 **룰이 `still_frames`를 다시 읽지 않게** 하기 위해서다. 한 값이 두 곳에 있지만, 정지 장면의 탐지 결과는 만들어진 뒤 바뀌지 않으므로 어긋날 일이 없다.
 - 차량을 드래그하는 경로는 없다. 형태는 이 하나뿐이다 (D-65).
 - `schema_version` 1(`{"bbox": [...]}` 하나)은 D-65 이전 형식이다. 저장된 옛 데이터는 버린다 (D-25).
+- 3은 `damage_inputs`만 바뀐 번호다. 05장 11번 요청의 `schema_version`이 두 객체에 공통이라 이 테이블에도 3으로 저장한다 (D-83).
 
 - **본인 차량은 추적하지 않는다.** 주차된 차라 영상 내내 자리가 같으므로 고정된 영역으로 다룬다. 2단계 룰은 "다른 트랙이 이 영역 근처에 왔는가"를 본다. 그래서 `track_id`를 이어 붙일 필요가 없다. (D-29)
-- **확장**: 겹친 차량을 픽셀 단위로 가르려면 `schema_version`을 3으로 올려 `polygon`(고른 차량의 외곽)을 더한다. `bbox`의 뜻은 그대로 두므로 룰은 고치지 않는다 🚧 (D-65, U-09).
+- **확장**: 겹친 차량을 픽셀 단위로 가르려면 `schema_version`을 올려 `polygon`(고른 차량의 외곽)을 더한다. `bbox`의 뜻은 그대로 두므로 룰은 고치지 않는다 🚧 (D-65, U-09).
 
 ### damage_inputs
 
@@ -236,20 +232,32 @@ users ──┬──< sessions        (로그인 세션)
 | `payload` | jsonb | 입력 내용 |
 | `created_at`, `updated_at` | timestamptz | |
 
-고른 본인 차량 영역 **안에서 파손 부위를 드래그해** 지정한다 (D-65). 차량 선택과 파손 부위는 **한 요청으로 함께 저장한다** (D-29, D-36). 두 행을 한 트랜잭션에서 쓴다.
+사용자가 입력 화면에서 **탐지 상황**(파손이 CCTV에 보이는지)을 고르고, 보이면 고른 본인 차량 영역 **안에서 파손 부위를 드래그해** 지정한다. **파손 사진**과 **텍스트 설명**은 선택으로 더한다 (D-65, D-72). 차량 선택과 파손 부위는 **한 요청으로 함께 저장한다** (D-29, D-36). 두 행을 한 트랜잭션에서 쓴다.
+
+`schema_version` 3 (D-83):
 
 ```json
 {
-  "damage_bbox": [940, 470, 1000, 610]
+  "visible": true,
+  "damage_bbox": [940, 470, 1000, 610],
+  "description": "조수석 뒷문 아래가 긁혔어요",
+  "photo_key": "videos/17/inputs/photo.jpg"
 }
 ```
 
-| 키 | 뜻 |
-|---|---|
-| `damage_bbox` | 사용자가 그린 파손 부위. 원본 해상도 기준 픽셀 |
+| 키 | 필수 | 뜻 |
+|---|---|---|
+| `visible` | 필수 | 파손이 CCTV에 보이는지. `true` 보임, `false` 안 보임 (D-72) |
+| `damage_bbox` | `visible`이 `true`면 필수 | 사용자가 그린 파손 부위. 원본 해상도 기준 픽셀 |
+| (안 보임일 때의 위치) | 🚧 | 파손이 안 보일 때 `damage_bbox` 대신 받을 값. 입력 방식(U-25, 팀장)이 정해지면 키를 더한다 |
+| `description` | 선택 | 텍스트 설명. 최대 500자. VLM에 참고 자료로만 넣는다 (06장 6.6) |
+| `photo_key` | 선택 | 파손 사진의 원본 버킷 키. 05장 18번이 준 값을 그대로 저장한다 (4.9) |
 
+- 선택 키는 값이 없으면 **키를 뺀다.** 빈 문자열이나 `null`로 두지 않는다. 워커가 키가 있는지만 보고 VLM 입력에 넣을지 정한다 (06장 6.6).
+- `schema_version` 2(`{"damage_bbox": [...]}` 하나)는 D-72 이전 형식이다. 저장된 옛 데이터는 버린다 (D-25).
 - 파손 부위가 차량의 어느 쪽인지(`sides`: `left`·`right`·`top`·`bottom`의 배열)는 **저장하지 않는다.** 2단계를 시작할 때 GPU 워커가 `damage_bbox`와 `vehicle_selections.payload.bbox`를 비교해 계산한다. 룰이 "파손 부위 쪽 인접 공간"(PRD 3.3)을 정할 때 쓴다. (D-34)
   - 저장하면 사용자가 차량 선택만 다시 했을 때 옛 차량 기준의 값이 남는다. 두 사각형이 서로 다른 테이블에 있어 한쪽만 고쳐질 수 있기 때문이다.
+  - 🚧 통로 쪽/옆면을 사용자가 고르게 하면(U-26, 팀장) 그 값은 저장해야 하므로 이 규칙이 바뀐다.
 - 자유 드로잉(폴리곤)이 아니라 **사각형 하나**로 받는다. 정지 장면에는 파손이 보이지 않아 사용자가 기억으로 대략 찍는 입력이고, 룰의 근접 판정 폭에 외곽 몇 px 차이는 묻히기 때문이다. 근거와 바꿀 신호는 [11장 D-29](11-decisions.md#d-29-본인-차량과-파손-부위는-정지-장면-위에서-두-번-드래그해-입력한다).
 - ⚠️ **룰이 실제로 무엇을 입력으로 받을지는 여전히 U-13(팀장, 06장)이다.** 근접 판정 폭, 인접 영역을 어디까지로 볼지가 정해지면 `schema_version`을 올려 필요한 값을 더한다. (D-25)
 - ⚠️ **값 검증은 DB가 해 주지 않는다.** 백엔드(Pydantic)가 `schema_version`별로 검증한다. 검증 규칙은 [05장 5.7](05-api.md#57-차량파손-부위-입력-저장-api)에 있다. (D-25)
@@ -262,17 +270,19 @@ users ──┬──< sessions        (로그인 세션)
 |---|---|---|
 | `id` | bigserial PK | |
 | `analysis_job_id` | bigint FK → analysis_jobs | |
-| `judged_at_sec` | double precision | 판정 시점(원본 시간). 불변 조건 7 |
+| `judged_at_sec` | double precision | 판정 시점(원본 시간). 가장 가까웠던 순간이고, VLM 프레임 샘플링의 **기준점**으로도 쓴다 (D-73, D-84). 불변 조건 7 |
+| `channel` | text | 어느 채널이 잡았는지. `A`(객체탐지+추적) · `B`(근접 영역 움직임) (D-71). 두 채널이 같은 물체를 잡아 하나로 합친 후보의 값은 🚧 (U-13) |
 | `rule_name` | text | 어느 룰이 잡았는지. 목록은 🚧 (U-13) |
-| `track_id` | integer | 근거가 된 트랙. 영상 안에서 유일하다 (4.8, D-76) |
-| `vlm_score` | integer | 0~100. VLM 호출 전에는 비어 있다 |
+| `track_id` | integer | 근거가 된 트랙. 채널 A·B 트랙이 한 번호 체계를 나눠 쓰며, 영상 안에서 유일하다 (4.8, D-76). 번호 매기는 방식은 🚧 (U-23, 팀장) |
+| `vlm_pass1` | boolean | 1차 VLM 결과. `true` 통과 · `false` 탈락. 1차 전이거나 1차를 건너뛴 후보는 비어 있다 (D-74, U-32) |
+| `vlm_score` | integer | 0~100. 2차 VLM이 매긴다. 1차에서 탈락하면 0. VLM 호출 전에는 비어 있다 (D-74) |
 | `rank` | integer | 점수순 정렬 결과. 1부터 |
 | `batch_no` | integer | 몇 번째 묶음인지. 1부터 |
 | `verdict` | text | `unseen`(아직 안 봄) · `not_found`(못 찾음). "찾음"은 여기에 적지 않는다 (D-35) |
 | `verdict_at` | timestamptz | 사용자가 [다음]을 눌러 그 묶음을 "못 찾음"으로 넘긴 시각. 같은 묶음은 모두 같은 값이다 (D-37) |
 | `created_at` | timestamptz | |
 
-- **VLM은 후보를 지우지 않는다.** 점수를 매기기 전후로 행 수가 같다. (불변 조건 4)
+- **VLM은 후보를 지우지 않는다.** 점수를 매기기 전후로 행 수가 같다. 1차에서 탈락한 후보도 `vlm_score = 0`으로 남아 정렬 맨 아래에 온다. (불변 조건 4, D-74)
 - 후보는 **판정 시점 하나만** 저장한다. 사건 지점(= `judged_at_sec + 5초`)은 01장 1.6의 상수로 계산한다. 클립 구간은 클립을 만들 때 계산해 `candidate_clips`에만 저장한다. (D-33)
   - ⚠️ 연속된 판정을 하나로 합치는 규칙(U-13, 팀장)에 따라 후보가 "구간"을 가져야 하면, 그때 후보 구간 칼럼을 더한다.
 - "못 찾음"은 후보마다 따로 받지 않는다. 사용자가 묶음 아래 [다음]을 누르면 그 묶음 후보 전부를 한 번에 `not_found`로 바꾼다. (D-37)
@@ -289,10 +299,12 @@ users ──┬──< sessions        (로그인 세션)
 | `candidate_id` | bigint FK → candidates | 몇 번째 묶음인지는 이 후보의 `batch_no`로 본다 (D-33) |
 | `start_sec`, `end_sec` | double precision | 원본 시간 기준 구간. 판정 시점 −10초 ~ +20초를 영상 경계에서 잘라낸 값 (4.7). 불변 조건 7 |
 | `masked_s3_key` | text | 마스킹본 버킷 키 (4.9) |
+| `crop_bbox` | integer[] | 클립을 잘라 낸 영역 `[x1, y1, x2, y2]`. 원본 해상도 기준 픽셀. 본인 차량 주변이다 (D-70, D-84). 크기는 🚧 (U-30) |
 | `status` | text | `pending` · `running` · `done` · `failed` |
 | `created_at` | timestamptz | 묶음별 소요 시간은 이 값으로 본다 |
 
 - **클립 생성에 실패하면(`failed`) 그 후보는 이번 묶음에서 빠진다.** 05장 12번이 `done`인 클립만 목록에 넣기 때문이다. 워커는 다시 만들지 않고, `verdict`도 건드리지 않는다. 드문 경우라 받아들인다 (D-51).
+- `crop_bbox`는 클립 화면이 원본의 어디인지 알려 주려고 저장한다. 05장 12번이 돌려줄지는 07장 화면 구성이 정해지면 정한다 🚧.
 - 사용자에게 주는 재생 URL은 이 행의 `masked_s3_key`로만 발급한다. 고정한 사건 지점도 이 행을 가리키므로 같은 키로 재생한다. (불변 조건 1, D-32)
 
 ### pinned_incidents
@@ -378,19 +390,17 @@ users ──┬──< sessions        (로그인 세션)
 | 코드 | 뜻 | 사용자 입력 | 끝 상태 |
 |---|---|---|---|
 | `queued` | SQS에 1단계 작업이 들어갔고 워커가 아직 잡지 않았다. 화면에 "앞에 N건"을 함께 보여준다 (4.5) | 불가 | |
-| `stills_running` | 워커가 1단계를 시작해 정지 장면을 비식별화하는 중 | 불가 | |
-| `stage1_running` | 정지 장면이 준비됐고 객체탐지·추적이 진행 중 | **가능** | |
-| `stage1_input_done` | 입력이 끝났고 1단계가 아직 진행 중. 1단계가 끝나면 2단계가 자동으로 시작된다 | **불가** (입력은 한 번뿐, D-66) | |
-| `stage1_done` | 1단계가 끝났고 입력을 기다린다 | **가능** | |
-| `stage2_running` | 룰·VLM·후보 클립 비식별화 진행 중 | 불가 | |
-| `ready` | 후보 묶음이 준비됐다. 사용자가 확인할 수 있다 | | |
-| `batch_running` | "못 찾음" 뒤 다음 묶음을 만드는 중 | | |
+| `stills_running` | 워커가 1단계를 시작해 정지 장면의 차량을 탐지하고 비식별화하는 중. 수십 초 걸린다 (D-67) | 불가 | |
+| `stage1_done` | 정지 장면이 준비됐고 입력을 기다린다. 입력을 저장한 뒤에는 2단계 차례를 기다린다(`input_done`, 아래) | **가능** (입력 전만) | |
+| `stage2_running` | 탐지·추적, 룰, VLM, 첫 두 묶음 후보 클립 비식별화 진행 중. 24시간 영상에 약 30분(추정) (D-67, D-68) | 불가 | |
+| `ready` | 지금 보여줄 묶음(`current_batch_no`)이 준비됐다. 사용자가 확인할 수 있다 | | |
+| `batch_running` | [다음]을 눌렀는데 보여줄 묶음이 아직 준비되지 않아 만드는 중. 준비 속도보다 빨리 눌렀을 때만 생긴다 (D-68) | | |
 | `finished` | 사용자가 [확인 끝내기]를 눌렀다. 고정한 사건 지점은 `pinned_incidents`에 있다(0개일 수도 있다) | | ✅ |
 | `exhausted` | 모든 후보를 "못 찾음"으로 확인했다. 사건이 없다는 뜻이 아니다 (PRD 3.6) | | ✅ |
 | `failed` | 워커가 되풀이해도 소용없는 오류를 만났다. `error_message`에 오류가 있다 (D-43) | | ✅ |
 
 - 화면이 보는 상태는 이 목록에 **`uploading`·`upload_failed` 두 개가 더 있다.** 업로드가 끝나지 않아 아직 작업 행이 없는 영상을 위해 조회 API가 만들어 주는 값이고, DB에는 없다 (D-47, 05장 5.5).
-- **`stage1_done`은 `status`만으로 입력 가능 여부가 갈리지 않는다.** 입력을 기다리는 중일 수도 있고, 입력을 받아 2단계 작업을 넣어 둔 중일 수도 있다(전이 7에서 상태를 바꾸는 쪽은 워커다). 그래서 상태 조회 API가 `input_completed_at`이 차 있는지를 `input_done`으로 함께 돌려준다. 저장하는 칼럼이 아니라 조회할 때 계산하는 값이다 (D-49, 05장 5.5·5.7).
+- **`stage1_done`은 `status`만으로 입력 가능 여부가 갈리지 않는다.** 입력을 기다리는 중일 수도 있고, 입력을 받아 2단계 작업을 넣어 둔 중일 수도 있다(전이 7에서 상태를 바꾸는 쪽은 워커다). 그래서 상태 조회 API가 `input_completed_at`이 차 있는지를 `input_done`으로 함께 돌려준다. 저장하는 칼럼이 아니라 조회할 때 계산하는 값이다 (D-49, 05장 5.5·5.7). 입력을 받은 뒤의 `stage1_done`은 2단계 대기 중이라 화면에 "앞에 N건"을 함께 보여준다 (4.5, D-81).
 - **입력은 한 번만 받는다.** `input_completed_at`이 차 있으면 상태를 가리지 않고 **409 `INVALID_STATE`** 로 거절한다. 저장 전에 화면이 확인창을 띄우고, 저장한 뒤에는 고칠 수 없다 (D-66, 05장 5.7 / 07장). 그래서 위 표에서 입력이 **가능**한 칸은 `input_done`이 `false`일 때만이다.
 - 초안 목록보다 `stills_running`·`stage1_done`·`batch_running` 3개가 늘었다. 화면이 `status` 하나만 보고 "지금 입력할 수 있는지"를 판단할 수 있게 하기 위해서다. 정지 장면이 준비되기 전에는 입력 화면을 열 수 없다. (D-15)
 
@@ -400,20 +410,19 @@ users ──┬──< sessions        (로그인 세션)
 |---|---|---|---|---|
 | 1 | (행 생성) → `queued` | 업로드 완료 알림을 받고 1단계 작업을 SQS에 넣을 때 | 백엔드 | `created_at` |
 | 2 | `queued` → `stills_running` | 워커가 1단계 메시지를 꺼냈을 때 | 워커 | `stage1_started_at` |
-| 3 | `stills_running` → `stage1_running` | 정지 장면 비식별화와 **차량 탐지**가 끝났을 때 (D-65) | 워커 | `still_frames` 행 생성 (1행, `detections` 포함) |
-| 4 | `stage1_running` → `stage1_input_done` | 사용자가 차량·파손 부위 입력을 저장했을 때 | 백엔드 | `input_completed_at` |
-| 5 | `stage1_running` → `stage1_done` | 탐지·추적이 영상 끝까지 가고 마지막 구간 파일을 저장했는데 입력이 없을 때 (D-76) | 워커 | `stage1_ended_at` |
-| 6 | `stage1_input_done` → `stage2_running` | 탐지·추적이 영상 끝까지 가고 마지막 구간 파일을 저장했고 입력이 있을 때. 워커가 이어서 2단계를 실행한다 | 워커 | `stage1_ended_at`, `stage2_started_at` |
+| 3 | `stills_running` → `stage1_done` | 정지 장면 비식별화와 **차량 탐지**가 끝났을 때 (D-65, D-67) | 워커 | `still_frames` 행 생성 (1행, `detections` 포함), `stage1_ended_at` |
 | 7 | `stage1_done` → `stage2_running` | 입력이 들어와 백엔드가 2단계 작업을 SQS에 넣고, 워커가 그 메시지를 꺼냈을 때 | 워커 | `input_completed_at`(백엔드), `stage2_started_at` |
-| 8 | `stage2_running` → `ready` | 첫 묶음 후보 클립이 모두 만들어졌을 때 | 워커 | `stage2_ended_at` |
+| 8 | `stage2_running` → `ready` | 상위 20개(묶음 1·2) 후보 클립이 모두 만들어졌을 때. 후보가 10개 이하면 묶음 1만 (D-68) | 워커 | `current_batch_no = 1`, `stage2_ended_at` |
 | 9 | `ready` → `finished` | 사용자가 [확인 끝내기]를 눌렀을 때 (D-80) | 백엔드 | 없음. "찾음"은 상태를 바꾸지 않고 `pinned_incidents` 행만 넣는다 |
-| 10 | `ready` → `batch_running` | 사용자가 [다음]을 눌렀고(묶음 전체 "못 찾음", D-37) 남은 후보가 있을 때 | 백엔드→워커 | 백엔드가 `next_batch` 작업을 SQS에 넣는다 |
-| 11 | `batch_running` → `ready` | 다음 묶음 클립이 만들어졌을 때 | 워커 | |
-| 12 | `ready` → `exhausted` | 사용자가 [다음]을 눌렀고(묶음 전체 "못 찾음", D-37) 남은 후보가 없을 때 | 백엔드 | |
+| 10 | `ready` → `batch_running` | 사용자가 [다음]을 눌렀고(묶음 전체 "못 찾음", D-37) 다음 묶음이 아직 준비되지 않았을 때 | 백엔드 | `current_batch_no` + 1. 백엔드가 `next_batch` 작업을 SQS에 넣는다 (D-82) |
+| 11 | `batch_running` → `ready` | 워커가 묶음 k의 클립을 다 만들었고 `current_batch_no`가 k일 때 | 워커 | |
+| 12 | `ready` → `exhausted` | 사용자가 [다음]을 눌렀고(묶음 전체 "못 찾음", D-37) 다음 묶음도, 번호가 안 매겨진 후보도 없을 때 | 백엔드 | |
 | 14 | `stage2_running` → `exhausted` | 2단계가 끝났는데 룰이 후보를 하나도 만들지 못했을 때 (후보 0건) | 워커 | `stage2_ended_at`. 클립을 만들 것이 없으므로 `ready`를 거치지 않는다 (D-50) |
 | 13 | 어떤 상태 → `failed` | 1단계 시작 직후 워커가 읽을 수 없는 코덱을 발견했을 때(다시 해도 같으므로 바로, D-43 ⚠️ 팀장 확인). 그 밖에 워커가 되풀이해도 소용없는 오류를 만났을 때 | 워커 | `error_message`. 어떤 오류를 이렇게 볼지는 🚧 (06장) |
 | 15 | `batch_running` → `finished` | 다음 묶음을 만드는 동안 사용자가 [확인 끝내기]를 눌렀을 때 (D-79, D-80) | 백엔드 | 9번과 같다. 만들던 묶음은 버려진다. 워커의 전이 11은 `WHERE status = 'batch_running'`이라 0행이 되고, 4.4 규칙대로 메시지를 지우고 끝난다 |
 
+- **4·5·6은 비어 있다.** 1단계 중 입력을 받던 전이였는데, 입력이 항상 1단계 뒤에 들어오게 되어(D-67) 없어졌다. 다른 문서가 전이를 번호로 가리키므로 번호를 다시 매기지 않는다. (D-81)
+- **[다음]을 눌렀을 때 다음 묶음이 이미 준비돼 있으면 상태는 `ready` 그대로이고 `current_batch_no`만 1 오른다.** 상태가 바뀌지 않으므로 전이 번호가 없다. 워커는 항상 한 묶음 앞서 준비하므로(D-68) 보통 이 경우다. 판단 순서는 05장 13번. (D-82)
 - 7번에서 백엔드는 상태를 바꾸지 않는다. 입력을 저장하고 SQS에만 넣는다. 상태를 바꾸는 쪽을 워커 하나로 모아야 4.4의 중복 방지가 한 곳에서 걸린다.
 - **`exhausted`에 이르는 길은 둘이다.** 사용자가 [다음]으로 후보를 전부 넘긴 경우(전이 12)와, 후보가 애초에 0건인 경우(전이 14)다. 화면 문구가 달라야 하므로 상태 조회 API가 `candidate_total`을 함께 돌려준다 (D-50, 05장 5.5). 09장 KPI 집계도 이 둘을 구분해서 센다.
 - 끝 상태(`finished`, `exhausted`, `failed`)에서는 더 전이하지 않고, "찾음"도 받지 않는다. 다시 분석하려면 새 작업을 만든다. (재분석 기능은 Non-Scope)
@@ -422,18 +431,18 @@ users ──┬──< sessions        (로그인 세션)
 
 ## 4.4 두 번 실행되지 않게 하는 방법
 
-SQS 표준 대기열은 드물게 같은 메시지를 두 번 전달한다. 워커가 처리 중에 죽으면 같은 작업이 다시 전달되기도 한다. (D-16) 또 2단계는 "1단계 완료"와 "입력 완료" 두 경로에서 시작될 수 있어(전이 6·7) 두 번 시작될 위험이 있다.
+SQS 표준 대기열은 드물게 같은 메시지를 두 번 전달한다. 워커가 처리 중에 죽으면 같은 작업이 다시 전달되기도 한다. (D-16)
 
 **해결: 상태를 조건부로 바꾼다.** 상태를 바꾸는 UPDATE에 "지금 상태가 X일 때만"을 붙이고, **바뀐 행 수가 0이면 이미 다른 쪽이 처리한 것이므로 그냥 끝낸다.**
 
 ```sql
--- 2단계 시작 (전이 6·7). 워커가 2단계를 시작하기 직전에 실행한다
+-- 2단계 시작 (전이 7). 워커가 2단계를 시작하기 직전에 실행한다
 UPDATE analysis_jobs
    SET status = 'stage2_running',
        stage2_started_at = now(),
        updated_at = now()
  WHERE id = :job_id
-   AND status IN ('stage1_input_done', 'stage1_done');
+   AND status = 'stage1_done';
 ```
 
 - 바뀐 행 수가 **1이면** 이 워커가 2단계를 맡는다.
@@ -441,9 +450,10 @@ UPDATE analysis_jobs
 - **0행이면 이유를 가리지 않고 지운다.** 행 자체가 없는 경우(백엔드가 SQS에 넣고 커밋하기 전이거나, 커밋이 실패한 경우)도 마찬가지다. 그 때문에 작업이 대기 상태에 멈추면 백엔드가 임계 시간 뒤 SQS에 다시 넣는다 (D-56 ⚠️ 팀장 확인).
 - PostgreSQL에서 UPDATE는 해당 행에 잠금을 건다. 두 워커가 동시에 실행해도 한쪽만 1을 받는다.
 
-같은 방법을 1단계 시작(전이 2, `WHERE status = 'queued'`)과 다음 묶음(전이 11)에도 쓴다. **상태를 바꾸는 모든 UPDATE에는 `WHERE status = ...`를 반드시 붙인다.** 이것이 D-16 "반드시 지킬 것" 2번(멱등성)을 구현하는 방법이다.
+같은 방법을 1단계 시작(전이 2, `WHERE status = 'queued'`)과 다음 묶음(전이 11)에도 쓴다. 전이 11은 묶음 번호까지 조건에 넣는다(`AND current_batch_no = :k`). 사용자가 그사이 [다음]을 또 눌러 보여줄 묶음이 k+1로 넘어갔으면 0행이 되고, 상태는 `batch_running`에 남아 묶음 k+1을 기다린다 (D-82). **상태를 바꾸는 모든 UPDATE에는 `WHERE status = ...`를 반드시 붙인다.** 이것이 D-16 "반드시 지킬 것" 2번(멱등성)을 구현하는 방법이다.
 
 - **상태 칼럼이 아닌 곳에도 같은 방법을 쓴다.** 업로드 링크의 `used_at`(05장 6번), 업로드 완료의 `upload_completed_at`(05장 7번)이 모두 "비어 있을 때만 채운다"는 조건부 UPDATE다. 1행이면 이 요청이 맡고, 0행이면 이미 처리된 것이라 아무것도 하지 않는다.
+- **`next_batch`는 상태를 바꾸며 시작하지 않으므로 잠금으로 중복을 막는다.** 워커가 한 트랜잭션에서 `SELECT status, current_batch_no ... FOR UPDATE`로 행을 잠그고, `max(batch_no)`가 이미 `current_batch_no + 1` 이상이면(한 묶음 앞서 있으면) 아무것도 하지 않고 메시지를 지운다. 아니면 번호가 안 매겨진 후보 10개에 `batch_no`를 매기고 `pending` 클립 행을 같은 트랜잭션에서 만든다. 두 번 전달돼도 두 번째는 "이미 앞서 있음"이 된다. 절차는 05장 13번. (D-82)
 - 2단계가 중간부터 다시 시작되면 `processed_sec`부터 이어 간다. 그 앞의 구간 파일과 추적기 상태가 S3에 있으므로 다시 탐지하지 않는다 (D-76). ⚠️ 다만 `stage2_running`에서 재전달된 메시지는 위 규칙대로 0행이라 지워지므로, 무엇이 다시 시작시킬지는 🚧 (D-76 한계, D-56 한계).
 
 ## 4.5 "대기 중 (앞에 N건)"의 N 계산
@@ -451,14 +461,23 @@ UPDATE analysis_jobs
 **SQS를 조회하지 않는다.** SQS는 대기 중인 메시지 수를 대략값으로만 알려주고, "내 앞에 몇 개"는 알려주지 않는다. DB에서 센다. (D-19 최소 조치 6번)
 
 ```sql
-SELECT count(*)
-  FROM analysis_jobs
- WHERE status IN ('queued', 'stills_running', 'stage1_running', 'stage1_input_done')
-   AND created_at < (SELECT created_at FROM analysis_jobs WHERE id = :job_id);
+WITH q AS (
+  SELECT id,
+         CASE WHEN status IN ('queued', 'stills_running') THEN created_at
+              ELSE input_completed_at END AS lined_up_at   -- 줄에 선 시각
+    FROM analysis_jobs
+   WHERE status IN ('queued', 'stills_running', 'stage2_running')
+      OR (status = 'stage1_done' AND input_completed_at IS NOT NULL)
+)
+SELECT count(*) FROM q
+ WHERE lined_up_at < (SELECT lined_up_at FROM q WHERE id = :job_id);
 ```
 
-- 뜻: **나보다 먼저 들어왔고 아직 1단계가 끝나지 않은 작업 수**다.
-- 인덱스 `(status, created_at)`가 있으면 행이 많아져도 빠르다.
+- 뜻: **나보다 먼저 줄에 섰고 아직 GPU 차례가 끝나지 않은 작업 수**다. 1단계 작업(`queued`·`stills_running`)은 업로드를 마친 시각(`created_at`)에, 2단계 작업(입력을 마친 `stage1_done`·`stage2_running`)은 입력을 마친 시각(`input_completed_at`)에 줄에 선다. 2단계가 약 30분으로 길어 2단계 대기가 실제 기다림의 대부분이기 때문이다. (D-81)
+- 1단계 작업과 2단계 작업을 한 줄로 센다. GPU 1대가 SQS 대기열 하나를 들어온 순서대로 대략 꺼내 간다고 보는 것이다.
+- `next_batch` 작업은 세지 않는다. 묶음 하나(클립 10개)라 짧기 때문이다.
+- ⚠️ **GPU 1대를 전제로 한 값이다.** SQS 표준 대기열은 순서를 보장하지 않으므로 이 값은 근사다. GPU를 여러 대로 늘리면(02장 2.10) "앞에 N건"의 뜻부터 다시 정해야 한다.
+- 인덱스 `(status, created_at)`가 있으면 행이 많아져도 빠르다. 대상이 대기·실행 중인 작업뿐이라 행 수가 적다.
 - 이 값은 정확한 예측이 아니라 "멈춘 게 아니라 순서를 기다리는 중"을 보여주기 위한 것이다. 화면 조회 주기는 5~10초다. 🚧 (U-18)
 
 ## 4.6 SQS 메시지 형식
@@ -476,9 +495,9 @@ SELECT count(*)
 | `job_id` | 정수 | `analysis_jobs.id` |
 | `kind` | 문자열 | `stage1` · `stage2` · `next_batch` 셋 중 하나 |
 
-- **묶음 번호는 넣지 않는다.** `next_batch`를 받은 워커가 DB에서 `max(batch_no) + 1`을 계산한다. 메시지에 넣으면 중복 전달 때 어긋난다.
-- 메시지를 꺼낸 워커는 먼저 4.4의 조건부 UPDATE를 시도한다. 0행이면 아무 일도 하지 않고, 이유를 가리지 않고 메시지를 지운다 (4.4, D-56 ⚠️ 팀장 확인).
-- 1단계는 수십 분이 걸리므로 처리하는 동안 `ChangeMessageVisibility`로 가시성 제한 시간을 연장한다. 연장 주기는 🚧 (U-18)
+- **묶음 번호는 넣지 않는다.** `next_batch`를 받은 워커가 DB에서 `max(batch_no) + 1`을 계산한다. 이미 한 묶음 앞서 있으면 아무것도 하지 않는다 (4.4). 메시지에 넣으면 중복 전달 때 어긋난다.
+- 메시지를 꺼낸 워커는 먼저 4.4의 조건부 UPDATE를 시도한다(`next_batch`는 4.4의 잠금 확인). 0행이면 아무 일도 하지 않고, 이유를 가리지 않고 메시지를 지운다 (4.4, D-56 ⚠️ 팀장 확인).
+- 2단계는 약 30분(추정)이 걸리므로 처리하는 동안 `ChangeMessageVisibility`로 가시성 제한 시간을 연장한다. 연장 주기는 🚧 (U-18)
 
 ## 4.7 시간 필드 규칙
 
@@ -496,7 +515,7 @@ SELECT count(*)
 
 ## 4.8 트랙 결과 파일 형식
 
-**중간 저장 구간 하나당 JSONL 파일 하나**를 만든다. 구간 파일을 번호순으로 이어 붙이면 영상 전체의 트랙이다. 한 줄에 JSON 객체 하나를 쓰고, 줄 하나가 "어떤 시각에 어떤 객체가 어디에 있었는지"를 나타낸다. (D-26, D-76)
+2단계 탐지·추적(채널 A·B)에서 만든다 (D-67, D-71). **중간 저장 구간 하나당 JSONL 파일 하나**를 만든다. 구간 파일을 번호순으로 이어 붙이면 영상 전체의 트랙이다. 한 줄에 JSON 객체 하나를 쓰고, 줄 하나가 "어떤 시각에 어떤 객체가 어디에 있었는지"를 나타낸다. (D-26, D-76)
 
 ```
 {"t":720.0,"track_id":31,"cls":"car","bbox":[810,440,960,620],"conf":0.91}
@@ -508,12 +527,13 @@ SELECT count(*)
 |---|---|---|
 | `t` | 실수 | **원본 시간(초).** 구간으로 나눠 저장해도 원본 기준이다 (4.7) |
 | `track_id` | 정수 | 추적 ID. **영상 안에서 유일하다** |
-| `cls` | 문자열 | 객체 종류. `car` · `person` 등. 목록은 🚧 (U-09) |
+| `cls` | 문자열 | 객체 종류. `car` · `person` 등. 목록은 🚧 (U-09). 채널 B 트랙은 클래스가 없어 이 키가 없다 |
 | `bbox` | 정수 4개 | `[x1, y1, x2, y2]`, 원본 해상도 기준 픽셀 |
 | `conf` | 실수 | 탐지 신뢰도 0~1 |
 
 **규칙**
 
+- 🚧 채널 B 트랙(`cls` 없음)을 같은 파일에 넣을지, 채널을 나타내는 키를 둘지는 U-23(팀장)에서 정한다.
 - 줄은 `t` 오름차순으로 쓴다. 같은 `t`의 객체들은 이어서 쓴다.
 - `track_id`는 영상 안에서 유일하다. 탐지·추적을 영상 처음부터 끝까지 한 줄로 하고, 이어서 할 때도 추적기 상태(다음 ID 번호 포함)를 불러 오기 때문이다. 구간 경계를 넘는 트랙은 앞뒤 파일에서 같은 `track_id`를 가진다. `candidates.track_id`가 이 값이다. (D-76)
 - 구간 번호는 `시작 시간 ÷ 중간 저장 간격`이다(간격은 🚧 U-06). 이어서 할 때 같은 구간을 다시 쓰면 같은 파일을 덮어쓴다.
@@ -530,12 +550,14 @@ SELECT count(*)
 ### 원본 버킷 `<prefix>-raw`
 
 ```
-videos/{video_id}/original.{ext}     예: original.mp4, original.avi
+videos/{video_id}/original.{ext}          예: original.mp4, original.avi
+videos/{video_id}/inputs/photo.{ext}      예: inputs/photo.jpg  (파손 사진, 선택)
 ```
 
 - 여기에는 **업로드용 presigned URL만** 발급한다. 재생 URL은 어떤 경우에도 발급하지 않는다. (불변 조건 1, D-23)
 - **이 버킷의 객체는 오래 살지 않는다.** 백엔드 주기 작업이 `upload_completed_at`에서 30일이 지나면 지운다. 그 위에 S3 수명 주기 규칙으로 30일 삭제를 안전망으로 건다. (D-52, D-64, 02장 2.9)
 - `ext`는 업로드한 파일의 확장자를 소문자로 바꾼 것이다. 허용 확장자는 `.mp4` `.avi` `.mkv` `.mov`이고 코덱은 H.264·H.265다 (D-43, 01장 1.6).
+- **파손 사진도 원본 버킷에 둔다.** 번호판 등 사용자 정보가 비식별화 없이 들어 있어(06장 6.4) 원본과 같은 보호가 필요하고, 같은 `videos/{video_id}/` 접두사라 원본과 함께 30일에 지워진다. 업로드용 presigned URL은 05장 18번이 발급한다. 허용 확장자는 `.jpg` `.jpeg` `.png` `.heic`, 최대 20MB다 (D-83, 01장 1.6).
 
 ### 마스킹본 버킷 `<prefix>-masked`
 
@@ -630,6 +652,7 @@ CREATE TABLE analysis_jobs (
   input_completed_at timestamptz,
   error_message      text,
   processed_sec      double precision NOT NULL DEFAULT 0,   -- 중간 저장한 지점 (D-76)
+  current_batch_no   integer,                  -- 지금 보여주는 묶음. ready가 될 때 1 (D-82)
   created_at         timestamptz NOT NULL DEFAULT now(),
   updated_at         timestamptz NOT NULL DEFAULT now()
 );
@@ -665,10 +688,12 @@ CREATE TABLE damage_inputs (
 CREATE TABLE candidates (
   id              bigserial PRIMARY KEY,
   analysis_job_id bigint           NOT NULL REFERENCES analysis_jobs(id) ON DELETE CASCADE,
-  judged_at_sec   double precision NOT NULL,   -- 구간은 저장하지 않는다 (D-33)
+  judged_at_sec   double precision NOT NULL,   -- 구간은 저장하지 않는다 (D-33). VLM 기준점 (D-84)
+  channel         text             NOT NULL,   -- 'A' | 'B' (D-71). 합친 후보의 값은 🚧 (U-13)
   rule_name       text             NOT NULL,   -- 목록은 🚧 (U-13)
   track_id        integer          NOT NULL,   -- 영상 안에서 유일 (4.8, D-76)
-  vlm_score       integer,                     -- 0~100. VLM 호출 전에는 비어 있다
+  vlm_pass1       boolean,                     -- 1차 VLM 통과/탈락. 1차 전·건너뜀은 비어 있다 (D-74)
+  vlm_score       integer,                     -- 0~100. 1차 탈락은 0. VLM 호출 전에는 비어 있다
   rank            integer,
   batch_no        integer,
   verdict         text             NOT NULL DEFAULT 'unseen',   -- 'unseen' | 'not_found'. 찾음은 pinned_incidents (D-35)
@@ -682,6 +707,7 @@ CREATE TABLE candidate_clips (
   start_sec     double precision NOT NULL,
   end_sec       double precision NOT NULL,
   masked_s3_key text,                          -- 완료 후 채운다
+  crop_bbox     integer[],                     -- [x1, y1, x2, y2] 원본 픽셀. 클립을 만들 때 채운다 (D-70, D-84)
   status        text             NOT NULL DEFAULT 'pending',
   created_at    timestamptz      NOT NULL DEFAULT now()
 );
@@ -748,7 +774,7 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 | `videos → upload_tokens` FK | CASCADE를 걸지 **않는다**(기본 동작) | 영상은 링크로만 올라오므로(D-45) 영상이 가리키는 링크 행은 지울 수 없어야 한다. 만료 링크 정리 작업을 만들면 쓰지 않은 링크(`used_at IS NULL`)만 지운다 |
 | `updated_at` 갱신 | 트리거를 쓰지 않고 **UPDATE 문에 직접 쓴다** | 상태를 바꾸는 UPDATE는 4.4처럼 `WHERE status = ...`가 붙은 조건부 문장이다. 같은 문장에서 함께 쓰는 편이 읽기 쉽고, 트리거가 숨어서 도는 것보다 추적하기 낫다 |
 | `NOT NULL` 기준 | 행을 만드는 시점에 값을 알 수 있으면 `NOT NULL`, 나중에 채우면 NULL 허용 | `videos.duration_sec`처럼 워커가 나중에 채우는 칼럼은 NULL이어야 한다. 주석으로 "완료 후 채운다"를 적어 둔다 |
-| 금액·좌표 타입 | 좌표·시간은 `double precision`, 픽셀 bbox는 JSONB 안의 정수 배열 | 4.2·4.8의 표와 같다. 소수 오차가 문제 되는 계산(금액 등)은 이 프로젝트에 없다 |
+| 금액·좌표 타입 | 좌표·시간은 `double precision`, 픽셀 bbox는 JSONB 안의 정수 배열. JSONB가 아닌 칼럼(`candidate_clips.crop_bbox`)은 `integer[]` | 4.2·4.8의 표와 같다. 소수 오차가 문제 되는 계산(금액 등)은 이 프로젝트에 없다 |
 
 ## 4.11 이 장에서 미정으로 남는 것
 
@@ -759,11 +785,16 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 | 누끼를 다각형으로 딸지 (겹친 차량을 픽셀 단위로 가르기) | 06장 (U-09). D-65는 탐지 bbox만 쓴다 🚧 |
 | 탐지 0건·본인 차 없음일 때의 폴백 | **두지 않는다** → 재업로드 안내로 간다 (D-65, 2026-09-26 팀장 결정) |
 | 룰이 실제로 받는 파손 부위 값(근접 판정 폭, 인접 영역) | 06장 (U-13) → 정해지면 `schema_version`만 올린다 |
-| `payload` 검증 규칙 | **해결** → [05장 5.7](05-api.md#57-차량파손-부위-입력-저장-api). D-65로 `schema_version` 2가 되어 규칙을 고쳐야 한다 ⚠️ 팀원 2 |
+| `payload` 검증 규칙 | **해결** → [05장 5.7](05-api.md#57-차량파손-부위-입력-저장-api) (`schema_version` 3, D-83) |
 | 디코딩 청크 길이, 중간 저장 간격, 샘플링 fps | U-06, 실측 후 |
 | 상태별 화면 문구 | 07장 (U-15) |
 | 청크 경계를 넘는 트랙 이어 붙이기 | **해결** → D-76 (탐지·추적을 영상 전체에 한 줄로 해 끊기지 않는다) |
-| 1단계 도중 죽은 작업을 누가 다시 시작시키나 | 🚧 팀장·팀원 2 (D-76 한계, D-56 한계) |
+| 2단계 도중 죽은 작업을 누가 다시 시작시키나 | 🚧 팀장·팀원 2 (D-76 한계, D-56 한계) |
+| 다음 묶음을 만들던 워커가 죽어 `pending` 클립이 남은 작업 | 🚧 위와 같다. 재전달된 `next_batch`는 "이미 앞서 있음"으로 지워지므로(4.4) 무엇이 다시 만들지 정해야 한다 (D-82, D-76 한계, D-56 한계) |
+| 파손이 안 보일 때 받을 위치 입력 | 🚧 U-25 (팀장). 정해지면 `damage_inputs` `schema_version`을 올린다 |
+| 통로 쪽/옆면을 사용자가 고를지 | 🚧 U-26 (팀장). 고르면 D-34가 바뀐다 |
+| 두 채널이 합친 후보의 `channel` 값 | 🚧 U-13 (팀장) |
+| `crop_bbox`를 화면에 줄지 | 🚧 07장 |
 | 추적기 상태 파일 형식 | 06장 (D-76) |
 | 워커가 어떤 오류를 `failed`로 볼지 (전이 13) | 06장 (D-43) |
 | 마이그레이션 도구(Alembic 등), `0001_init.sql`을 둘 위치 | 03장, 10장 (U-03, U-12) |
@@ -799,8 +830,12 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 - 두 단계 분석과 상태 표시: D-05, [02장 2.5](02-architecture.md#25-처리-흐름-두-단계-분석)
 - DB는 백엔드 EC2의 PostgreSQL: D-17
 - 작업 전달은 SQS, 상태는 DB: D-16
-- 1단계 중 입력 허용, 2단계 자동 시작: D-15
+- 1단계 중 입력 허용, 2단계 자동 시작: D-15 → 입력은 1단계 뒤: D-67
 - 대기 순서 표시, 무상태 API: D-19
+- 1단계는 정지 장면만, 입력 뒤 2단계: D-67 → **`stage1_running`·`stage1_input_done` 없음, 전이 4·5·6 비움, "앞에 N건"에 2단계 대기 포함: D-81**
+- 한 묶음 앞서 준비: D-68 → **`current_batch_no`: D-82**
+- 탐지 상황·사진·텍스트 입력: D-72 → **`damage_inputs` `schema_version` 3, 사진은 원본 버킷 `inputs/`: D-83**
+- 탐지 채널 A·B, VLM 기준점, 1차·2차 VLM, 클립 크롭: D-70, D-71, D-73, D-74 → **`channel`·`vlm_pass1`·`crop_bbox`: D-84**
 - 불변 조건 1·7: [02장 2.4](02-architecture.md#24-이중-경로와-불변-조건)
 - S3 사용: D-09. 영역은 비공개 버킷 3개로 분리: D-23
 - 청크는 디코딩만 나누고 탐지·추적은 한 줄로, 중간 저장, `chunks` 테이블 없음: D-76, [02장 2.6](02-architecture.md#26-청크-분할과-병렬-처리)
