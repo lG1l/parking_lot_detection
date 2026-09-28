@@ -104,6 +104,7 @@ users ──┬──< sessions        (로그인 세션)
 | `upload_token_id` | bigint FK → upload_tokens, NOT NULL | 어느 링크로 올라왔는지. 영상은 업로드 링크로만 올라온다 (D-28, D-45) |
 | `s3_key` | text | 원본 버킷 안의 키 (4.9) |
 | `original_filename` | text | 관리자가 올린 파일 이름 |
+| `recording_started_at` | timestamptz | 영상 첫 프레임의 실제 녹화 시각. 관리자가 업로드할 때 **선택으로** 입력한다. 비어 있으면 모른다 (D-85) |
 | `size_bytes` | bigint | 업로드 URL 발급 때 브라우저가 알려준 크기. 5GB 검사에 쓴 값 (05장 5.4) |
 | `duration_sec` | double precision | 영상 길이(초). GPU 워커가 1단계에서 채운다 |
 | `fps` | double precision | 원본 fps. 워커가 채운다. 샘플링 fps와 다르다 |
@@ -511,6 +512,7 @@ SELECT count(*) FROM q
 - 후보는 원본 시간 기준 판정 시점을, 후보 클립은 원본 시간 기준 시작·끝을 가진다. 고정된 사건 지점은 가리키는 클립의 값을 그대로 쓴다. **디코딩 청크로 자르거나 클립으로 가공한 뒤에도 이 값이 유지된다.** (불변 조건 7, D-33)
   - 구간 파일 3번이 원본 720초에서 시작하면, 그 파일에 적히는 `t`는 0이 아니라 720.0부터다.
   - 30초짜리 클립 안의 시간(0~30초)은 DB에 저장하지 않는다. 저장하는 것은 원본 기준 `start_sec`·`end_sec`뿐이다.
+- **실제 시각은 저장하지 않는다.** 원본 시간은 `*_sec`로만 두고, 실제 시각이 필요하면 `videos.recording_started_at + *_sec`로 **응답을 만들 때만** 계산한다(05장 15번). 영상이 중간에 끊기지 않았다는 가정이라 추정값이다 (D-85).
 - 후보 클립 구간은 `판정 시점 −10초 ~ +20초`로 계산한다. 영상 경계를 넘으면 잘라내고, 그 결과를 `candidate_clips.start_sec`·`end_sec`에 저장한다. 따라서 클립 길이가 30초보다 짧을 수 있다. (01장 1.6)
 
 ## 4.8 트랙 결과 파일 형식
@@ -630,6 +632,7 @@ CREATE TABLE videos (
   upload_token_id     bigint      NOT NULL REFERENCES upload_tokens(id),  -- 영상은 링크로만 올라온다 (D-45)
   s3_key              text        NOT NULL,
   original_filename   text        NOT NULL,
+  recording_started_at timestamptz,            -- 관리자가 입력한 녹화 시작 시각. 선택 (D-85)
   size_bytes          bigint,                  -- 업로드 URL 발급 때 채운다
   duration_sec        double precision,        -- 아래 4개는 워커가 1단계에서 채운다
   fps                 double precision,
@@ -836,6 +839,7 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 - 한 묶음 앞서 준비: D-68 → **`current_batch_no`: D-82**
 - 탐지 상황·사진·텍스트 입력: D-72 → **`damage_inputs` `schema_version` 3, 사진은 원본 버킷 `inputs/`: D-83**
 - 탐지 채널 A·B, VLM 기준점, 1차·2차 VLM, 클립 크롭: D-70, D-71, D-73, D-74 → **`channel`·`vlm_pass1`·`crop_bbox`: D-84**
+- 녹화 시작 시각(선택 입력)과 추정 실제 시각: D-85
 - 불변 조건 1·7: [02장 2.4](02-architecture.md#24-이중-경로와-불변-조건)
 - S3 사용: D-09. 영역은 비공개 버킷 3개로 분리: D-23
 - 청크는 디코딩만 나누고 탐지·추적은 한 줄로, 중간 저장, `chunks` 테이블 없음: D-76, [02장 2.6](02-architecture.md#26-청크-분할과-병렬-처리)

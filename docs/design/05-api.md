@@ -321,7 +321,8 @@ UPDATE upload_tokens
 요청
 
 ```json
-{"filename": "CH03_20260917_000000.mp4", "size_bytes": 1837260800}
+{"filename": "CH03_20260917_000000.mp4", "size_bytes": 1837260800,
+ "recording_started_at": "2026-09-17T00:00:00+09:00"}
 ```
 
 성공: `200`
@@ -347,12 +348,13 @@ RETURNING id, owner_user_id;
    - `:token_hash`는 주소의 `token`을 `token_hash()`로 거친 값이다 (D-59). 5·7번도 같은 방법으로 행을 찾는다.
    - 1행이 나오면 이 요청이 링크를 가져갔다. 0행이면 다시 조회해 "링크를 쓸 수 없는 경우의 코드" 중 맞는 것을 돌려준다.
    - 관리자가 [업로드]를 두 번 눌러 요청이 동시에 두 번 와도 한쪽만 1행을 받는다. 다른 쪽은 `UPLOAD_TOKEN_USED`를 받는다. 프론트는 첫 요청을 보낸 뒤 버튼을 막는다.
-3. 같은 트랜잭션에서 `videos` 행을 만든다. 주인은 링크의 주인이고, `upload_token_id`·`original_filename`·`size_bytes`를 채운다. S3 키 `videos/{video_id}/original.{ext}`는 행 번호가 있어야 정해지므로, 번호를 먼저 받고(`nextval`) 키를 채워 넣는다 (04장 4.9).
+3. 같은 트랜잭션에서 `videos` 행을 만든다. 주인은 링크의 주인이고, `upload_token_id`·`original_filename`·`size_bytes`·`recording_started_at`을 채운다. S3 키 `videos/{video_id}/original.{ext}`는 행 번호가 있어야 정해지므로, 번호를 먼저 받고(`nextval`) 키를 채워 넣는다 (04장 4.9).
 4. 커밋한다.
 5. 업로드용 presigned URL을 서명한다. 원본 버킷 `PutObject`, 유효 시간은 01장 1.6(15분)이다 (D-41).
 6. **GPU는 켜지 않는다** (D-62). 업로드가 15분을 넘으면 여기서 켠 GPU가 할 일 없이 15분치 요금만 태우고 꺼진다. 대신 브라우저가 업로드 막바지에 16번을 부른다.
 
 - `ext`는 `filename`의 마지막 `.` 뒤를 소문자로 바꾼 것이다. `CH03.MP4` → `mp4`.
+- `recording_started_at`은 **선택**이다. 영상 첫 프레임의 실제 녹화 시각으로, 관리자가 DVR에서 내보낼 때 고른 시작 시각이다. 없으면 키를 빼거나 `null`로 보낸다. 시간대가 붙은 ISO 8601 문자열이다(5.1) (D-85).
 - 링크는 **이 API에서 쓴 것이 된다.** 업로드가 중간에 끊기면 링크를 새로 받아야 한다 (04장 `upload_tokens`).
 - 응답에 `video_id`를 넣지 않는다. 관리자는 영상을 볼 수 없고, 7번은 `token`으로 영상을 찾는다.
 
@@ -371,7 +373,7 @@ RETURNING id, owner_user_id;
 | 404 / 410 | 위 표 | 링크를 쓸 수 없음 |
 | 422 | `UNSUPPORTED_FILE_TYPE` | `filename`의 확장자가 `.mp4` `.avi` `.mkv` `.mov`가 아님. 확장자가 없는 경우도 포함 (D-43) |
 | 422 | `FILE_TOO_LARGE` | `size_bytes`가 5GB(01장 1.6)보다 큼 (D-22) |
-| 422 | `VALIDATION_FAILED` | `filename`이 비었거나 `size_bytes`가 0 이하 |
+| 422 | `VALIDATION_FAILED` | `filename`이 비었거나 `size_bytes`가 0 이하. `recording_started_at`이 시간대 없는 문자열이거나 지금보다 뒤 |
 
 - 확장자와 크기는 프론트가 먼저 막는다(07장). 여기서 다시 막는 것은 프론트를 거치지 않은 요청 때문이다.
 - 크기는 브라우저가 알려준 값이다. 실제로 더 큰 파일을 보내도 S3가 단일 PUT 5GB 한도에서 거절한다.
@@ -942,10 +944,12 @@ SELECT count(*) FROM candidates
 [
   {"candidate_clip_id": 1187,
    "start_sec": 13235.0, "end_sec": 13265.0, "incident_at_sec": 13250.0,
+   "est_start_at": "2026-09-17T03:40:35+09:00", "est_end_at": "2026-09-17T03:41:05+09:00",
    "clip_url": "https://<prefix>-masked.s3.ap-northeast-2.amazonaws.com/videos/17/clips/1187.mp4?X-Amz-Algorithm=...",
    "pinned_at": "2026-09-20T15:20:11+09:00"},
   {"candidate_clip_id": 1244,
    "start_sec": 40120.0, "end_sec": 40150.0, "incident_at_sec": 40135.0,
+   "est_start_at": "2026-09-17T11:08:40+09:00", "est_end_at": "2026-09-17T11:09:10+09:00",
    "clip_url": "https://<prefix>-masked.s3.ap-northeast-2.amazonaws.com/videos/17/clips/1244.mp4?X-Amz-Algorithm=...",
    "pinned_at": "2026-09-20T15:31:40+09:00"}
 ]
@@ -955,9 +959,11 @@ SELECT count(*) FROM candidates
 |---|---|
 | `start_sec`·`end_sec` | **경찰에게 넘길 값.** 고정한 클립이 원본 영상의 어느 구간인지 (PRD 3.6, 불변 조건 7) |
 | `incident_at_sec` | 사건 지점의 원본 시간. 클립 안에서의 위치는 `incident_at_sec − start_sec`다 |
+| `est_start_at`·`est_end_at` | 추정 실제 시각. `recording_started_at + start_sec`·`+ end_sec`. 관리자가 녹화 시작 시각을 넣지 않았으면 `null`이다 (D-85) |
 | `clip_url` | 마스킹본 클립의 재생용 URL. 유효 시간 15분 (D-41) |
 
-- 세 시간 값은 모두 원본 영상 시작부터의 초다. `03:40:35` 같은 표시 형식은 07장에서 정한다.
+- 세 `*_sec` 값은 모두 원본 영상 시작부터의 초다. `03:40:35` 같은 표시 형식은 07장에서 정한다.
+- **`est_*_at`은 추정값이다.** 관리자가 입력한 시각이 맞고 영상이 중간에 끊기지 않았을 때만 맞는다. 움직임 감지 녹화나 이어 붙인 파일은 빈 시간이 빠져 어긋난다. 그래서 화면은 경과 시간(`start_sec`·`end_sec`)을 늘 함께 보여주고, 실제 시각에는 "관리자 입력 기준 추정"을 붙인다 (D-85).
 - 값은 고정한 클립 행에서 읽는다. `pinned_incidents`에는 복사해 두지 않는다 (D-32, 04장의 JOIN 쿼리). `incident_at_sec`는 그 클립의 후보에서 `judged_at_sec + 5초`로 계산한다.
 - **다운로드 링크는 주지 않는다.** `clip_url`은 `<video>`가 재생하는 URL이고, 화면에 다운로드 버튼을 두지 않는다 (불변 조건 8, PRD 3.6).
 - **고정한 것이 없으면 빈 배열이다.** 상태를 가리지 않는다. `exhausted`여도 그 전에 고정한 것이 있으면 나온다.
@@ -1183,6 +1189,7 @@ flowchart TD
 - 1단계는 정지 장면만, 입력 뒤 곧바로 2단계와 GPU 켜기, 2단계 대기에도 `queue_ahead`: D-67, **D-81**
 - 한 묶음 앞서 준비, `current_batch_no`로 지금 묶음을 가림: D-68, **D-82**
 - 탐지 상황·사진·텍스트 입력, 사진은 18번 presigned PUT: D-72, **D-83** / 클립 크롭: D-70, **D-84**
+- 녹화 시작 시각(6번, 선택)과 추정 실제 시각(15번): **D-85**
 - 대기 상태에 멈춘 작업은 5초 점검이 SQS에 다시 넣는다(DLQ·재시도 상한 없음): D-56
 - 업로드 중·업로드 실패 상태는 조회할 때 계산: D-47
 - 정지 장면은 시작 장면 1장, 1단계에서 만든다: D-48
