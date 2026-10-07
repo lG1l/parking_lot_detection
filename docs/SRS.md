@@ -294,16 +294,21 @@ S3는 비공개 버킷 3개(원본·마스킹·분석 결과)로 나눈다. 원�
 
 ### 5.1 파손 위치 입력
 
-`PUT /api/videos/{video_id}/input`은 `schema_version: 4`, 차량 `det_id`, `damage.visible`, `damage.damage_bbox`를 필수로 받는다. 위치는 `[x1, y1, x2, y2]` 정수 배열이며 원본 화면 좌표로 저장한다. 두 경우 모두 `0 <= x1 < x2 <= width`, `0 <= y1 < y2 <= height`를 만족해야 한다. 보임은 선택 차량 박스 내부로 한정하고, 안 보임은 화면 범위 안에서 작은 사각형을 허용한다. 작은 사각형의 고정 픽셀 크기를 강제하지 않는다. 브라우저 표시 배율과 여백은 좌표 변환 때 제거한다. 내 차 바닥 네 모서리(원본 화면 좌표 점 4개)와 파손 변(1개 또는 이웃한 2개)도 필수로 함께 받는다. 이 두 항목의 키 이름과 올릴 `schema_version`은 [API 설계](design/05-api.md)에서 정한다 🚧 (D-98). 아래 예시는 아직 버전 4다.
+`PUT /api/videos/{video_id}/input`은 `schema_version: 5`, 차량 `det_id`, `damage.visible`, `damage.damage_bbox`를 필수로 받는다. 위치는 `[x1, y1, x2, y2]` 정수 배열이며 원본 화면 좌표로 저장한다. 두 경우 모두 `0 <= x1 < x2 <= width`, `0 <= y1 < y2 <= height`를 만족해야 한다. 보임은 선택 차량 박스 내부로 한정하고, 안 보임은 화면 범위 안에서 작은 사각형을 허용한다. 작은 사각형의 고정 픽셀 크기를 강제하지 않는다. 브라우저 표시 배율과 여백은 좌표 변환 때 제거한다. 내 차 바닥 네 모서리(원본 화면 좌표 점 4개)와 파손 변(1개 또는 이웃한 2개)도 필수로 함께 받는다. 키 이름은 `floor_corners`(점 4개)와 `damage_edges`(변 번호 1~2개)다 (D-98, D-99).
 
 안 보임 예시:
 
 ```json
 {
   "still_frame_id": 305,
-  "schema_version": 4,
+  "schema_version": 5,
   "vehicle": {"det_id": 1},
-  "damage": {"visible": false, "damage_bbox": [805, 510, 825, 530]}
+  "damage": {
+    "visible": false,
+    "damage_bbox": [805, 510, 825, 530],
+    "floor_corners": [[700, 640], [1010, 650], [960, 520], [760, 515]],
+    "damage_edges": [2]
+  }
 }
 ```
 
@@ -326,7 +331,7 @@ S3는 비공개 버킷 3개(원본·마스킹·분석 결과)로 나눈다. 원�
 
 ### 5.4 데이터 관리
 
-기존 12개 엔티티(users, sessions, upload_tokens, videos, analysis_jobs, still_frames, vehicle_selections, damage_inputs, candidates, candidate_clips, pinned_incidents, access_logs)를 유지한다. 새 파손 사진 버킷·테이블이나 열람기한 저장 칼럼을 추가하지 않는다. 입력 사각형은 JSONB에 버전 4로 저장한다. 상세 필드·상태 전이·S3 경로는 [데이터 설계](design/04-data-model.md)를 따른다.
+기존 12개 엔티티(users, sessions, upload_tokens, videos, analysis_jobs, still_frames, vehicle_selections, damage_inputs, candidates, candidate_clips, pinned_incidents, access_logs)를 유지한다. 새 파손 사진 버킷·테이블이나 열람기한 저장 칼럼을 추가하지 않는다. 입력은 JSONB에 버전 5로 저장한다 (D-99). 상세 필드·상태 전이·S3 경로는 [데이터 설계](design/04-data-model.md)를 따른다.
 
 ## 6. 테스트 및 AI 성능 평가
 

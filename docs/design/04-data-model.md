@@ -776,7 +776,7 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 |---|---|
 | `videos (owner_user_id, created_at DESC)` | 사용자의 영상 목록을 최근순으로 보여줄 때 |
 | `analysis_jobs (status, created_at)` | 4.5의 "앞에 N건" 계산 |
-| `candidates (analysis_job_id, batch_no, rank)` | 묶음 하나를 점수순으로 꺼낼 때 |
+| `candidates (analysis_job_id, list_kind, batch_no, rank)` | 목록 하나의 묶음 하나를 점수순으로 꺼낼 때 (D-99) |
 | `candidates (analysis_job_id, verdict)` | 전이 10·12의 "남은 후보가 있는가" |
 | `candidate_clips (candidate_id)` | 후보의 클립을 찾을 때 |
 | `access_logs (video_id, created_at DESC)` | "이 영상에 누가 언제 닿았나" (D-53) |
