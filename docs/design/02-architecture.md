@@ -297,7 +297,7 @@ GitHub Actions에는 AWS 권한이 필요 없다. 배포를 SSH로 하기 때문
 | `s3:PutObject` | 원본 영역 | 업로드용 presigned URL 발급 (영상, 파손 사진. 서명한 쪽의 권한으로 업로드된다) |
 | `s3:GetObject` | 마스킹본 영역 | 재생용 presigned URL 발급. 원본 영역 읽기 권한은 주지 않는다 (2.4) |
 | `s3:DeleteObject`, `s3:ListBucket` | 원본 영역 | 원본 파기 주기 작업 (D-52, D-64, D-104). `videos/{video_id}/` 아래를 훑어 영상과 파손 사진을 함께 지운다. **둘 다 읽기가 아니라 불변 조건 1을 깨지 않는다.** `ListBucket`으로 보이는 것은 키 이름뿐이다 |
-| `s3:DeleteObject`, `s3:ListBucket` | 마스킹본·분석 결과 영역 | 마스킹본·분석 결과 파기 주기 작업 (D-57, D-64). `videos/{video_id}/` 아래를 훑어 지우므로 목록 조회가 함께 필요하다. 끝 상태에서는 고정한 클립 하나만 빼고 지운다 |
+| `s3:DeleteObject`, `s3:ListBucket` | 마스킹본·분석 결과 영역 | 마스킹본·분석 결과 파기 주기 작업 (D-57, D-64, D-80). `videos/{video_id}/` 아래를 훑어 지우므로 목록 조회가 함께 필요하다 |
 | `sqs:SendMessage` | 작업 대기열 | 작업 넣기 |
 | `ec2:StartInstances` | GPU EC2 1대 (인스턴스 ARN으로 제한) | GPU 켜기 |
 | `ec2:DescribeInstances` | 전체 (AWS가 대상 제한을 지원하지 않음) | GPU 상태 확인. 5초 주기 점검에서 "작업은 있는데 꺼져 있음"을 찾는다 (D-42) |
