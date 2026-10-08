@@ -12,7 +12,7 @@
 - 환경변수와 비밀값 관리 (DB 비밀번호, 연결 문자열 포함. 저장소에 커밋하지 않는다)
 - 로컬 개발용 CORS 설정 (`flutter run -d chrome`과 FastAPI의 포트가 다름)
 - CI 내용, 배포 스크립트 내용, Flutter 빌드 위치, GPU 워커 코드 배포 방식
-- 서버 부팅 시 서비스 자동 실행 방식 (API 서버, PostgreSQL, GPU 워커)
+- 서버 부팅 시 서비스 자동 실행 방식 (API 서버, 주기 작업, PostgreSQL, GPU 워커)
 - 백엔드 EC2 PostgreSQL 설치 스크립트 ([11장 D-17](11-decisions.md#d-17-db는-백엔드-ec2에-postgresql을-직접-설치한다)의 절차를 스크립트로)
 - GPU 자동 꺼짐 설정과 시연 날 끄는 방법 (D-15, [02장 2.8](02-architecture.md#시연-날-설정))
 - GPU EC2 접속(SSH) 방식
