@@ -43,6 +43,9 @@ env/
 .vscode/
 .idea/
 
+# 실행 중 생성 파일 (D-121)
+local_storage/
+
 # 데이터셋 / 학습 결과물 / 모델 가중치
 data/
 datasets/
@@ -58,6 +61,8 @@ outputs/
 *.mp4
 *.avi
 *.mov
+# 공유 테스트 자료 영상만 예외 (D-122)
+!fixtures/**/*.mp4
 
 # 로그
 *.log
