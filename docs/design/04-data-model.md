@@ -103,7 +103,7 @@ users ──┬──< sessions        (로그인 세션)
 |---|---|---|
 | `id` | bigserial PK | S3 키에도 쓴다 (4.9) |
 | `owner_user_id` | bigint FK → users | 영상의 주인. 결과를 보는 사용자 |
-| `upload_token_id` | bigint FK → upload_tokens, NOT NULL | 어느 링크로 올라왔는지. 영상은 업로드 링크로만 올라온다 (D-28, D-45) |
+| `upload_token_id` | bigint FK → upload_tokens, NOT NULL, UNIQUE | 어느 링크로 올라왔는지. 영상은 업로드 링크로만 올라온다 (D-28, D-45). 링크 하나에 영상 하나다 (D-108) |
 | `s3_key` | text | 원본 버킷 안의 키 (4.9) |
 | `original_filename` | text | 관리자가 올린 파일 이름 |
 | `recording_started_at` | timestamptz | 영상 첫 프레임의 실제 녹화 시각. 관리자가 업로드할 때 **선택으로** 입력한다. 비어 있으면 모른다 (D-85) |
@@ -664,7 +664,7 @@ CREATE TABLE upload_tokens (
 CREATE TABLE videos (
   id                  bigserial PRIMARY KEY,
   owner_user_id       bigint      NOT NULL REFERENCES users(id),
-  upload_token_id     bigint      NOT NULL REFERENCES upload_tokens(id),  -- 영상은 링크로만 올라온다 (D-45)
+  upload_token_id     bigint      NOT NULL UNIQUE REFERENCES upload_tokens(id),  -- 영상은 링크로만 올라온다 (D-45). 링크 하나에 영상 하나 (D-108)
   s3_key              text        NOT NULL,
   original_filename   text        NOT NULL,
   recording_started_at timestamptz,            -- 관리자가 입력한 녹화 시작 시각. 선택 (D-85)
@@ -793,6 +793,7 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 | `candidates (analysis_job_id, list_kind, batch_no, rank)` | 목록 하나의 묶음 하나를 점수순으로 꺼낼 때 (D-99) |
 | `candidates (analysis_job_id, verdict)` | 전이 10·12의 "남은 후보가 있는가" |
 | `candidate_clips (candidate_id)` | 후보의 클립을 찾을 때 |
+| `videos (upload_token_id)` UNIQUE | 업로드 완료 알림(05장 7번)이 링크로 영상을 찾을 때. 같은 링크로 영상 행이 두 개 생기는 것도 막는다 (D-108) |
 | `access_logs (video_id, created_at DESC)` | "이 영상에 누가 언제 닿았나" (D-53) |
 | `videos (upload_completed_at) WHERE raw_deleted_at IS NULL` | 파기 주기 작업이 보관 상한(30일)이 지난 "지울 것"을 찾을 때. 부분 인덱스라 이미 지운 영상은 아예 들어오지 않는다 (D-52, D-64) |
 | `videos (upload_completed_at) WHERE masked_deleted_at IS NULL` | 같은 주기 작업이 마스킹본 파기 대상을 찾을 때 (D-57) |
