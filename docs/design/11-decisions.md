@@ -123,6 +123,7 @@
 | [D-104](#d-104-원본-버킷-파기는-접두사로-훑어-지운다-백엔드-역할에-원본-버킷-s3listbucket을-더한다) | 원본 버킷 파기는 접두사로 훑어 지운다. 백엔드 역할에 원본 버킷 `s3:ListBucket`을 더한다 | 2026-10-08 | 확정 (2026-10-08) |
 | [D-105](#d-105-백엔드-주기-작업은-api-서버와-따로-된-프로세스-하나로-돌린다) | 백엔드 주기 작업은 API 서버와 따로 된 프로세스 하나로 돌린다 | 2026-10-08 | 확정 (2026-10-08) |
 | [D-106](#d-106-파기-주기-작업은-켤-때-한-번-그-뒤-1시간마다-돈다) | 파기 주기 작업은 켤 때 한 번, 그 뒤 1시간마다 돈다 | 2026-10-08 | 확정 (2026-10-08) |
+| [D-107](#d-107-백엔드-점검-대상과-다시-넣을-메시지-종류를-상태별-표로-정한다) | 백엔드 점검 대상과 다시 넣을 메시지 종류를 상태별 표로 정한다 | 2026-10-08 | 확정 (2026-10-08) |
 
 ---
 
@@ -1849,13 +1850,12 @@ pinned_incidents → 1203 (502의 클립)
        그 밖(pending, running, stopping) → 끝. stopping이면 다음 점검에서 다시 본다
 ```
 
-  - "GPU를 기다리는 작업"은 DB에서 센다. SQS는 조회하지 않는다 (4.5와 같은 이유).
+  - "GPU를 기다리는 작업"은 DB에서 센다. SQS는 조회하지 않는다 (4.5와 같은 이유). 대상 상태는 04장 4.6 표를 따른다 (D-107).
 
 ```sql
 SELECT EXISTS (
   SELECT 1 FROM analysis_jobs
-   WHERE status IN ('queued', 'stills_running', 'stage1_running', 'stage1_input_done',
-                    'stage2_running', 'batch_running')
+   WHERE status IN ('queued', 'stills_running', 'stage2_running', 'batch_running')
       OR (status = 'stage1_done' AND input_completed_at IS NOT NULL)  -- 전이 7: 2단계 작업을 넣었고 워커가 아직 안 꺼냄
 );
 ```
@@ -2571,17 +2571,17 @@ GPU 켜기 요청 (실패해도 성공 응답, D-42)
 -- D-42의 5초 점검에 같이 넣는다
 SELECT id, status FROM analysis_jobs
  WHERE (status = 'queued'
-        OR status = 'stage1_input_done'
+        OR status = 'batch_running'
         OR (status = 'stage1_done' AND input_completed_at IS NOT NULL))
    AND updated_at < now() - interval '🚧 U-18';
--- 나온 작업마다 SendMessage 후
+-- 나온 작업마다 상태에 맞는 kind(04장 4.6 표, D-107)로 SendMessage 후
 UPDATE analysis_jobs SET updated_at = now() WHERE id = :job_id;
 ```
 
 - 대상은 **대기 상태 3개뿐이다.** `*_running`은 넣지 않는다. 그 상태에서는 메시지가 워커 손에 있고, 워커가 죽으면 가시성 제한 시간이 지나 SQS가 알아서 다시 전달한다. 메시지가 **아예 없어진** 경우만 재전송이 필요하고, 그것은 대기 상태에서만 생긴다.
 - 재전송한 뒤 `updated_at`을 찍는다. 찍지 않으면 5초마다 같은 메시지를 계속 보낸다. 상태는 바꾸지 않으므로 4.4의 조건부 UPDATE 규칙과 부딪히지 않는다.
 - 임계 시간은 🚧 U-18이다. `queued`에서 워커가 잡기까지 GPU 부팅 1~2분 + 모델 로딩이 정상적으로 걸리므로 그보다 넉넉해야 한다.
-- ⚠️ 팀장 확인: `batch_running`(전이 10)을 대상에 넣을지는 04장 전이 10의 "상태를 누가 바꾸는가"가 정해져야 답이 난다. 백엔드가 `ready → batch_running`으로 바꾸고 SQS에 넣는다면 메시지 유실 시 여기 멈추므로 대상이어야 하고, 워커가 바꾼다면 `ready`가 대기 상태라 대상이 된다.
+- `batch_running`도 대상이다. 전이 10에서 백엔드가 `ready → batch_running`으로 바꾸고 `next_batch`를 넣으므로 `queued`와 같은 대기 상태다 (D-107).
 
 **배경: DLQ에 실제로 무엇이 도착하는가**
 
@@ -4639,3 +4639,31 @@ ROI에 닿은 움직임 덩어리를 다음 순서로 처리한다.
 | 5초 점검과 같은 주기 | 1시간과 비교해 파기가 늦어지는 시간은 거의 같은데 DB 조회만 많아진다 |
 
 **적용 위치**: 04장 4.3
+
+## D-107. 백엔드 점검 대상과 다시 넣을 메시지 종류를 상태별 표로 정한다
+
+- 날짜: 2026-10-08
+- 상태: 확정 (2026-10-08, 팀원 2). 백엔드 주기 작업만 바뀌어 다른 팀원이 고칠 것은 없다
+
+### 결정
+
+GPU 켜기 점검(D-42)과 다시 넣기(D-56)가 보는 상태, 다시 넣을 메시지의 `kind`를 04장 4.6의 표 하나로 정한다. D-81에서 없어진 `stage1_running`·`stage1_input_done`은 두 SQL에서 뺀다.
+
+- GPU 켜기 점검: `queued`, `stills_running`, `stage1_done`(입력함), `stage2_running`, `batch_running`
+- 다시 넣기: `queued` → `stage1`, `stage1_done`(입력함) → `stage2`, `batch_running` → `next_batch`
+- `ready`에서 다음 묶음을 미리 준비하는 중인 작업은 둘 다 대상이 아니다.
+
+### 이유
+
+- 다시 넣을 때 어떤 `kind`를 보낼지 적힌 곳이 없었다.
+- `batch_running`은 전이 10에서 백엔드가 상태를 바꾸고 `next_batch`를 넣는다. `queued`와 같은 대기 상태라, 메시지를 잃으면 사용자가 계속 기다린다. 잘못 다시 넣어도 워커가 "이미 앞서 있음"으로 보고 지운다 (04장 4.4).
+- `ready` + 미리 준비 중은 메시지를 잃어도 사용자가 [다음]을 누르면 05장 13번이 `next_batch`를 다시 넣고 GPU를 켠다. 워커는 `pending` 클립부터 마저 만든다 (D-99). 따로 점검하지 않아도 복구된다.
+
+### 비교한 대안
+
+| 대안 | 버린 이유 |
+|---|---|
+| `ready` + `pending` 클립도 점검 대상에 넣음 | 조건(클립 테이블 조회)이 늘지만 얻는 것은 [다음]을 누른 뒤 잠깐의 대기를 줄이는 것뿐이다 |
+| `batch_running`을 다시 넣기에서 뺌 | 드물지만 메시지를 잃으면 사용자가 끝없이 기다린다 |
+
+**적용 위치**: 04장 4.6 / D-42·D-56의 SQL

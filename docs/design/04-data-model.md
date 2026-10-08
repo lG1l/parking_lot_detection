@@ -521,6 +521,20 @@ SELECT count(*) FROM q
 - 메시지를 꺼낸 워커는 먼저 4.4의 조건부 UPDATE를 시도한다(`next_batch`는 4.4의 잠금 확인). 0행이면 메시지를 지운다. 단, 그 메시지가 맡는 `*_running`이면 지우지 않고 이어서 한다 (4.4, D-56 ⚠️ 팀장 확인, D-94).
 - 2단계는 약 30분(추정)이 걸리므로 처리하는 동안 `ChangeMessageVisibility`로 가시성 제한 시간을 연장한다. 연장 주기는 🚧 (U-18)
 
+**상태별 메시지와 백엔드 점검 대상** (D-42, D-56, D-107)
+
+| 상태 | 추가 조건 | 이 작업의 메시지 `kind` | GPU 켜기 점검 (D-42) | 다시 넣기 (D-56) |
+|---|---|---|---|---|
+| `queued` | | `stage1` | ✅ | ✅ |
+| `stills_running` | | `stage1` | ✅ | ✗ |
+| `stage1_done` | `input_completed_at IS NOT NULL` | `stage2` | ✅ | ✅ |
+| `stage2_running` | | `stage2` | ✅ | ✗ |
+| `batch_running` | | `next_batch` | ✅ | ✅ |
+| `ready` | `pending` 클립 있음 (미리 준비 중) | `next_batch` | ✗ | ✗ |
+
+- 다시 넣기는 메시지가 줄에 있어야 하는 대기 상태만 본다. `*_running`은 메시지가 워커 손에 있고, 워커가 죽으면 가시성 제한 시간이 지나 SQS가 다시 전달한다.
+- `ready` + 미리 준비 중은 메시지를 잃어도 사용자가 [다음]을 누르면 05장 13번이 `next_batch`를 다시 넣고 GPU를 켠다 (D-99).
+
 ## 4.7 시간 필드 규칙
 
 **영상 안의 시간과 벽시계 시각을 절대 섞지 않는다.** 이름으로 구분한다.
