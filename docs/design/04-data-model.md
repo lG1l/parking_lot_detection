@@ -806,7 +806,7 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 | `videos (upload_completed_at) WHERE raw_deleted_at IS NULL` | 파기 주기 작업이 보관 상한(30일)이 지난 "파기 표시할 것"을 찾을 때. 부분 인덱스라 이미 표시한 영상은 아예 들어오지 않는다 (D-52, D-64) |
 | `videos (upload_completed_at) WHERE masked_deleted_at IS NULL` | 같은 주기 작업이 마스킹본 파기 대상을 찾을 때 (D-57) |
 
-- 데모 규모(영상 수십 건)에서는 인덱스가 없어도 느리지 않다. **부하 테스트(09장)에서 행을 많이 넣고 재는 것이 이 인덱스들의 목적이다.**
+- 데모 규모(영상 수십 건)에서는 인덱스가 없어도 느리지 않다. 행이 많아져도 조회가 느려지지 않게 미리 둔다.
 - `still_frames`·`vehicle_selections`·`damage_inputs`·`pinned_incidents`는 UNIQUE 제약이 만드는 인덱스로 충분하다. 모두 `analysis_job_id`로만 찾기 때문이다. `pinned_incidents`의 UNIQUE는 `(analysis_job_id, candidate_clip_id)`라 앞 칼럼만으로도 이 인덱스를 쓴다.
 - `sessions`와 `upload_tokens`도 마찬가지다. 찾는 방법이 `token_hash` 하나뿐이고 여기에 UNIQUE가 걸려 있다. 요청마다 도는 조회라 인덱스가 꼭 필요한데, UNIQUE가 이미 만들어 준다.
 

@@ -22,7 +22,6 @@
 | 서버 OS·AMI | 백엔드: Ubuntu LTS ⚠️(가정, 버전 🚧 U-03). GPU: AWS Deep Learning Base AMI (Ubuntu 22.04) | GPU: NVIDIA 드라이버·CUDA가 미리 설치되어 있다. AMI 사용료 없음 | 팀장, 팀원 2 | GPU: D-21 |
 | 인프라 코드 | Terraform | | 팀원 2 | |
 | CI/CD | GitHub Actions | | 팀원 2 | D-13 |
-| 부하 테스트 | Locust (Python) | 팀 언어가 Python. 오픈소스, 추가 비용 없음 | 🚧 | D-20 |
 
 ## 3.2 스택별 주의사항
 

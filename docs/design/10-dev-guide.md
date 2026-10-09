@@ -167,7 +167,6 @@ CI 성공 여부를 자동으로 조회해 배포를 막는 기능이나 CI 성�
 - ~~GPU 자동 꺼짐 설정과 시연 날 끄는 방법~~ → D-131 (`.env`의 대기 시간 값, 0이면 끔. 시연 날 SSH로 접속해 바꾸고 워커 재시작, 끝나면 15로 되돌림. [02장 2.8](02-architecture.md#시연-날-설정)). 변수 이름은 팀장
 - ~~GPU EC2 접속(SSH) 방식~~ → D-128, D-133 (22번을 전체에 계속 열어 두고 키 인증만 허용. `.env` 작성·시연 날 설정·로그 확인에 쓴다). 키 페어·보안 그룹 규칙은 👤 팀원 2
 - GPU EC2 설치 스크립트: user data로 처음 켜질 때 한 번 실행한다(D-125: uv·Python 설치 → clone → `uv sync`·가중치 → 자동 실행 등록. `.env`는 설치 뒤 SSH로 접속해 작성한다, D-128·D-133). 내용은 팀장, Terraform 연결은 👤 팀원 2. DLAMI 위에 Python 패키지 설치. Terraform에서 AMI ID를 변수로 고정하는 방법, 루트 볼륨 크기 확인 (D-21)
-- Locust 실행 방법 (D-20)
 - Flutter·PostgreSQL 버전, 백엔드 EC2 OS 버전, 포맷터·린터 (Python 3.12·uv는 D-119)
 - ~~브랜치·커밋 규칙~~ → D-120 (`main` 바로 push, force push 금지, 계약 변경 공지, 결정 번호 규칙)
 
@@ -175,7 +174,7 @@ CI 성공 여부를 자동으로 조회해 배포를 막는 기능이나 CI 성�
 
 - 배포 절차: D-13, [02장 2.8](02-architecture.md#28-배포와-운영)
 - Flutter Web의 로컬 CORS: D-08
-- SQS 규칙: D-16 / PostgreSQL 설치: D-17 / 가짜 워커·Locust: D-20 / GPU AMI: D-21
+- SQS 규칙: D-16 / PostgreSQL 설치: D-17 / 가짜 워커: D-20 / GPU AMI: D-21
 - 미결정: U-03
 
 
