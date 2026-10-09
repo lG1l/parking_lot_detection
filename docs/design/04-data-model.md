@@ -642,8 +642,8 @@ videos/{video_id}/tracks/tracker_state
 
 ### 적용 방법
 
-- 파일은 `backend/migrations/0001_init.sql`에 둔다(저장소 구조는 03장 3.3, D-118). 마이그레이션 도구와 적용 명령은 👤 팀원 2 결정 필요 (U-36). 정해질 때까지는 이 파일을 `psql -f`로 한 번 실행한다.
-- 시연 전까지는 스키마가 바뀌면 **DB를 지우고 다시 만든다.** 아직 지킬 데이터가 없다. 도구가 정해진 뒤에는 D-117을 따라 마이그레이션 파일로 바꾸고, 데이터 삭제는 별도 초기화 명령으로만 한다 (U-36).
+- 마이그레이션 도구는 Alembic이다. 이 DDL은 Alembic 첫 파일 `backend/alembic/versions/0001_init.py`에 `op.execute`로 SQL 그대로 넣는다. 적용은 `uv run alembic upgrade head`다. (D-151)
+- 스키마를 바꿀 때는 기존 파일을 고치지 않고 새 마이그레이션 파일을 추가한다. 데이터 삭제는 별도 초기화 명령으로만 한다 (D-117, D-151).
 
 ```sql
 CREATE TABLE users (
@@ -849,7 +849,7 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 | 추적기 상태 파일 형식 | 06장 (D-76) |
 | 워커가 어떤 오류를 `failed`로 볼지 (전이 13) | **해결 → D-93, D-94** |
 | 파싱 실패 목록 안의 순서(`rank`) | 🚧 팀장 (D-93, 06장 6.6) |
-| 마이그레이션 도구(Alembic 등), `0001_init.sql`을 둘 위치 | 👤 팀원 2, 10장 (U-36) |
+| ~~마이그레이션 도구, 첫 DDL을 둘 위치~~ | → D-151 (Alembic, `backend/alembic/versions/0001_init.py`) |
 | 마스킹본·분석 결과의 보관 기간과 파기 방법 | **해결** → D-57 (업로드 완료 30일 뒤 파기, `masked_deleted_at`). 파기 시점은 D-64·D-80으로 조정 (업로드 완료 30일 뒤 원본·트랙·마스킹본을 한 번에) |
 | `status`에 CHECK 제약을 더할지 | D-24가 확정되고 상태 목록이 굳은 뒤 (D-27) |
 
