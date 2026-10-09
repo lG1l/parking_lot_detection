@@ -134,6 +134,7 @@ EC2에 백엔드·비전을 컨테이너로 배포할지는 별도 CD 결정이�
 - DB가 필요한 검사에는 CI 실행 안에서 임시 PostgreSQL을 준비한다. 실제 서비스 DB나 팀원 로컬 DB에 연결하지 않는다.
 - 테스트 DB에 마이그레이션과 필요한 테스트 데이터를 적용한 뒤 검사를 실행한다. 실행별로 독립된 데이터를 사용하며 다음 CI 실행에 결과를 보존할 필요는 없다.
 - 팀원 2가 `.github/workflows/ci.yml` 같은 워크플로 파일에 `main` 푸시 트리거, 코드 내려받기, 환경·의존성 설치, 임시 DB 준비, 분야별 검사 명령을 설정한다. 파일명과 작업 분할·도구·구체 명령은 담당자가 정한다.
+- 워크플로에서 쓰는 액션은 큰 번호 태그로 적는다(`actions/checkout@v7`, `astral-sh/setup-uv@v10`). 버그 수정은 자동으로 받고 다음 큰 번호로는 넘어가지 않는다. `hashicorp/setup-terraform@v4`를 쓰면 `terraform_version: 1.16.5`를 함께 적는다. (D-150)
 - 팀원 1과 팀장은 자기 분야 테스트 및 필요한 의존성·실행 명령을 팀원 2에게 전달한다. 로컬과 CI에서 같은 검사를 재현할 수 있도록 실제 명령을 이 장에 보완한다.
 - 테스트는 기능 구현과 함께 추가한다. 현재 문서는 요구사항이며 워크플로·테스트가 구현되거나 통과했다는 뜻이 아니다.
 
@@ -167,7 +168,7 @@ CI 성공 여부를 자동으로 조회해 배포를 막는 기능이나 CI 성�
 - ~~GPU 자동 꺼짐 설정과 시연 날 끄는 방법~~ → D-131 (`.env`의 대기 시간 값, 0이면 끔. 시연 날 SSH로 접속해 바꾸고 워커 재시작, 끝나면 15로 되돌림. [02장 2.8](02-architecture.md#시연-날-설정)). 변수 이름은 팀장
 - ~~GPU EC2 접속(SSH) 방식~~ → D-128, D-133 (22번을 전체에 계속 열어 두고 키 인증만 허용. `.env` 작성·시연 날 설정·로그 확인에 쓴다). 키 페어·보안 그룹 규칙은 👤 팀원 2
 - GPU EC2 설치 스크립트: user data로 처음 켜질 때 한 번 실행한다(D-125: uv·Python 설치 → clone → `uv sync`·가중치 → 자동 실행 등록. `.env`는 설치 뒤 SSH로 접속해 작성한다, D-128·D-133). 내용은 팀장, Terraform 연결은 👤 팀원 2. DLAMI 위에 Python 패키지 설치. Terraform에서 AMI ID를 변수로 고정하는 방법, 루트 볼륨 크기 확인 (D-21)
-- Flutter 버전, `pipeline/` 포맷터·린터 (Python 3.12·uv는 D-119, 백엔드 EC2 OS·PostgreSQL 버전은 D-144, `backend/` 포맷터·린터 Ruff는 D-148, Terraform·AWS provider 버전은 D-149)
+- Flutter 버전, `pipeline/` 포맷터·린터 (Python 3.12·uv는 D-119, 백엔드 EC2 OS·PostgreSQL 버전은 D-144, `backend/` 포맷터·린터 Ruff는 D-148, Terraform·AWS provider 버전은 D-149, GitHub Actions 액션 버전은 D-150)
 - ~~브랜치·커밋 규칙~~ → D-120 (`main` 바로 push, force push 금지, 계약 변경 공지, 결정 번호 규칙)
 
 ## 관련 결정·조건

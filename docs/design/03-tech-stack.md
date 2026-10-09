@@ -21,7 +21,7 @@
 | 서버 | EC2: 백엔드(CPU) 1대 + GPU 1대 | | 팀장, 팀원 2 | D-10 |
 | 서버 OS·AMI | 백엔드: Ubuntu 24.04 LTS. GPU: AWS Deep Learning Base AMI (Ubuntu 22.04) | GPU: NVIDIA 드라이버·CUDA가 미리 설치되어 있다. AMI 사용료 없음 | 팀장, 팀원 2 | 백엔드: D-144, GPU: D-21 |
 | 인프라 코드 | Terraform 1.16 (AWS provider 6.x) | | 팀원 2 | D-149 |
-| CI/CD | GitHub Actions | | 팀원 2 | D-13 |
+| CI/CD | GitHub Actions | | 팀원 2 | D-13, D-150 |
 
 ## 3.2 스택별 주의사항
 
@@ -87,4 +87,5 @@ parking_lot_detection/
 - 백엔드 EC2는 Ubuntu 24.04 LTS, PostgreSQL은 16이다. 메이저 버전만 고정한다. (D-144)
 - `backend/`의 포맷터·린터는 Ruff 하나로 한다. `backend/pyproject.toml`의 dev 의존성에 넣어 `uv.lock`으로 버전을 고정하고, `uv run ruff format`(모양 맞추기)과 `uv run ruff check --fix`(실수 찾기·import 정리)로 실행한다. CI는 `ruff format --check`와 `ruff check`로 검사만 한다. (D-148)
 - Terraform은 `~> 1.16.0`(1.16.x만), AWS provider는 `~> 6.0`(6.x만)으로 범위를 적고, `terraform init`이 만드는 `infra/.terraform.lock.hcl`을 커밋해 provider 정확한 버전을 고정한다. 올릴 때는 `terraform init -upgrade` → `terraform plan` 확인 → lock 파일 커밋. (D-149)
+- GitHub Actions에서 빌려 쓰는 액션은 큰 번호 태그로 적는다(`actions/checkout@v7`, `astral-sh/setup-uv@v10`). `hashicorp/setup-terraform@v4`를 쓰면 `terraform_version: 1.16.5`를 함께 적는다. (D-150)
 - Flutter 버전, `pipeline/`의 포맷터·린터는 🚧 (U-03, 10장 문답 후 결정)
