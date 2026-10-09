@@ -14,12 +14,12 @@
 | 비식별화 | 사람 탐지 + 번호판 탐지 후 모자이크 (모델 🚧 U-09) | PRD 3.1 | 팀장 | |
 | 영상 처리 | FFmpeg, OpenCV | 디코딩, 청크 분할, 클립 자르기, H.264 인코딩 | 팀장 | |
 | VLM | AWS Bedrock (모델 🚧 U-08) | PRD 3.4. GPU 워커가 호출한다 | 팀장 | D-06, D-14 |
-| DB | PostgreSQL (백엔드 EC2에 직접 설치) | 백엔드와 GPU 워커가 함께 접속해야 한다. 추가 비용 없음 | 팀원 2 | D-17 |
+| DB | PostgreSQL 16 (백엔드 EC2에 apt로 직접 설치, 로컬은 Docker `postgres:16`) | 백엔드와 GPU 워커가 함께 접속해야 한다. 추가 비용 없음 | 팀원 2 | D-17, D-144 |
 | 작업 대기열 | AWS SQS 표준 대기열 1개 | 백엔드 → GPU 워커 작업 전달. 재전달 기본 제공, 무료 범위. DLQ는 두지 않는다 | 팀원 2, 팀장 | D-16, D-56 |
 | 파일 저장소 | AWS S3 (비공개) | 업로드·재생 모두 presigned URL로 직접 | 팀장, 팀원 2 | D-09, D-18 |
 | AWS 호출 | boto3 (AWS 공식 Python SDK) | GPU 켜기, S3 읽기·쓰기, presigned URL 발급, SQS 넣기·꺼내기, Bedrock 호출. 자격 증명은 코드에 넣지 않고 EC2 IAM 역할에서 자동으로 받는다 | 팀장, 팀원 2 | |
 | 서버 | EC2: 백엔드(CPU) 1대 + GPU 1대 | | 팀장, 팀원 2 | D-10 |
-| 서버 OS·AMI | 백엔드: Ubuntu LTS ⚠️(가정, 버전 🚧 U-03). GPU: AWS Deep Learning Base AMI (Ubuntu 22.04) | GPU: NVIDIA 드라이버·CUDA가 미리 설치되어 있다. AMI 사용료 없음 | 팀장, 팀원 2 | GPU: D-21 |
+| 서버 OS·AMI | 백엔드: Ubuntu 24.04 LTS. GPU: AWS Deep Learning Base AMI (Ubuntu 22.04) | GPU: NVIDIA 드라이버·CUDA가 미리 설치되어 있다. AMI 사용료 없음 | 팀장, 팀원 2 | 백엔드: D-144, GPU: D-21 |
 | 인프라 코드 | Terraform | | 팀원 2 | |
 | CI/CD | GitHub Actions | | 팀원 2 | D-13 |
 
@@ -84,4 +84,5 @@ parking_lot_detection/
 ## 3.4 버전과 개발 도구
 
 - Python 3.12, 패키지 관리는 uv. `backend/`와 `pipeline/`이 각자 `pyproject.toml`·`uv.lock`을 둔다. (D-119)
-- Flutter·PostgreSQL 버전, 코드 포맷터·린터는 🚧 (U-03, 10장 문답 후 결정)
+- 백엔드 EC2는 Ubuntu 24.04 LTS, PostgreSQL은 16이다. 메이저 버전만 고정한다. (D-144)
+- Flutter 버전, 코드 포맷터·린터는 🚧 (U-03, 10장 문답 후 결정)
