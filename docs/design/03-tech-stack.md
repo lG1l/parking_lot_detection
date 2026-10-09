@@ -85,4 +85,5 @@ parking_lot_detection/
 
 - Python 3.12, 패키지 관리는 uv. `backend/`와 `pipeline/`이 각자 `pyproject.toml`·`uv.lock`을 둔다. (D-119)
 - 백엔드 EC2는 Ubuntu 24.04 LTS, PostgreSQL은 16이다. 메이저 버전만 고정한다. (D-144)
-- Flutter 버전, 코드 포맷터·린터는 🚧 (U-03, 10장 문답 후 결정)
+- `backend/`의 포맷터·린터는 Ruff 하나로 한다. `backend/pyproject.toml`의 dev 의존성에 넣어 `uv.lock`으로 버전을 고정하고, `uv run ruff format`(모양 맞추기)과 `uv run ruff check --fix`(실수 찾기·import 정리)로 실행한다. CI는 `ruff format --check`와 `ruff check`로 검사만 한다. (D-148)
+- Flutter 버전, `pipeline/`의 포맷터·린터는 🚧 (U-03, 10장 문답 후 결정)
