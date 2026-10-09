@@ -121,12 +121,12 @@ users ──┬──< sessions        (로그인 세션)
 | `width`, `height` | integer | 원본 해상도. 워커가 채운다 |
 | `created_at` | timestamptz | URL 발급 시각 |
 | `upload_completed_at` | timestamptz | 업로드 완료 알림을 받은 시각. 비어 있으면 미완료 |
-| `raw_deleted_at` | timestamptz | 원본 영상**과 트랙 파일**을 S3에서 지운 시각. 비어 있으면 아직 있다 (D-52, D-64) |
-| `masked_deleted_at` | timestamptz | 마스킹본(정지 장면, 후보 클립)을 전부 지운 시각. 비어 있으면 아직 있다 (D-57, D-64) |
+| `raw_deleted_at` | timestamptz | 원본 영상**과 트랙 파일**을 파기 처리한 시각. 비어 있으면 아직 파기 전이다. 실제 S3 삭제는 수명 주기 규칙이 따로 하므로 이 시각과 하루 정도 다를 수 있다 (D-52, D-64, D-142) |
+| `masked_deleted_at` | timestamptz | 마스킹본(정지 장면, 후보 클립)을 파기 처리한 시각. 비어 있으면 아직 파기 전이다. 실제 삭제는 `raw_deleted_at`과 같은 이유로 다를 수 있고, 나중에 만든 클립은 더 늦게 지워진다 (D-57, D-64, D-142) |
 
 - `duration_sec`·`fps`·`width`·`height`는 업로드 시점에 알 수 없다. 워커가 1단계 시작 때 원본을 열어 채운다.
-- **파기 시점은 하나다** (D-64, D-80). `upload_completed_at`에서 30일이 지나면 원본, 트랙 파일, 마스킹본을 **한 번에** 지우고 `raw_deleted_at`·`masked_deleted_at`을 같은 값으로 찍는다. 끝 상태(`finished`·`exhausted`·`failed`)에 이르러도 지우지 않는다. 사용자가 여러 장면을 고정할 수 있어, 고정한 클립만 남기는 부분 삭제를 두지 않는다. `last_activity_at`은 쓰지 않으므로 칼럼을 두지 않는다.
-- **`raw_deleted_at`이 차 있으면 원본과 트랙 파일이 없다.** 둘은 언제나 함께 지워진다. 재분석은 Non-Scope이므로 이 값이 다시 비워지는 일은 없다. (D-64)
+- **파기 시점은 하나다** (D-64, D-80). `upload_completed_at`에서 30일이 지나면 원본, 트랙 파일, 마스킹본을 **한 번에** 파기 처리하고 `raw_deleted_at`·`masked_deleted_at`을 같은 값으로 찍는다. 실제 파일은 S3 수명 주기 규칙이 지운다 (D-136, D-142). 끝 상태(`finished`·`exhausted`·`failed`)에 이르러도 지우지 않는다. 사용자가 여러 장면을 고정할 수 있어, 고정한 클립만 남기는 부분 삭제를 두지 않는다. `last_activity_at`은 쓰지 않으므로 칼럼을 두지 않는다.
+- **`raw_deleted_at`이 차 있으면 원본과 트랙 파일은 파기된 것으로 본다.** 파일이 아직 남아 있어도 열지 않는다. 둘은 언제나 함께 파기 처리된다. 재분석은 Non-Scope이므로 이 값이 다시 비워지는 일은 없다. (D-64)
 - 기준이 `upload_completed_at`인 이유: 열람할 때마다 기한이 밀리면 수집일에서 30일을 넘겨 표준지침 제41조②에 어긋난다. (D-57)
 - **열람 기한(`view_expires_at`)은 칼럼으로 두지 않는다.** 조회 API가 `upload_completed_at + 30일`로 계산해 돌려준다. 업로드 완료 전에는 `null`이다. 재접속·사건 고정·확인 종료로 연장하지 않는다 (D-92).
 
@@ -451,7 +451,7 @@ users ──┬──< sessions        (로그인 세션)
 - **`exhausted`에 이르는 길은 둘이다.** 사용자가 [다음]으로 두 목록의 후보를 전부 넘긴 경우(전이 12)와, 후보가 애초에 0건인 경우(전이 14)다. 화면 문구가 달라야 하므로 상태 조회 API가 `candidate_total`을 함께 돌려준다 (D-50, 05장 5.5). 09장 KPI 집계도 이 둘을 구분해서 센다.
 - 끝 상태(`finished`, `exhausted`, `failed`)에서는 더 전이하지 않고, "찾음"도 받지 않는다. 다시 분석하려면 새 작업을 만든다. (재분석 기능은 Non-Scope)
 - **워커가 `failed`로 바꿀 때도 조건을 붙인다**(전이 13). 자기가 맡은 상태일 때만 바꾼다(예: `WHERE status = 'batch_running'`). 전이 15로 이미 `finished`가 된 작업을 워커가 `failed`로 덮어쓰면 안 된다
-- **끝 상태는 파기와 상관없다.** 상태와 관계없이 `upload_completed_at`에서 30일이 지나면 백엔드 주기 작업(켤 때 1회, 그 뒤 1시간마다)이 원본, 트랙 파일, 마스킹본을 한 번에 지운다. 끝 상태가 된 뒤에도 30일까지는 고정한 사건 지점을 다시 볼 수 있다. (D-52, D-57, D-64, D-80, D-106)
+- **끝 상태는 파기와 상관없다.** 상태와 관계없이 `upload_completed_at`에서 30일이 지나면 S3 수명 주기 규칙이 파일을 지우고, 백엔드 주기 작업(켤 때 1회, 그 뒤 1시간마다)이 파기 표시와 기록을 남긴다. 끝 상태가 된 뒤에도 30일까지는 고정한 사건 지점을 다시 볼 수 있다. (D-52, D-57, D-64, D-80, D-106, D-136, D-142)
 
 ## 4.4 두 번 실행되지 않게 하는 방법
 
@@ -617,7 +617,7 @@ videos/{video_id}/clips/{candidate_clip_id}.mp4   예: clips/1187.mp4
 - 사용자에게 주는 재생 URL은 **이 버킷에서만** 발급한다.
 - **이 버킷의 객체도 오래 살지 않는다.** 원본과 같은 때 지운다 (D-64, D-80).
   - S3 수명 주기 규칙이 객체를 만든 지 30일 뒤 지운다. 클립은 업로드보다 늦게 만들어지므로 그만큼 늦게 지워진다. 수명 주기 권한을 못 받으면 백엔드 주기 작업이 `upload_completed_at`에서 30일이 지나면 `videos/{video_id}/` 전체를 지운다 (D-57, D-136). 끝 상태가 돼도 먼저 지우지 않는다. 고정한 클립이 여러 개일 수 있기 때문이다.
-  - DB 삭제 표시(`raw_deleted_at`·`masked_deleted_at`)와 삭제 기록을 수명 주기 방식에서 어떻게 할지는 👤 팀원 2가 정한다 (D-136).
+  - DB 파기 표시(`raw_deleted_at`·`masked_deleted_at`)와 파기 기록(`delete_raw`·`delete_masked`)은 백엔드 주기 작업이 날짜를 보고 남긴다. S3는 보지 않는다 (D-142).
 - 클립은 H.264 코덱 MP4로 만든다. 브라우저 `<video>` 태그가 재생해야 하기 때문이다. (D-08)
 
 ### 분석 결과 버킷 `<prefix>-analysis`
@@ -683,8 +683,8 @@ CREATE TABLE videos (
   height              integer,
   created_at          timestamptz NOT NULL DEFAULT now(),
   upload_completed_at timestamptz,             -- 비어 있으면 업로드 미완료
-  raw_deleted_at      timestamptz,             -- 원본과 트랙을 지운 시각. 비어 있으면 있다 (D-52, D-64)
-  masked_deleted_at   timestamptz              -- 마스킹본을 전부 지운 시각. raw_deleted_at과 같은 때 찍는다 (D-57, D-64)
+  raw_deleted_at      timestamptz,             -- 원본과 트랙을 파기 처리한 시각. 비어 있으면 파기 전 (D-52, D-64, D-142)
+  masked_deleted_at   timestamptz              -- 마스킹본을 파기 처리한 시각. raw_deleted_at과 같은 때 찍는다 (D-57, D-64, D-142)
 );
 
 CREATE TABLE analysis_jobs (
@@ -803,7 +803,7 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 | `candidate_clips (candidate_id)` | 후보의 클립을 찾을 때 |
 | `videos (upload_token_id)` UNIQUE | 업로드 완료 알림(05장 7번)이 링크로 영상을 찾을 때. 같은 링크로 영상 행이 두 개 생기는 것도 막는다 (D-108) |
 | `access_logs (video_id, created_at DESC)` | "이 영상에 누가 언제 닿았나" (D-53) |
-| `videos (upload_completed_at) WHERE raw_deleted_at IS NULL` | 파기 주기 작업이 보관 상한(30일)이 지난 "지울 것"을 찾을 때. 부분 인덱스라 이미 지운 영상은 아예 들어오지 않는다 (D-52, D-64) |
+| `videos (upload_completed_at) WHERE raw_deleted_at IS NULL` | 파기 주기 작업이 보관 상한(30일)이 지난 "파기 표시할 것"을 찾을 때. 부분 인덱스라 이미 표시한 영상은 아예 들어오지 않는다 (D-52, D-64) |
 | `videos (upload_completed_at) WHERE masked_deleted_at IS NULL` | 같은 주기 작업이 마스킹본 파기 대상을 찾을 때 (D-57) |
 
 - 데모 규모(영상 수십 건)에서는 인덱스가 없어도 느리지 않다. **부하 테스트(09장)에서 행을 많이 넣고 재는 것이 이 인덱스들의 목적이다.**
