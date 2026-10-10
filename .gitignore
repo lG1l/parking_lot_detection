@@ -33,18 +33,33 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .ipynb_checkpoints/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
 
 # 가상환경
 venv/
 .venv/
 env/
 
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+
 # IDE
 .vscode/
 .idea/
 
+# 실행 중 생성 파일 (D-121)
+local_storage/
+
 # 데이터셋 / 학습 결과물 / 모델 가중치
 data/
+# Flutter 기능 폴더의 data/는 코드라 예외 (D-140). frontend/ 안에는 데이터셋을 두지 않는다
+!frontend/**/data/
 datasets/
 runs/
 outputs/
@@ -58,6 +73,9 @@ outputs/
 *.mp4
 *.avi
 *.mov
+*.mkv
+# 공유 테스트 자료 영상만 예외 (D-122)
+!fixtures/**/*.mp4
 
 # 로그
 *.log
