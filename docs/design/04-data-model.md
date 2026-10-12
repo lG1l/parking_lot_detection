@@ -1,23 +1,17 @@
 # 04. 데이터 모델
 
-> **2026-10-12 팀장 결정 — D-147 반영 필요: 관리자 위탁계약 동의 기록을 저장한다. 저장 항목은 확인 체크 3개, 동의한 계약 문구 버전(`agreement_version`), 동의 시각, 접속 IP이고 어느 업로드 링크로 동의했는지 연결한다. 보관 기간은 동의한 때부터 90일이며 영상 30일 파기와 따로 둔다. 테이블·칼럼·파기 방식은 아래 본문에 아직 반영하지 않았다. 담당: 팀원 2.**
-
 > **D-113: 30일 이용 기한 차단은 유지하되 실제 파일 삭제 지연은 데모에서 허용한다. 삭제는 프로세스 시작 시 1회·이후 1시간마다 수행하며 추가 삭제 인프라는 도입하지 않는다. “30일 뒤 파기”는 만료 대상의 주기적 삭제를 뜻하고 정시 삭제 보장이 아니다. 제출 자료의 세부 운영 절충 생략 규칙은 SRS 부록 A를 따른다.**
-
-> **D-112 반영: 서비스 오류의 failed는 조건부 사용자 재시도가 가능하다. 실패 단계·복구 지점·실행 식별과 단계별 재시도 전이를 보완해야 한다. 아래 상태표·스키마에는 상세 반영 전이다. 저장된 입력·완료 결과·고정·목록 진행을 초기화하지 않는다. 사용자 재시도는 최초 분석·자동 재시도를 제외하고 작업당 누적 최대 3회다. 서버가 유효하게 접수한 재시도만 원자적으로 차감하며 중복·거절 요청은 차감하지 않는다. 3회 소진 후 다시 실패하면 재시도 버튼 대신 운영 담당자 문의를 안내한다.**
 
 > **2026-10-08 팀장 결정 — D-110: 전이 9·15의 확인 종료는 해당 작업에 고정 1개 이상이 있어야 한다. 기존 작업 미종료는 새 영상·작업 생성의 차단 조건이 아니다. 영상별 진행·결과를 유지하며, 보류는 사용자 확인만 미루므로 별도 paused 상태를 추가하지 않는다(D-111).**
 
-> **2026-10-08 팀장 결정 — D-109가 D-51을 대체한다. 최종 실패 후보는 열람 불가로 구분하고 `not_found`로 기록하지 않는다. 열람 불가의 저장·계산 방식과 `unseen`·`exhausted` 집계는 백엔드 담당자가 반영해야 한다. 아래의 묶음 전체 일괄 `not_found` 처리와 `unseen`만으로 종료를 판단하는 기존 절차는 수정 전 초안이다.**
-
-> 마지막 수정: 2026-10-06
+> 마지막 수정: 2026-10-12
 > 표시: 🚧 미정 · ⚠️ 확인 필요 · 🔐 멘토 승인 필요
 >
-> U-21·U-22·U-23을 팀원 2가 정리해(D-24, D-25, D-26) 본문을 작성했고, 4.10의 DDL 규칙을 D-27로, 관리자 업로드 방식(U-14)을 D-28로, 차량·파손 부위 입력 방식(U-13 일부)을 D-29로, 세션 저장 방식을 D-30으로, 사건 지점 고정 방식을 D-32로, 중복 저장 정리를 D-33~D-35로, 누끼를 우선 빼는 안을 D-36으로(→ D-65로 대체), 묶음 단위 [다음]을 D-37로, 고정 해제 없음을 D-40으로, 여러 장면 고정과 [확인 끝내기]를 D-80으로, 원본 허용 형식과 코덱 불량 시 바로 `failed`를 D-43으로, 링크로만 업로드(`upload_token_id` NOT NULL)를 D-45로, SQS에 넣고 나서 커밋하는 순서(4.4)를 D-46으로 더했다. 마스킹본·분석 결과 파기(U-24)는 D-57로, 청크를 디코딩에만 쓰고 트랙을 중간 저장하는 방식(`chunks` 테이블 없음, `processed_sec`)은 D-76으로 더했다. 이 중 **D-27·D-28·D-29·D-30·D-32·D-35·D-37·D-40·D-41·D-45·D-46·D-48·D-51·D-52·D-53·D-57은 확정**이고, 나머지는 상태가 **"확정 필요"** 다. **입력 방식은 2026-09-26 D-65(탐지된 차량 고르기), 입력 수정은 D-66(한 번만 받음)으로 바뀌었다** — 둘 다 상태가 "확정 필요"이고, `still_frames.detections`와 `vehicle_selections`의 차량 선택 형식(`schema_version` 2부터, 지금 5)이 여기에 딸려 있다. 특히 **U-23(트랙 파일 형식)은 담당이 팀장**이므로 팀장이 확인해야 확정된다. D-29는 입력 방식만 확정이고, U-13의 나머지(룰 상황 목록·근접 판정·인접 영역)는 팀장 담당으로 남는다. 확정되지 않은 결정을 전제로 백엔드 구현을 시작해도 되지만, 뒤집힐 수 있다는 것을 알고 진행한다.
+> U-21·U-22·U-23을 팀원 2가 정리해(D-24, D-25, D-26) 본문을 작성했고, 4.10의 DDL 규칙을 D-27로, 관리자 업로드 방식(U-14)을 D-28로, 차량·파손 부위 입력 방식(U-13 일부)을 D-29로, 세션 저장 방식을 D-30으로, 사건 지점 고정 방식을 D-32로, 중복 저장 정리를 D-33~D-35로, 누끼를 우선 빼는 안을 D-36으로(→ D-65로 대체), 묶음 단위 [다음]을 D-37로, 고정 해제 없음을 D-40으로, 여러 장면 고정과 [확인 끝내기]를 D-80으로, 원본 허용 형식과 코덱 불량 시 바로 `failed`를 D-43으로, 링크로만 업로드(`upload_token_id` NOT NULL)를 D-45로, SQS에 넣고 나서 커밋하는 순서(4.4)를 D-46으로 더했다. 마스킹본·분석 결과 파기(U-24)는 D-57로, 청크를 디코딩에만 쓰고 트랙을 중간 저장하는 방식(`chunks` 테이블 없음, `processed_sec`)은 D-76으로 더했다. 이 결정들은 **모두 확정**이다(2026-10-09, D-135). **입력 방식은 2026-09-26 D-65(탐지된 차량 고르기), 입력 수정은 D-66(한 번만 받음)으로 바뀌었고**, `still_frames.detections`와 `vehicle_selections`의 차량 선택 형식(`schema_version` 2부터, 지금 5)이 여기에 딸려 있다. D-29는 입력 방식만 정하고, U-13의 나머지(룰 상황 목록·근접 판정·인접 영역)는 팀장 담당으로 남는다.
 >
-> **D-67~D-75(2026-09-27, 팀장)를 반영했다.** 1단계가 정지 장면만 만들어 `stage1_running`·`stage1_input_done`이 없어졌고(D-81), 한 묶음 앞서 준비하려고 `current_batch_no`를 더했다(D-82). 파손 사진·텍스트 설명·탐지 상황은 `damage_inputs` `schema_version` 4로(D-83, D-92), 채널·1차 VLM 결과·크롭 영역은 `candidates`·`candidate_clips` 칼럼으로 더했다(D-84). D-81·D-82·D-84의 상태는 **"확정 필요"** 다. 입력 버전 4와 사진 저장 방식은 D-92를 따른다.
+> **D-67~D-75(2026-09-27, 팀장)를 반영했다.** 1단계가 정지 장면만 만들어 `stage1_running`·`stage1_input_done`이 없어졌고(D-81), 한 묶음 앞서 준비하려고 `current_batch_no`를 더했다(D-82). 파손 사진·텍스트 설명·탐지 상황은 `damage_inputs` `schema_version` 4로(D-83, D-92), 채널·1차 VLM 결과·크롭 영역은 `candidates`·`candidate_clips` 칼럼으로 더했다(D-84). D-81·D-82·D-84는 확정이다(2026-10-09). 입력 버전 4와 사진 저장 방식은 D-92를 따른다.
 
-> **D-93·D-94·D-98(2026-10-06, 팀장)을 반영했다.** 파손 입력에 내 차 바닥 네 모서리와 파손 변을 더해 `damage_inputs` `schema_version` 5로 올렸고(D-34 대체), 파싱 실패 목록을 `candidates.list_kind`와 `analysis_jobs.current_failed_batch_no`로 나눴으며, `exhausted`는 두 목록을 모두 다 넘겼을 때 찍는다. 워커가 죽어 재전달된 작업은 이어서 한다(4.4). 팀원 2가 정한 형식과 규칙은 D-99이고 상태는 **"확정 필요"** 다.
+> **D-93·D-94·D-98(2026-10-06, 팀장)을 반영했다.** 파손 입력에 내 차 바닥 네 모서리와 파손 변을 더해 `damage_inputs` `schema_version` 5로 올렸고(D-34 대체), 파싱 실패 목록을 `candidates.list_kind`와 `analysis_jobs.current_failed_batch_no`로 나눴으며, `exhausted`는 두 목록을 모두 다 넘겼을 때 찍는다. 워커가 죽어 재전달된 작업은 이어서 한다(4.4). 팀원 2가 정한 형식과 규칙은 D-99다(확정, 2026-10-09).
 
 ## 4.1 전체 구조
 
@@ -26,7 +20,7 @@ DB는 백엔드 EC2의 PostgreSQL이다. 백엔드와 GPU 워커가 같은 DB에
 ```
 users ──┬──< sessions        (로그인 세션)
         │
-        ├──< upload_tokens   (업로드 전용 일회용 링크)
+        ├──< upload_tokens ──1:1── upload_agreements  (업로드 링크, 위탁계약 동의 D-147)
         │
         ├──< access_logs     (열람·발급·파기 기록, D-53)
         │
@@ -44,7 +38,7 @@ users ──┬──< sessions        (로그인 세션)
 - U-21에서 `analysis`라고 부른 테이블이 `analysis_jobs`다. 04장 초안의 엔티티 이름 `AnalysisJob`과 같은 것이며, 앞으로는 `analysis_jobs`로 통일한다.
 - 테이블 이름은 소문자 복수형 snake_case로 쓴다. `user`는 PostgreSQL 예약어라 쓸 수 없어 `users`로 한다.
 
-**초안 목록에서 늘어난 테이블 5개**
+**초안 목록에서 늘어난 테이블 6개**
 
 | 테이블 | 추가한 이유 |
 |---|---|
@@ -52,6 +46,7 @@ users ──┬──< sessions        (로그인 세션)
 | `still_frames` | 정지 장면(마스킹본 이미지)이 어느 원본 시간의 것이고 비식별화가 끝났는지 알아야 화면에 보여줄 수 있다. 불변 조건 2 |
 | `upload_tokens` | 관리자는 로그인하지 않고 **업로드 전용 일회용 링크**로만 올린다. 그 링크의 주인·만료·사용 여부를 기록한다 (D-28) |
 | `access_logs` | 개인영상정보에 닿는 요청을 한 행씩 남긴다. 표준 개인정보 보호지침 제44조⑤(열람 기록)·제42조(이용·파기 기록)와 고시 제8조①(접속기록 1년)이 요구하는 법정 기록이다 (D-53) |
+| `upload_agreements` | 관리자의 위탁계약 동의 기록. 개인정보 보호법 제26조① 위탁 문서의 증빙이다. 동의한 때부터 90일 보관한다 (D-147) |
 
 ## 4.2 테이블과 필드
 
@@ -105,6 +100,22 @@ users ──┬──< sessions        (로그인 세션)
 - `used_at`은 **업로드용 presigned URL을 발급할 때** 찍는다. 그래서 업로드가 중간에 실패하면 링크는 이미 쓴 것이 되고, 다시 발급받아야 한다. 발급이 한 번 더 필요할 뿐이라 이대로 둔다.
 - 토큰은 **해시해서 저장한다.** 평문은 발급 응답에 한 번 넣고 버린다. DB 덤프·스냅샷·로그로 행이 새도 주운 값으로는 링크를 쓸 수 없다 (D-59). 유효 시간·발급 방식은 [08장 8.6](08-auth.md#86-업로드-전용-일회용-링크)에 있다.
 
+### upload_agreements
+
+관리자가 업로드 링크로 맺은 **위탁계약 동의 기록**이다. 링크 하나에 동의 하나다. 6번(업로드 URL 발급)이 링크를 쓴 것으로 표시하는 트랜잭션 안에서 함께 넣는다 (D-147).
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `id` | bigserial PK | |
+| `upload_token_id` | bigint FK UNIQUE → upload_tokens | 어느 링크로 동의했나 |
+| `agreement_version` | text | 동의한 계약 문구 버전. 백엔드 상수와 같아야 받는다 (법적문제검토 4부) |
+| `confirm_signage` · `confirm_disclosure_judged` · `confirm_reconsignment` | boolean | 확인 체크 3개. 셋 다 `true`일 때만 저장되지만, 무엇에 동의했는지 남기려고 칸을 둔다 |
+| `requested_ip` | inet | 접속 IP. `access_logs.requested_ip`와 같은 방법으로 얻는다 |
+| `agreed_at` | timestamptz | 동의 시각(= 6번을 받은 시각) |
+
+- **90일 뒤 지운다.** 백엔드 주기 작업(켤 때 1번, 그 뒤 1시간마다, D-113)이 `agreed_at < now() - interval '90 days'`인 행을 `DELETE`한다. 영상 30일 파기와 따로 돌아간다.
+- 어떤 API도 이 기록을 돌려주지 않는다.
+
 ### videos
 
 업로드한 원본 영상 1건. 행은 **업로드용 presigned URL을 발급할 때** 만든다(그때 S3 키가 정해지기 때문이다). 업로드가 끝나지 않았으면 `upload_completed_at`이 비어 있다. (D-18)
@@ -146,7 +157,9 @@ users ──┬──< sessions        (로그인 세션)
 | `stage2_started_at` | timestamptz | 2단계 시작 |
 | `stage2_ended_at` | timestamptz | 2단계 종료 |
 | `input_completed_at` | timestamptz | 차량·파손 부위 입력이 끝난 시각. 2단계 시작 조건에 쓴다 |
-| `error_message` | text | 실패했을 때 마지막 오류. 평소에는 비어 있다 |
+| `error_message` | text | 실패했을 때 마지막 오류(개발자용). 평소에는 비어 있다 |
+| `failure_kind` | text | 실패 이유. `input_error` · `vlm_parse_rate` · `vlm_outage` · `worker_died` 중 하나(전이 13 ①~④). 워커가 `failed`로 바꿀 때 함께 적는다. 평소에는 비어 있다 (D-112) |
+| `user_retry_count` | integer | 사용자가 접수시킨 재시도 횟수. 처음 0, 최대 3. 재시도를 접수할 때 상태 변경과 같은 UPDATE에서 1 올린다. 초기화하지 않는다 (D-112) |
 | `processed_sec` | double precision | 2단계 탐지·추적을 중간 저장한 지점(원본 시간). 처음에는 0. 워커가 구간을 저장할 때마다 갱신한다 (D-76) |
 | `current_batch_no` | integer | 후보군 목록에서 사용자에게 **지금 보여주는** 묶음 번호. `ready`가 될 때 1이 되고 이 목록의 [다음]마다 1씩 오른다. 그 전에는, 그리고 후보군 목록이 비어 있으면 비어 있다 (D-82, D-99) |
 | `current_failed_batch_no` | integer | 파싱 실패 목록에서 지금 보여주는 묶음 번호. 규칙은 `current_batch_no`와 같다. 파싱 실패 후보가 없으면 비어 있다 (D-93, D-99) |
@@ -301,7 +314,7 @@ users ──┬──< sessions        (로그인 세션)
 | `list_kind` | text | 어느 목록인지. `main`(후보군) · `parse_failed`(2차 VLM 파싱 실패). 처음에는 `main`이고, 2차 VLM이 끝내 점수를 내지 못하면 워커가 `parse_failed`로 바꾼다 (D-93, D-99) |
 | `rank` | integer | 목록 안 정렬 결과. 목록마다 1부터. 후보군은 점수순, 파싱 실패 목록 안 순서는 🚧 (D-93) |
 | `batch_no` | integer | 목록 안에서 몇 번째 묶음인지. 목록마다 1부터 |
-| `verdict` | text | `unseen`(아직 안 봄) · `not_found`(못 찾음). "찾음"은 여기에 적지 않는다 (D-35) |
+| `verdict` | text | `unseen`(아직 안 봄) · `not_found`(못 찾음) · `unavailable`(클립을 끝내 만들지 못해 볼 수 없음. 워커가 적는다, D-109). "찾음"은 여기에 적지 않는다 (D-35) |
 | `verdict_at` | timestamptz | 사용자가 [다음]을 눌러 그 묶음을 "못 찾음"으로 넘긴 시각. 같은 묶음은 모두 같은 값이다 (D-37) |
 | `created_at` | timestamptz | |
 
@@ -327,7 +340,7 @@ users ──┬──< sessions        (로그인 세션)
 | `status` | text | `pending` · `running` · `done` · `failed` |
 | `created_at` | timestamptz | 묶음별 소요 시간은 이 값으로 본다 |
 
-- **클립 생성에 실패하면(`failed`) 그 후보는 이번 묶음에서 빠진다.** 05장 12번이 `done`인 클립만 목록에 넣기 때문이다. 워커는 다시 만들지 않고, `verdict`도 건드리지 않는다. 드문 경우라 받아들인다 (D-51).
+- **클립 생성은 최초 포함 총 3번까지 시도한다 (D-109).** 다시 시도할 때는 새 `pending` 행을 만든다. 3번 모두 실패하거나 다시 해도 안 되는 오류이면, 워커는 마지막 행을 `failed`로 바꾸는 트랜잭션에서 그 후보의 `verdict`를 `unavailable`로 바꾼다. `unavailable` 후보는 [다음]으로 `not_found`가 되지 않고, 남은 후보 수에도 들지 않는다. 오류 분류와 대기 간격은 06장(팀장)에서 정한다.
 - `crop_bbox`는 클립 화면이 원본의 어디인지 알려 주려고 저장한다. 05장 12번이 돌려줄지는 07장 화면 구성이 정해지면 정한다 🚧.
 - 사용자에게 주는 재생 URL은 이 행의 `masked_s3_key`로만 발급한다. 고정한 사건 지점도 이 행을 가리키므로 같은 키로 재생한다. (불변 조건 1, D-32)
 
@@ -422,7 +435,7 @@ users ──┬──< sessions        (로그인 세션)
 | `batch_running` | [다음]을 눌렀는데 보여줄 묶음이 아직 준비되지 않아 만드는 중. 준비 속도보다 빨리 눌렀을 때만 생긴다 (D-68) | | |
 | `finished` | 사용자가 [확인 끝내기]를 눌렀다. 고정한 사건 지점은 `pinned_incidents`에 있다(0개일 수도 있다) | | ✅ |
 | `exhausted` | 모든 후보를 "못 찾음"으로 확인했다. 사건이 없다는 뜻이 아니다 (PRD 3.6) | | ✅ |
-| `failed` | 입력 오류, VLM 파싱 실패율 초과, VLM 장애 지속, 같은 작업에서 워커가 3번 죽음 중 하나다(전이 13). `error_message`에 이유가 있다 (D-43, D-93, D-94) | | ✅ |
+| `failed` | 입력 오류, VLM 파싱 실패율 초과, VLM 장애 지속, 같은 작업에서 워커가 3번 죽음 중 하나다(전이 13). `failure_kind`에 무엇인지, `error_message`에 자세한 이유가 있다. 파일 문제가 아니면 사용자가 다시 시도할 수 있다(전이 16) (D-43, D-93, D-94, D-112) | | ✅ |
 
 - 화면이 보는 상태는 이 목록에 **`uploading`·`upload_failed` 두 개가 더 있다.** 업로드가 끝나지 않아 아직 작업 행이 없는 영상을 위해 조회 API가 만들어 주는 값이고, DB에는 없다 (D-47, 05장 5.5).
 - **`stage1_done`은 `status`만으로 입력 가능 여부가 갈리지 않는다.** 입력을 기다리는 중일 수도 있고, 입력을 받아 2단계 작업을 넣어 둔 중일 수도 있다(전이 7에서 상태를 바꾸는 쪽은 워커다). 그래서 상태 조회 API가 `input_completed_at`이 차 있는지를 `input_done`으로 함께 돌려준다. 저장하는 칼럼이 아니라 조회할 때 계산하는 값이다 (D-49, 05장 5.5·5.7). 입력을 받은 뒤의 `stage1_done`은 2단계 대기 중이라 화면에 "앞에 N건"을 함께 보여준다 (4.5, D-81).
@@ -443,15 +456,27 @@ users ──┬──< sessions        (로그인 세션)
 | 11 | `batch_running` → `ready` | 워커가 한 목록의 묶음 k의 클립을 다 만들었고 그 목록의 묶음 번호가 k일 때 | 워커 | |
 | 12 | `ready` → `exhausted` | 사용자가 [다음]을 눌렀고(묶음 전체 "못 찾음", D-37) 그 뒤 작업에 `unseen` 후보가 하나도 없을 때. 곧 **두 목록을 모두 다 넘겼을 때**다 (D-99) | 백엔드 | |
 | 14 | `stage2_running` → `exhausted` | 2단계가 끝났는데 룰이 후보를 하나도 만들지 못했을 때 (후보 0건) | 워커 | `stage2_ended_at`. 클립을 만들 것이 없으므로 `ready`를 거치지 않는다 (D-50) |
-| 13 | 어떤 상태 → `failed` | 다음 넷 중 하나 (D-43, D-93, D-94). ① 입력 오류: 코덱 불량·읽기 불가, 영상 길이 0, 원본 S3 객체 없음. 다시 해도 같으므로 바로 ② VLM 파싱 실패율 30% 초과(1차·2차 각각) ③ VLM 장애(스로틀링·5xx·타임아웃)가 총 약 10분 넘게 이어짐 ④ `*_running` 작업의 메시지를 4번째 받음(워커가 3번 죽음, 4.4) | 워커 | `error_message`. ①~④ 중 무엇인지 적는다. 그 밖의 오류는 `failed`로 보내지 않고 SQS 재전달에 맡긴다 (06장 6.2) |
+| 13 | 어떤 상태 → `failed` | 다음 넷 중 하나 (D-43, D-93, D-94). ① 입력 오류: 코덱 불량·읽기 불가, 영상 길이 0, 원본 S3 객체 없음. 다시 해도 같으므로 바로 ② VLM 파싱 실패율 30% 초과(1차·2차 각각) ③ VLM 장애(스로틀링·5xx·타임아웃)가 총 약 10분 넘게 이어짐 ④ `*_running` 작업의 메시지를 4번째 받음(워커가 3번 죽음, 4.4) | 워커 | `error_message`, `failure_kind`. ①~④를 `failure_kind`에 `input_error`·`vlm_parse_rate`·`vlm_outage`·`worker_died`로 적는다 (D-112). 그 밖의 오류는 `failed`로 보내지 않고 SQS 재전달에 맡긴다 (06장 6.2) |
 | 15 | `batch_running` → `finished` | 다음 묶음을 만드는 동안 사용자가 [확인 끝내기]를 눌렀을 때 (D-79, D-80) | 백엔드 | 9번과 같다. 만들던 묶음은 버려진다. 워커의 전이 11은 `WHERE status = 'batch_running'`이라 0행이 되고, 4.4 규칙대로 메시지를 지우고 끝난다 |
+| 16 | `failed` → `queued`·`stage1_done`·`batch_running`·`ready` | 사용자가 [분석 다시 시도]를 눌렀고 서버가 접수했을 때. 어느 상태로 갈지는 아래 "재시도로 되돌릴 상태" (D-112) | 백엔드 | `user_retry_count` + 1, `failure_kind`·`error_message`를 비운다. 그 상태의 메시지를 SQS에 넣는다 (05장 19번) |
 
 - **4·5·6은 비어 있다.** 1단계 중 입력을 받던 전이였는데, 입력이 항상 1단계 뒤에 들어오게 되어(D-67) 없어졌다. 다른 문서가 전이를 번호로 가리키므로 번호를 다시 매기지 않는다. (D-81)
 - **[다음]을 눌렀을 때 다음 묶음이 이미 준비돼 있으면 상태는 `ready` 그대로이고 `current_batch_no`만 1 오른다.** 상태가 바뀌지 않으므로 전이 번호가 없다. 워커는 항상 한 묶음 앞서 준비하므로(D-68) 보통 이 경우다. 판단 순서는 05장 13번. (D-82)
 - 7번에서 백엔드는 상태를 바꾸지 않는다. 입력을 저장하고 SQS에만 넣는다. 상태를 바꾸는 쪽을 워커 하나로 모아야 4.4의 중복 방지가 한 곳에서 걸린다.
 - **한 목록을 다 넘겨도 다른 목록에 `unseen` 후보가 남았으면 `ready` 그대로다.** 다 넘긴 목록의 묶음 번호도 그대로 두고, 그 목록이 끝났는지는 남은 `unseen` 후보 수로 본다(05장 12번 `lists`의 `done`). 파싱 실패 목록이 비어 있으면 지금처럼 후보군 목록만으로 정해진다 (D-99).
 - **`exhausted`에 이르는 길은 둘이다.** 사용자가 [다음]으로 두 목록의 후보를 전부 넘긴 경우(전이 12)와, 후보가 애초에 0건인 경우(전이 14)다. 화면 문구가 달라야 하므로 상태 조회 API가 `candidate_total`을 함께 돌려준다 (D-50, 05장 5.5). 09장 KPI 집계도 이 둘을 구분해서 센다.
-- 끝 상태(`finished`, `exhausted`, `failed`)에서는 더 전이하지 않고, "찾음"도 받지 않는다. 다시 분석하려면 새 작업을 만든다. (재분석 기능은 Non-Scope)
+- 끝 상태(`finished`, `exhausted`, `failed`)에서는 더 전이하지 않고, "찾음"도 받지 않는다. **단, `failed`는 사용자 재시도(전이 16)로 실패한 단계에 되돌아갈 수 있다** (D-112). 완료된 작업을 처음부터 다시 분석하는 기능은 없다. (재분석 기능은 Non-Scope)
+- **재시도로 되돌릴 상태** (전이 16, D-112). 실패 직전 상태를 따로 저장하지 않고, 백엔드가 이미 있는 칼럼으로 위에서부터 처음 맞는 것을 고른다.
+
+  | 순서 | 조건 | 되돌릴 상태 | 넣는 메시지 | 워커가 이어 하는 곳 |
+  |---|---|---|---|---|
+  | 1 | `stage1_ended_at`이 비어 있음 | `queued` | `stage1` | 1단계를 처음부터 (전이 2) |
+  | 2 | `stage2_ended_at`이 비어 있음 | `stage1_done` (입력 유지) | `stage2` | `processed_sec`부터 (전이 7, 4.4) |
+  | 3 | 지금 보여주는 묶음(`current_batch_no`·`current_failed_batch_no`)의 후보 중 클립이 `pending`·`running`인 것이 있음 | `batch_running` | `next_batch` | `pending` 클립부터 (4.4) |
+  | 4 | 그 밖. 보여줄 묶음은 준비됐고 다음 묶음을 미리 만들다 실패했다 | `ready` | `next_batch` | 같다 |
+
+  - 3과 4를 가르는 이유: 미리 만들다 실패한 작업을 `batch_running`으로 되돌리면, 워커가 다음 묶음을 끝내도 전이 11의 조건(`current_batch_no = k`)이 맞지 않아 `batch_running`에 멈춘다.
+  - 입력·완료된 후보와 클립·고정·묶음 번호는 건드리지 않는다. 사용자 재시도는 작업당 3번까지다(`user_retry_count`).
 - **워커가 `failed`로 바꿀 때도 조건을 붙인다**(전이 13). 자기가 맡은 상태일 때만 바꾼다(예: `WHERE status = 'batch_running'`). 전이 15로 이미 `finished`가 된 작업을 워커가 `failed`로 덮어쓰면 안 된다
 - **끝 상태는 파기와 상관없다.** 상태와 관계없이 `upload_completed_at`에서 30일이 지나면 S3 수명 주기 규칙이 파일을 지우고, 백엔드 주기 작업(켤 때 1회, 그 뒤 1시간마다)이 파기 표시와 기록을 남긴다. 끝 상태가 된 뒤에도 30일까지는 고정한 사건 지점을 다시 볼 수 있다. (D-52, D-57, D-64, D-80, D-106, D-136, D-142)
 
@@ -671,6 +696,17 @@ CREATE TABLE upload_tokens (
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE upload_agreements (
+  id                        bigserial PRIMARY KEY,
+  upload_token_id           bigint      NOT NULL UNIQUE REFERENCES upload_tokens(id) ON DELETE CASCADE,
+  agreement_version         text        NOT NULL,   -- 동의한 계약 문구 버전 (법적문제검토 4부)
+  confirm_signage           boolean     NOT NULL,
+  confirm_disclosure_judged boolean     NOT NULL,
+  confirm_reconsignment     boolean     NOT NULL,
+  requested_ip              inet        NOT NULL,   -- 접속 IP
+  agreed_at                 timestamptz NOT NULL DEFAULT now()   -- 90일 뒤 주기 작업이 지운다 (D-147)
+);
+
 CREATE TABLE videos (
   id                  bigserial PRIMARY KEY,
   owner_user_id       bigint      NOT NULL REFERENCES users(id),
@@ -699,6 +735,8 @@ CREATE TABLE analysis_jobs (
   stage2_ended_at    timestamptz,
   input_completed_at timestamptz,
   error_message      text,
+  failure_kind       text CHECK (failure_kind IN ('input_error','vlm_parse_rate','vlm_outage','worker_died')),  -- D-112
+  user_retry_count   integer     NOT NULL DEFAULT 0 CHECK (user_retry_count BETWEEN 0 AND 3),  -- D-112
   processed_sec      double precision NOT NULL DEFAULT 0,   -- 중간 저장한 지점 (D-76)
   current_batch_no   integer,                  -- 후보군 목록의 지금 보여주는 묶음. ready가 될 때 1 (D-82)
   current_failed_batch_no integer,             -- 파싱 실패 목록의 지금 보여주는 묶음. 없으면 비어 있다 (D-99)
@@ -816,7 +854,7 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 
 | 항목 | 정한 것 | 이유 |
 |---|---|---|
-| `status`에 CHECK 제약 | **걸지 않는다.** 값 목록은 백엔드·워커 코드의 enum으로만 관리한다 | 상태 목록(4.3)이 아직 바뀔 수 있다(D-24는 "확정 필요"). CHECK를 걸면 값 하나를 더할 때마다 DB를 고쳐야 한다. 상태를 쓰는 곳이 백엔드와 워커 둘뿐이라 코드에서 막아도 충분하다 |
+| `status`에 CHECK 제약 | **걸지 않는다.** 값 목록은 백엔드·워커 코드의 enum으로만 관리한다 | 상태 목록(4.3)은 결정이 바뀌며 여러 번 달라졌다(D-81 등). CHECK를 걸면 값 하나를 더할 때마다 DB를 고쳐야 한다. 상태를 쓰는 곳이 백엔드와 워커 둘뿐이라 코드에서 막아도 충분하다 |
 | `analysis_jobs` 아래 테이블의 FK | 모두 `ON DELETE CASCADE` | 영상 1건을 지울 때 관련 행이 함께 지워진다. S3에서 `videos/{video_id}/` 접두사 하나만 지우면 되는 것(4.9)과 짝이 맞는다 |
 | `videos → users` FK | CASCADE를 걸지 **않는다**(기본 동작) | 사용자를 지웠다고 영상과 분석 결과가 사라지면 안 된다. 참조가 남아 있으면 삭제가 거부된다 |
 | `upload_tokens → users`, `sessions → users` FK | CASCADE를 건다 | 링크와 세션은 짧게 살고 만료되는 임시 값이라 계정과 함께 사라져도 된다 (D-30) |
@@ -875,7 +913,7 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 - 입력 수정은 1단계가 끝나기 전까지, 상태 조회에 `input_done`: D-49 → 입력은 한 번만, 저장 전 확인창: D-66
 - 본인 차량은 탐지된 차량 중에서 고른다(`still_frames.detections`, `vehicle_selections` `schema_version` 2부터, 지금 5): D-65
 - 후보 0건이면 `exhausted`로 보내고 `candidate_total`로 구분: D-50
-- 클립 생성에 실패한 후보는 이번 묶음에서 빠지고, 다시 만들지 않는다: D-51
+- 클립은 총 3번까지 시도하고, 끝내 실패한 후보는 `verdict = 'unavailable'`(열람 불가): D-109 (D-51 대체)
 - 원본과 트랙은 업로드 완료 30일 뒤에 파기, `raw_deleted_at`: D-52, D-64, D-80
 - 열람·발급·파기 기록을 `access_logs`에 남긴다: D-53
 - 마스킹본도 원본과 같이 업로드 완료 30일 뒤에 전부 파기, `masked_deleted_at`: D-57, D-64, D-80 (U-24 해결)

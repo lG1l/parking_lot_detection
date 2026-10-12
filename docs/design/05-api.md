@@ -1,23 +1,15 @@
 # 05. API 명세
 
-> **2026-10-12 팀장 결정 — D-147 반영 필요: 업로드 링크로 부르는 API에 관리자 위탁계약 동의를 저장하는 요청이 필요하다(체크 3개, 문구 버전). 동의 기록이 없으면 6번 업로드 URL 발급을 거절해야 한다. 본인인증 API는 두지 않는다(D-146). 아래 18개 엔드포인트와 에러 코드에는 아직 반영하지 않았다. 담당: 팀원 2.**
-
-> **D-112 반영: 사용자 분석 재시도 API와 상태 응답의 사용자용 오류 분류·재시도 가능 여부를 추가해야 한다. 기존 18개 엔드포인트만으로 새 요구사항이 충족되지 않는다. 소유권·기한·원본 이용 가능 조건·실패 상태 검사, 원자적 중복 접수 방지 및 작업 전달 복구의 상세 계약은 작성 필요. 사용자 재시도는 최초 분석·자동 재시도를 제외하고 작업당 누적 최대 3회다. 서버가 유효하게 접수한 재시도만 원자적으로 차감하며 중복·거절 요청은 차감하지 않는다. 3회 소진 후 다시 실패하면 재시도 버튼 대신 운영 담당자 문의를 안내한다.**
-
 > **D-111: 보류·목록 이동은 종료나 다음 묶음 처리가 아니다. 기존 작업을 유지한 채 새 영상 접수를 허용하며 재진입 시 최신 상태를 조회한다. 분석 정지·재개 API는 두지 않는다.**
 
-> **2026-10-08 팀장 결정 — D-110 반영 필요: 17번 확인 종료는 서버에서도 고정 1개 이상을 검사한다. 아래 상태만 검사하는 SQL은 보완 전이다. 상태·고정 검사와 갱신을 같은 트랜잭션으로 직렬화하고 고정 0개 거절 응답을 정의해야 한다. 기존 미종료 작업을 이유로 새 업로드·분석 요청을 막지 않는다.**
-
-> **2026-10-08 팀장 결정 — D-109가 D-51을 대체한다. 최종 실패 후보를 조용히 숨기거나 `not_found`로 처리하지 않는다. 12·13번의 실패 수 응답, 갱신 대상 SQL, `lists.done`·`remaining`·완료 조건과 전체 클립 실패 응답을 백엔드 담당자가 함께 수정해야 한다. 아래 해당 SQL·예시는 이 변경 반영 전이며 그대로 구현하지 않는다.**
-
-> 마지막 수정: 2026-10-06
+> 마지막 수정: 2026-10-12
 > 표시: 🚧 미정 · ⚠️ 확인 필요 · 🔐 멘토 승인 필요
 >
-> 5.2의 엔드포인트 18개를 모두 썼다. 근거가 되는 결정 중 **D-28·D-29·D-30·D-31·D-32·D-35·D-37·D-38·D-39·D-40·D-41·D-42·D-44·D-45·D-46·D-47·D-48·D-49·D-51·D-52·D-53·D-57·D-80은 확정**이고, 나머지(D-25·D-43·D-50·D-56·D-62·D-64·**D-65·D-66**)는 상태가 아직 **"확정 필요"** 다. **D-36은 D-65로, D-49의 수정 허용 구간은 D-66으로, D-34는 D-98로 대체됐다** — 10번과 11번이 그에 맞춰 바뀌었으니 팀원 2가 확인해야 한다. 14·15번과 새 17번은 D-80(여러 장면 고정, [확인 끝내기])에 맞춰 바뀌었다. 이 장을 전제로 백엔드·프론트 구현을 시작해도 되지만, 확정되지 않은 것은 뒤집힐 수 있다는 것을 알고 진행한다. 남은 항목은 [5.10](#510-이-장에서-미정으로-남는-것)에 모아 두었다. 프론트에서 화면·기능 요구사항을 뽑을 때는 [5.11](#511-전체-그림)의 요약부터 본다.
+> 5.2의 엔드포인트 19개를 모두 썼다. 근거가 되는 결정은 **모두 확정**이다(2026-10-09, D-135). **D-36은 D-65로, D-49의 수정 허용 구간은 D-66으로, D-34는 D-98로 대체됐다.** 14·15번과 새 17번은 D-80(여러 장면 고정, [확인 끝내기])에 맞춰 바뀌었다. 이 장을 전제로 백엔드·프론트 구현을 시작한다. 남은 항목은 [5.10](#510-이-장에서-미정으로-남는-것)에 모아 두었다. 프론트에서 화면·기능 요구사항을 뽑을 때는 [5.11](#511-전체-그림)의 요약부터 본다.
 
-> **D-67~D-75(2026-09-27, 팀장)를 반영했다.** 11번은 입력이 항상 1단계 뒤에 들어오므로 저장하면 곧바로 2단계 작업을 넣고 GPU를 켠다(D-81). 요청은 탐지 상황·텍스트 설명·사진 키가 더해진 `schema_version` 4이고, 사진은 새 18번이 주는 presigned URL로 올린다(D-83). 9번은 입력을 마치고 2단계를 기다릴 때도 `queue_ahead`를 준다(D-81). 12·13번은 `current_batch_no`로 지금 보여줄 묶음을 가린다(D-82). D-81·D-82의 상태는 **"확정 필요"** 다. 입력 버전 4와 사진 저장 방식은 D-92를 따른다.
+> **D-67~D-75(2026-09-27, 팀장)를 반영했다.** 11번은 입력이 항상 1단계 뒤에 들어오므로 저장하면 곧바로 2단계 작업을 넣고 GPU를 켠다(D-81). 요청은 탐지 상황·텍스트 설명·사진 키가 더해진 `schema_version` 4이고, 사진은 새 18번이 주는 presigned URL로 올린다(D-83). 9번은 입력을 마치고 2단계를 기다릴 때도 `queue_ahead`를 준다(D-81). 12·13번은 `current_batch_no`로 지금 보여줄 묶음을 가린다(D-82). D-81·D-82는 확정이다(2026-10-09). 입력 버전 4와 사진 저장 방식은 D-92를 따른다.
 
-> **D-93·D-98(2026-10-06, 팀장)을 반영했다.** 11번 요청은 내 차 바닥 네 모서리와 파손 변이 더해진 `schema_version` 5다(D-34 대체). 12·13번은 `list`로 후보군·파싱 실패 목록을 가리고, 응답의 `lists`에 두 목록의 마지막 묶음·남은 후보 수·다 넘겼는지를 함께 준다. `exhausted`는 두 목록을 모두 다 넘겼을 때다. 형식과 규칙은 D-99이고 상태는 **"확정 필요"** 다.
+> **D-93·D-98(2026-10-06, 팀장)을 반영했다.** 11번 요청은 내 차 바닥 네 모서리와 파손 변이 더해진 `schema_version` 5다(D-34 대체). 12·13번은 `list`로 후보군·파싱 실패 목록을 가리고, 응답의 `lists`에 두 목록의 마지막 묶음·남은 후보 수·다 넘겼는지를 함께 준다. `exhausted`는 두 목록을 모두 다 넘겼을 때다. 형식과 규칙은 D-99다(확정, 2026-10-09).
 
 ## 5.1 공통 규칙
 
@@ -106,7 +98,7 @@
 `access_logs`와 별개로, API 서버가 파일·콘솔에 쓰는 로그(접근 로그, 오류 로그)에는 비밀 값과 개인정보를 남기지 않는다. 자세한 규칙은 [08장 8.10](08-auth.md#810-열람-기록-남기기)에 있다.
 
 - 요청·응답 본문을 로그에 쓰지 않는다 (비밀번호, presigned URL)
-- 업로드 링크 API(5·6·7번)의 경로에 든 `token`은 가려서 쓴다: `/api/uploads/***/presign`
+- 업로드 링크 API(5·6·7·16번)의 경로에 든 `token`은 가려서 쓴다: `/api/uploads/***/presign`
 - 쿠키·`Authorization` 헤더를 쓰지 않는다
 
 **파기와 API의 관계** (D-52, D-57, D-64, D-80)
@@ -115,9 +107,9 @@
 
 | 시점 | 무엇이 사라지나 | API에 미치는 영향 |
 |---|---|---|
-| `upload_completed_at` + 30일 | 세 버킷의 `videos/{video_id}/` 전체 (원본, 트랙, 정지 장면, 모든 후보 클립) | 10·12·14·15번이 409 `MASKED_EXPIRED`, 11·13·18번이 409 `RAW_EXPIRED` |
+| `upload_completed_at` + 30일 | 세 버킷의 `videos/{video_id}/` 전체 (원본, 트랙, 정지 장면, 모든 후보 클립) | 10·12·14·15번이 409 `MASKED_EXPIRED`, 11·13·18·19번이 409 `RAW_EXPIRED` |
 
-- **열람기한(`view_expires_at`)이 지나면 파기 작업이 아직 돌지 않았어도 막는다** (D-92). 10·12·14·15번은 새 재생 URL을 주지 않고 409 `MASKED_EXPIRED`, 11·13·18번은 409 `RAW_EXPIRED`다.
+- **열람기한(`view_expires_at`)이 지나면 파기 작업이 아직 돌지 않았어도 막는다** (D-92). 10·12·14·15번은 새 재생 URL을 주지 않고 409 `MASKED_EXPIRED`, 11·13·18·19번은 409 `RAW_EXPIRED`다.
 - 파기는 `analysis_jobs.status`를 바꾸지 않는다. 그래서 9번이 `raw_deleted`·`masked_deleted`를 따로 내려준다 (5.5).
 - **끝 상태(`finished`·`exhausted`·`failed`)가 돼도 지우지 않는다.** 사용자가 여러 장면을 고정할 수 있어, 30일까지는 정지 장면과 후보 클립, 고정한 사건 지점을 모두 볼 수 있다 (D-80).
 
@@ -177,11 +169,12 @@ GPU EC2 켜기 요청
 | 14 | `POST /api/videos/{video_id}/pin` | 사건 지점 고정. 여러 개 가능, 상태는 바뀌지 않는다 | D-35, D-79, D-80 |
 | 15 | `GET /api/videos/{video_id}/pin` | 고정된 사건 지점 목록과 재생용 URL, 원본 기준 시작·끝 시간 | D-32, D-80 |
 | 17 | `POST /api/videos/{video_id}/finish` | [확인 끝내기]. 후보 확인을 끝낸다 | 전이 9·15, D-80 |
+| 19 | `POST /api/videos/{video_id}/retry` | [분석 다시 시도]. `failed` 작업을 실패한 단계로 되돌리고 SQS에 넣는다. 작업당 3번까지 (5.5) | 전이 16, D-112 |
 
 - 피해자가 원본을 직접 올리는 API는 없다. 업로드는 5~7·16번뿐이다 (D-45).
 - 16번은 번호만 뒤에 붙었고 부르는 순서는 6번과 7번 사이다. 기존 번호를 밀지 않으려고 이렇게 뒀다.
 - 고정 해제 API는 없다 (D-40).
-- 17번은 16번 뒤에 새로 더해 번호가 끝에 붙었다. 18번도 같은 이유로 끝에 붙었고, 부르는 순서는 10번과 11번 사이다.
+- 17번은 16번 뒤에 새로 더해 번호가 끝에 붙었다. 18번도 같은 이유로 끝에 붙었고, 부르는 순서는 10번과 11번 사이다. 19번도 끝에 붙었고, 9번이 `failed`와 `can_retry: true`를 줄 때만 부른다.
 
 ## 5.3 계정 API
 
@@ -341,7 +334,11 @@ INSERT INTO upload_tokens (...) VALUES (...);
 
 ```json
 {"filename": "CH03_20260917_000000.mp4", "size_bytes": 1837260800,
- "recording_started_at": "2026-09-17T00:00:00+09:00"}
+ "recording_started_at": "2026-09-17T00:00:00+09:00",
+ "agreement": {"version": "2026-10-12",
+               "confirm_signage": true,
+               "confirm_disclosure_judged": true,
+               "confirm_reconsignment": true}}
 ```
 
 성공: `200`
@@ -352,7 +349,7 @@ INSERT INTO upload_tokens (...) VALUES (...);
 
 백엔드가 하는 일 (순서대로)
 
-1. 요청 값을 검사한다. 아래 "실패" 표.
+1. 요청 값을 검사한다. 아래 "실패" 표. **위탁계약 동의(`agreement`)도 여기서 본다(D-147).**
 2. 링크를 쓴 것으로 표시한다. **조건부 UPDATE 한 번**으로 검사와 표시를 같이 한다(4.4와 같은 방법).
 
 ```sql
@@ -367,12 +364,13 @@ RETURNING id, owner_user_id;
    - `:token_hash`는 주소의 `token`을 `token_hash()`로 거친 값이다 (D-59). 5·7번도 같은 방법으로 행을 찾는다.
    - 1행이 나오면 이 요청이 링크를 가져갔다. 0행이면 다시 조회해 "링크를 쓸 수 없는 경우의 코드" 중 맞는 것을 돌려준다.
    - 관리자가 [업로드]를 두 번 눌러 요청이 동시에 두 번 와도 한쪽만 1행을 받는다. 다른 쪽은 `UPLOAD_TOKEN_USED`를 받는다. 프론트는 첫 요청을 보낸 뒤 버튼을 막는다.
-3. 같은 트랜잭션에서 `videos` 행을 만든다. 주인은 링크의 주인이고, `upload_token_id`·`original_filename`·`size_bytes`·`recording_started_at`을 채운다. S3 키 `videos/{video_id}/original.{ext}`는 행 번호가 있어야 정해지므로, 번호를 먼저 받고(`nextval`) 키를 채워 넣는다 (04장 4.9).
+3. 같은 트랜잭션에서 **`upload_agreements` 행을 넣고(받은 `id`, 체크 3개, 버전, 요청 IP)**, `videos` 행을 만든다. 주인은 링크의 주인이고, `upload_token_id`·`original_filename`·`size_bytes`·`recording_started_at`을 채운다. S3 키 `videos/{video_id}/original.{ext}`는 행 번호가 있어야 정해지므로, 번호를 먼저 받고(`nextval`) 키를 채워 넣는다 (04장 4.9).
 4. 커밋한다.
 5. 업로드용 presigned URL을 서명한다. 원본 버킷 `PutObject`, 유효 시간은 01장 1.6(15분)이다 (D-41).
    **`If-None-Match: *`를 서명에 넣는다** (D-100). S3는 키에 객체가 없을 때만 받으므로, URL이 새도 먼저 올라간 파일을 덮어쓸 수 없다.
 6. **GPU는 켜지 않는다** (D-62). 업로드가 15분을 넘으면 여기서 켠 GPU가 할 일 없이 15분치 요금만 태우고 꺼진다. 대신 브라우저가 업로드 막바지에 16번을 부른다.
 
+- `agreement`는 관리자가 동의 화면에서 체크한 값이다. 프론트는 [동의하고 영상 선택하기]를 누를 때 이 값을 기억했다가 6번에 싣는다. 동의 기록은 S3 업로드보다 먼저 저장된다 (D-147).
 - `ext`는 `filename`의 마지막 `.` 뒤를 소문자로 바꾼 것이다. `CH03.MP4` → `mp4`.
 - `recording_started_at`은 **선택**이다. 영상 첫 프레임의 실제 녹화 시각으로, 관리자가 DVR에서 내보낼 때 고른 시작 시각이다. 없으면 키를 빼거나 `null`로 보낸다. 시간대가 붙은 ISO 8601 문자열이다(5.1) (D-85).
 - 링크는 **이 API에서 쓴 것이 된다.** 업로드가 중간에 끊기면 링크를 새로 받아야 한다 (04장 `upload_tokens`).
@@ -396,6 +394,7 @@ RETURNING id, owner_user_id;
 | 422 | `UNSUPPORTED_FILE_TYPE` | `filename`의 확장자가 `.mp4` `.avi` `.mkv` `.mov`가 아님. 확장자가 없는 경우도 포함 (D-43) |
 | 422 | `FILE_TOO_LARGE` | `size_bytes`가 5GB(01장 1.6)보다 큼 (D-22) |
 | 422 | `VALIDATION_FAILED` | `filename`이 비었거나 `size_bytes`가 0 이하. `recording_started_at`이 시간대 없는 문자열이거나 지금보다 뒤 |
+| 422 | `AGREEMENT_REQUIRED` | `agreement`가 없거나, 체크가 하나라도 `true`가 아니거나, `version`이 지금 계약 문구 버전과 다름 (D-147) |
 
 - 확장자와 크기는 프론트가 먼저 막는다(07장). 여기서 다시 막는 것은 프론트를 거치지 않은 요청 때문이다.
 - 크기는 브라우저가 알려준 값이다. 실제로 더 큰 파일을 보내도 S3가 단일 PUT 5GB 한도에서 거절한다.
@@ -467,7 +466,7 @@ RETURNING id, owner_user_id;
 
 - 만료(`expires_at`)는 보지 않는다. 7번과 같은 이유로, 큰 파일은 업로드 중에 24시간을 넘길 수 있다.
 
-## 5.5 영상 목록·상태 조회 API
+## 5.5 영상 목록·상태 조회·분석 재시도 API
 
 세션 쿠키로 인증하고, 요청마다 주인을 확인한다. 남의 영상은 404 `VIDEO_NOT_FOUND`다 (D-39).
 
@@ -528,6 +527,7 @@ END
  "queue_ahead": 2,
  "input_done": false,
  "candidate_total": 0,
+ "candidate_unavailable": 0,
  "raw_deleted": false,
  "masked_deleted": false,
  "created_at": "2026-09-19T09:12:00+09:00",
@@ -540,13 +540,28 @@ END
 | `queue_ahead` | `status`가 `queued`일 때, 그리고 `stage1_done`이면서 `input_done`이 `true`일 때(입력을 마치고 2단계를 기다리는 중). 나보다 먼저 줄에 섰고 아직 GPU 차례가 끝나지 않은 작업 수다 (04장 4.5, D-81) |
 | `input_done` | 항상. 차량·파손 부위 입력이 저장됐는지(`analysis_jobs.input_completed_at`이 차 있는지)다. 저장하지 않고 조회할 때 본다 |
 | `candidate_total` | `status`가 `exhausted`일 때만. 지금까지 만들어진 후보 총 수다. `0`이면 후보가 한 번도 만들어지지 않았다는 뜻이다 (04장 `candidates`를 세서 계산한다) |
+| `candidate_unavailable` | `status`가 `exhausted`일 때만. 클립을 끝내 만들지 못한 후보 수(`verdict = 'unavailable'`). 화면이 `candidate_total`과 비교해 "일부 열람 불가 / 전부 열람 불가" 문구를 고른다 (D-109) |
 | `raw_deleted` | 항상. 원본 영상**과 트랙 파일**이 파기됐는지(`videos.raw_deleted_at`이 차 있는지)다. 저장하지 않고 조회할 때 본다 (D-52, D-64) |
 | `masked_deleted` | 항상. 마스킹본이 파기됐는지(`videos.masked_deleted_at`이 차 있는지)다. 같은 방식으로 조회할 때 본다 (D-57, D-64) |
 | `duration_sec` | 워커가 1단계에서 채운 뒤부터. 그 전에는 `null` |
+| `error_kind` | `status`가 `failed`일 때만. 사용자용 실패 분류. `file` · `expired` · `temporary` · `service` 중 하나이고, 고르는 순서는 아래 표다 (D-112) |
+| `can_retry` | `status`가 `failed`일 때만. [분석 다시 시도]를 보여줄지. 19번이 요청을 받아 주는 조건과 같다 (D-112) |
+| `retry_left` | `status`가 `failed`일 때만. 남은 사용자 재시도 횟수 `3 - user_retry_count` (D-112) |
 | `view_expires_at` | 항상. 8번과 같은 값이다. 업로드가 끝나기 전에는 `null`이다. 후보 확인·결과 화면도 이 값을 쓴다 (D-92) |
 | 그 밖 | 항상 |
 
-- **실패 이유(`error_message`)는 돌려주지 않는다.** 워커가 남기는 영문 개발자용 문구라 사용자에게 보여줄 것이 아니다. D-112에 따라 사용자용 오류 분류와 재시도 가능 여부를 별도로 제공해야 한다(응답 필드 상세 반영 필요). 서비스 오류는 [분석 다시 시도], 파일 문제는 파일 확인·재업로드, 만료는 기한 만료를 안내한다. 모든 실패에 재업로드를 요구하지 않는다. 내부 오류는 개발자가 DB에서 본다.
+- **실패 이유(`error_message`)는 돌려주지 않는다.** 워커가 남기는 영문 개발자용 문구라 사용자에게 보여줄 것이 아니다. 대신 사용자용 분류 `error_kind`와 재시도 가능 여부 `can_retry`·`retry_left`를 준다. 화면 문구는 07장이 `error_kind`별로 정한다. 모든 실패에 재업로드를 요구하지 않는다. 내부 오류는 개발자가 DB에서 본다 (D-112).
+- **`error_kind`는 저장하지 않고 조회할 때 계산한다.** 04장 `analysis_jobs.failure_kind`와 파기·기한을 보고 아래 표의 위에서부터 처음 맞는 것을 고른다. 기한은 시간이 지나면 저절로 바뀌므로 저장하면 어긋난다.
+
+  | 순서 | 조건 | `error_kind` | `can_retry` |
+  |---|---|---|---|
+  | 1 | `failure_kind = 'input_error'` (코덱 불량·길이 0·원본 없음) | `file` — 파일 확인 후 새 링크로 다시 올리기 | `false` |
+  | 2 | `raw_deleted`이거나 `view_expires_at`이 지남 | `expired` — 다시 시도할 수 없음 | `false` |
+  | 3 | `failure_kind = 'vlm_outage'` | `temporary` — "일시적인 서비스 문제로…" | `retry_left > 0` |
+  | 4 | `failure_kind`가 `vlm_parse_rate`·`worker_died` | `service` — "서비스 문제로…" | `retry_left > 0` 🚧 팀장 확인(이 둘에 재시도를 줄지) |
+
+  - 파일 문제를 만료보다 먼저 본다. 파일이 깨졌으면 기한과 관계없이 "파일을 확인하고 새로 올리라"가 맞는 안내다.
+  - `temporary`·`service`인데 `can_retry`가 `false`면 화면은 버튼 없이 문의 안내를 보인다 (D-145 10번).
 - **`input_done`이 따로 있는 이유**: `stage1_done`은 "입력을 기다리는 중"과 "입력을 받아 2단계 작업을 넣어 둔 중" 둘 다에서 나온다(5.7). 화면이 `status` 하나만 보면 이미 입력한 사용자에게 입력 화면을 다시 보여주게 된다. 두 값을 함께 보고 입력 화면을 열지 정한다 (D-49, 07장). **D-66 뒤로는 이 값이 "고칠 수 있는지"와 같다** — `true`면 어느 상태든 11번이 409다.
 - **`raw_deleted`·`masked_deleted`가 따로 있는 이유**: 업로드 완료에서 30일이 지나면 원본, 트랙 파일, 마스킹본이 한 번에 파기된다(D-52, D-57, D-64, D-80). 파기해도 `status`는 바뀌지 않으므로, 화면이 `masked_deleted`를 보고 "보관 기간이 끝나 삭제되었습니다"를 보여준다 (07장). 10·12·15번은 `masked_deleted`를, 13번은 `raw_deleted`를 보고 요청을 막는다(후보 클립은 원본에서 잘라내기 때문이다).
   - 두 값은 같은 때 `true`가 된다. 파기 작업이 원본과 마스킹본을 지우는 도중 멈추면 잠깐 어긋날 수 있어 둘 다 둔다.
@@ -560,6 +575,56 @@ END
 | HTTP | `code` | 언제 |
 |---|---|---|
 | 404 | `VIDEO_NOT_FOUND` | 없는 영상이거나 남의 영상 |
+
+### 19. `POST /api/videos/{video_id}/retry` 분석 다시 시도
+
+요청 본문 없음. 9번이 `status: "failed"`, `can_retry: true`를 줄 때 화면이 [분석 다시 시도]로 부른다. 입력·완료된 후보·고정은 그대로 두고 **실패한 단계부터** 다시 한다 (D-112).
+
+성공: `202`
+
+```json
+{"status": "stage1_done", "retry_left": 2}
+```
+
+**백엔드가 하는 일** (전이 16, D-112)
+
+```
+트랜잭션 시작
+  1) SELECT ... FROM analysis_jobs WHERE video_id = :video_id FOR UPDATE
+     → status가 failed가 아니면 롤백하고 409 INVALID_STATE
+  2) 9번 표대로 error_kind를 계산한다
+     → expired면 롤백하고 409 RAW_EXPIRED
+     → file이면 롤백하고 409 RETRY_NOT_ALLOWED
+     → (🚧 팀장 확인) service에 재시도를 주지 않기로 하면 여기서 409 RETRY_NOT_ALLOWED
+  3) user_retry_count >= 3이면 롤백하고 409 RETRY_LIMIT_REACHED
+  4) 04장 4.3 "재시도로 되돌릴 상태" 표로 :next_status와 메시지 kind를 정한다
+  5) UPDATE analysis_jobs
+        SET status = :next_status,
+            user_retry_count = user_retry_count + 1,
+            failure_kind = NULL, error_message = NULL,
+            updated_at = now()
+      WHERE id = :job_id AND status = 'failed' AND user_retry_count < 3
+  6) SQS에 {"job_id", "kind"}를 넣고 GPU를 켠다
+     → 넣지 못하면 롤백하고 500 INTERNAL_ERROR
+커밋
+```
+
+- **상태 되돌리기와 횟수 +1이 한 UPDATE다.** 1)의 `FOR UPDATE`로 행을 잠그므로, 두 탭이 동시에 눌러도 한쪽은 1)에서 이미 바뀐 상태를 보고 409 `INVALID_STATE`를 받는다. 횟수는 한 번만 오른다.
+- **거절·중복 요청은 횟수를 쓰지 않는다.** 2)·3)에서 거절하면 롤백한다. 응답을 못 받아 다시 보낸 요청도 이미 `failed`가 아니라서 409 `INVALID_STATE`가 되고, 화면은 9번을 다시 불러 대기 화면으로 간다.
+- **SQS에 넣지 못하면 아무것도 바뀌지 않는다.** 롤백하므로 상태는 `failed`, 횟수도 그대로다. 프론트가 다시 보내면 된다. 커밋한 뒤에 메시지를 잃으면 D-56(10분 뒤 다시 넣기)이 다시 넣고, 이때도 횟수를 더 쓰지 않는다. `ready`로 되돌린 작업은 D-56 대상이 아니지만 사용자가 [다음]을 누르면 13번이 다시 넣는다 (D-99).
+- **원본을 읽지 않는다.** 백엔드는 원본 버킷 읽기 권한이 없다. 기한·파기는 DB로 보고, 원본이 실제로 없으면 워커가 다시 `failed`(`input_error`)로 바꾼다.
+- GPU를 항상 켜는 이유는 11번과 같다. 실패한 뒤 GPU가 유휴로 꺼졌을 수 있다.
+
+실패
+
+| HTTP | `code` | 언제 | 프론트 처리 |
+|---|---|---|---|
+| 404 | `VIDEO_NOT_FOUND` | 없는 영상이거나 남의 영상 | 목록으로 |
+| 409 | `INVALID_STATE` | `failed`가 아님. 다른 탭이 먼저 접수했거나 다시 보낸 요청 | 9번을 다시 불러 화면을 새로 그린다 |
+| 409 | `RAW_EXPIRED` | 원본이 파기됐거나 열람기한이 지남 | 9번을 다시 불러 화면을 새로 그린다 |
+| 409 | `RETRY_NOT_ALLOWED` | 파일 문제라 다시 해도 같다 | 9번을 다시 불러 화면을 새로 그린다(파일 확인·재업로드 안내) |
+| 409 | `RETRY_LIMIT_REACHED` | 이 작업의 사용자 재시도 3번을 다 썼다 | 9번을 다시 불러 화면을 새로 그린다(문의 안내) |
+| 500 | `INTERNAL_ERROR` | SQS에 넣지 못함. 아무것도 바뀌지 않았다 | 잠시 후 다시 보낸다 |
 
 ## 5.6 정지 장면 조회 API
 
@@ -797,6 +862,7 @@ DB는 `payload`의 내용을 검사하지 않는다. 아래를 백엔드(Pydanti
 {
   "list": "main",
   "batch_no": 1,
+  "unavailable": 0,
   "candidates": [
     {"candidate_clip_id": 1187, "rank": 1,
      "start_sec": 13235.0, "end_sec": 13265.0, "incident_at_sec": 13250.0,
@@ -806,8 +872,8 @@ DB는 `payload`의 내용을 검사하지 않는다. 아래를 백엔드(Pydanti
      "clip_url": "https://<prefix>-masked.s3.ap-northeast-2.amazonaws.com/videos/17/clips/1188.mp4?X-Amz-Algorithm=..."}
   ],
   "lists": {
-    "main":         {"latest_batch_no": 1, "remaining": 20, "done": false},
-    "parse_failed": {"latest_batch_no": 1, "remaining": 0,  "done": false}
+    "main":         {"latest_batch_no": 1, "remaining": 20, "done": false, "unavailable": 0},
+    "parse_failed": {"latest_batch_no": 1, "remaining": 0,  "done": false, "unavailable": 0}
   }
 }
 ```
@@ -816,6 +882,7 @@ DB는 `payload`의 내용을 검사하지 않는다. 아래를 백엔드(Pydanti
 |---|---|
 | `list` | 이 응답이 담은 목록. 요청의 `list`와 같다 |
 | `batch_no` | 이 응답이 담은 묶음 번호. 목록마다 1부터 |
+| `unavailable` | 이 묶음에서 클립을 끝내 만들지 못해 볼 수 없는 후보 수. 이 후보들은 `candidates`에 넣지 않는다 (D-109) |
 | `candidate_clip_id` | 고정할 때 14번에 보내는 번호 (D-35) |
 | `rank` | 점수순 순위. 배열은 이 순서로 정렬돼 있다 |
 | `start_sec`·`end_sec` | 클립이 원본 영상의 어느 구간인지 (04장 4.7) |
@@ -825,6 +892,7 @@ DB는 `payload`의 내용을 검사하지 않는다. 아래를 백엔드(Pydanti
 | `lists.*.latest_batch_no` | 그 목록에서 볼 수 있는 마지막 묶음 번호. 미리 준비해 둔 다음 묶음은 여기에 들지 않는다 (D-82). 목록이 비어 있으면 `null` |
 | `lists.*.remaining` | 그 목록에서 [다음 묶음 받기]를 누르면 더 볼 수 있는 후보 수. 어느 묶음을 보든 같은 값이다. `0`이면 마지막 묶음까지 왔다 |
 | `lists.*.done` | 그 목록의 후보를 끝까지 다 넘겼는지(`unseen` 후보가 0개). 다 넘겨도 묶음 번호는 그대로라(D-99) `remaining`이 `0`인 것만으로는 "마지막 묶음을 아직 안 넘김"과 구분되지 않는다. 비어 있는 목록도 `true`다 |
+| `lists.*.unavailable` | 그 목록 전체에서 열람 불가인 후보 수 (D-109) |
 
 - **[다음 묶음 받기]는 `status`가 `ready`이고, 보고 있는 묶음이 그 목록의 `latest_batch_no`이고, 그 목록의 `done`이 `false`일 때만 보인다.** 13번에는 그 목록과 묶음 번호를 보낸다 (D-82, D-99).
 - **VLM 점수는 돌려주지 않는다.** 배열 순서가 곧 점수순이다. 점수를 보여주면 사용자가 영상 대신 숫자를 보고 판단하게 되는데, 이 화면의 목적은 사용자가 직접 확인하는 것이다(PRD 3.5). KPI 집계(09장)는 DB에서 읽는다.
@@ -844,21 +912,23 @@ SELECT DISTINCT ON (d.id)
  ORDER BY d.id, c.id DESC;      -- 후보마다 가장 최근 클립 1개. 바깥에서 rank로 다시 정렬한다
 ```
 
-- **클립을 만들지 못한 후보는 목록에서 빠진다.** 위 SQL이 `c.status = 'done'`인 클립만 고르기 때문이다. 묶음이 10건이 아니라 9건으로 보일 수 있다. 워커는 다시 만들지 않고, 응답에도 따로 알리지 않는다. 드문 경우라 받아들인다 (D-51).
+- **열람 불가 후보(`unavailable`)는 `candidates` 배열에 넣지 않고 `unavailable`로 수만 알린다 (D-109).** 묶음이 10건이 아니라 9건으로 보일 수 있고, 화면은 "이 묶음에 열람 불가 N건"을 보인다. 묶음 전체가 열람 불가이면 배열이 비어 있을 수 있다.
 - `remaining`은 그 목록에서 지금 보여주는 묶음 뒤에 남은 후보 수다. 미리 준비해 둔 묶음과 아직 묶음에 들어가지 않은 후보를 함께 센다. 이번 묶음의 후보는 세지 않는다 (D-82). `done`은 그 목록에 `unseen` 후보가 하나도 없는지다. 두 목록을 한 번에 센다.
 
 ```sql
 SELECT list_kind,
-       count(*) FILTER (WHERE batch_no IS NULL OR batch_no > CASE list_kind
+       count(*) FILTER (WHERE verdict = 'unseen'
+                          AND (batch_no IS NULL OR batch_no > CASE list_kind
                           WHEN 'main' THEN :current_batch_no
-                          ELSE :current_failed_batch_no END) AS remaining,
-       count(*) AS unseen          -- 0이면 done
+                          ELSE :current_failed_batch_no END)) AS remaining,
+       count(*) FILTER (WHERE verdict = 'unseen') AS unseen,           -- 0이면 done
+       count(*) FILTER (WHERE verdict = 'unavailable') AS unavailable  -- D-109
   FROM candidates
- WHERE analysis_job_id = :job_id AND verdict = 'unseen'
+ WHERE analysis_job_id = :job_id AND verdict IN ('unseen', 'unavailable')
  GROUP BY list_kind;               -- 행이 없는 목록은 remaining 0, done true
 ```
 
-- **이 API는 빈 배열을 돌려주지 않는다.** 후보가 0건이면 워커가 `ready`를 거치지 않고 바로 `exhausted`로 보내므로(04장 전이 14), 이 API는 409를 돌려준다. 화면은 9번의 `status`와 `candidate_total`을 보고 "후보 구간이 탐지되지 않았다"를 띄운다. 사건이 없다는 뜻이 아니다 (PRD 3.5, D-50).
+- **후보가 0건인 작업에는 이 API를 부를 수 없다.** 후보가 0건이면 워커가 `ready`를 거치지 않고 바로 `exhausted`로 보내므로(04장 전이 14), 이 API는 409를 돌려준다. 화면은 9번의 `status`와 `candidate_total`을 보고 "후보 구간이 탐지되지 않았다"를 띄운다. 사건이 없다는 뜻이 아니다 (PRD 3.5, D-50).
 - **후보군 목록은 후보가 1건이라도 있으면 비지 않는다.** 2차 파싱 실패가 30%를 넘으면 작업이 `failed`가 되므로(04장 전이 13) 모든 후보가 파싱 실패 목록으로 갈 수 없다. 파싱 실패 목록은 보통 비어 있고, 그때 `list=parse_failed`로 부르면 422다. 화면은 `lists.parse_failed.latest_batch_no`가 `null`인 것을 보고 탭을 어떻게 보일지 정한다 (07장).
 
 **부를 수 있는 상태와 `latest_batch_no`** (D-79)
@@ -895,8 +965,8 @@ SELECT list_kind,
 ```json
 {"status": "ready",
  "lists": {
-   "main":         {"latest_batch_no": 2, "remaining": 10, "done": false},
-   "parse_failed": {"latest_batch_no": 1, "remaining": 0,  "done": false}}}
+   "main":         {"latest_batch_no": 2, "remaining": 10, "done": false, "unavailable": 0},
+   "parse_failed": {"latest_batch_no": 1, "remaining": 0,  "done": false, "unavailable": 0}}}
 ```
 
 - **보통 `ready`가 온다.** 워커가 다음 묶음을 미리 만들어 두므로 곧바로 12번으로 다음 묶음을 연다 (D-68). 준비가 끝나기 전에 누르면 `batch_running`이 오고, 화면은 9번으로 `ready`가 될 때까지 기다린다.
@@ -934,11 +1004,11 @@ SELECT list_kind,
 5) 4)를 했으면 GPU EC2 켜기를 요청한다. 실패해도 200이다 (D-42)
 ```
 
-- **"준비됐다"는 묶음 n+1 후보의 클립 중 `pending`·`running`이 하나도 없다는 뜻이다.** `failed`는 준비된 것으로 본다(D-51). 워커는 후보에 `batch_no`를 매기는 트랜잭션에서 `pending` 클립 행을 함께 만들므로, 번호가 매겨졌는데 클립 행이 없는 순간은 없다 (04장 4.4).
+- **"준비됐다"는 묶음 n+1 후보의 클립 중 `pending`·`running`이 하나도 없다는 뜻이다.** `failed`는 준비된 것으로 본다. 다시 시도할 클립은 새 `pending` 행으로 생기므로 그동안은 준비 안 된 것으로 보인다 (D-109). 워커는 후보에 `batch_no`를 매기는 트랜잭션에서 `pending` 클립 행을 함께 만들므로, 번호가 매겨졌는데 클립 행이 없는 순간은 없다 (04장 4.4).
 - 4)는 3)의 결과와 상관없이 한다. 묶음 n+1이 준비됐으면 워커는 n+2를 만들고, n+1이 아직이면 워커가 그 목록은 "이미 앞서 있음"으로 보고 건너뛴다. 워커는 그 전에 `pending` 클립부터 마저 만든다(04장 4.4, D-99). 메시지가 남아도 해가 없게 해 두어, 백엔드가 워커의 진행을 따지지 않아도 된다.
 - `batch_running`에서 `ready`로 되돌리는 것은 워커다(전이 11). 묶음 k를 다 만들었을 때 그 목록의 묶음 번호가 k일 때만 바꾼다.
 
-- 2)의 `verdict_at`은 묶음 후보 전부가 같은 값이다 (04장 `candidates`). 클립을 만들지 못해 화면에 나오지 않은 후보도 같이 `not_found`가 된다. 그 후보만 골라 남길 방법이 없고, 남겨 두면 `remaining`이 줄지 않아 `exhausted`에 이르지 못한다 (D-51).
+- 2)의 `verdict_at`은 묶음 후보 전부가 같은 값이다 (04장 `candidates`). **열람 불가 후보는 `unseen`이 아니어서 2)가 바꾸지 않는다.** `unseen`만 세므로 `exhausted`에 이르는 데에도 걸리지 않는다 (D-109).
 - 같은 묶음 번호로 요청이 동시에 두 번 와도 1)의 `FOR UPDATE`와 `WHERE status = 'ready'` 조건 때문에 한쪽만 처리된다. 다른 쪽은 409를 받고 다시 조회한다. 프론트는 첫 요청을 보낸 뒤 버튼을 막는다.
   - 다 넘긴 목록은 묶음 번호가 그대로라, 같은 요청을 다시 보내면 409가 아니라 200이 온다. 2)가 바꾸는 행이 없어 결과는 같다.
 - **0)이 필요한 이유는 프론트를 믿을 수 없기 때문이다.** 화면은 9번의 `raw_deleted`를 보고 버튼을 감추지만, 그 값은 마지막 조회 시점의 것이다. 화면을 열어 둔 사이에 원본이 파기되면 낡은 화면에 버튼이 남아 있다. 서버가 막지 않으면 SQS에 작업이 들어가고, 워커가 원본을 찾지 못해 `failed`가 된다 — 보관 기간이 지난 것이 "분석 실패"로 보인다.
@@ -1061,12 +1131,18 @@ SELECT list_kind,
 **백엔드가 하는 일** (전이 9·15, D-80)
 
 ```
-UPDATE analysis_jobs SET status = 'finished', updated_at = now()
- WHERE id = :job_id AND status IN ('ready', 'batch_running')
-→ 0행이면 409 INVALID_STATE
+트랜잭션 시작
+  1) SELECT id, status FROM analysis_jobs
+      WHERE video_id = :video_id FOR UPDATE        -- 14번 고정(FOR SHARE)과 줄을 세운다 (D-101)
+     → ready·batch_running이 아니면 롤백하고 409 INVALID_STATE
+  2) SELECT 1 FROM pinned_incidents WHERE analysis_job_id = :job_id LIMIT 1
+     → 없으면 롤백하고 409 NO_PINNED_INCIDENTS                       (D-110)
+  3) UPDATE analysis_jobs SET status = 'finished', updated_at = now()
+      WHERE id = :job_id
+커밋
 ```
 
-- 화면은 **고정이 1개 이상일 때만** 이 버튼을 보이고, 보내기 전에 확인창을 띄운다 (07장). 고정이 0개면 [다음]으로 후보를 넘겨 `exhausted`로 끝난다. **서버도 해당 작업의 고정이 1개 이상인지 검사한다(D-110). 고정 0개면 상태를 변경하지 않고 거절한다.**
+- 화면은 **고정이 1개 이상일 때만** 이 버튼을 보이고, 보내기 전에 확인창을 띄운다 (07장). 고정이 0개면 [다음]으로 후보를 넘겨 `exhausted`로 끝난다. **서버도 해당 작업의 고정이 1개 이상인지 검사한다(D-110). 고정 0개면 상태를 변경하지 않고 거절한다(2), `NO_PINNED_INCIDENTS`).**
 - `batch_running`에서 부르면 만들던 묶음은 버려진다. 워커의 `batch_running` → `ready`는 조건부 UPDATE라 0행이 되고 메시지를 지우고 끝난다 (04장 4.4). 이미 쓴 GPU 시간은 돌려받지 못한다.
 - **파기하지 않는다.** 원본과 마스킹본은 업로드 완료 30일 뒤에 지운다 (D-64, D-80).
 - SQS에 넣지 않고 GPU도 켜지 않는다.
@@ -1077,6 +1153,7 @@ UPDATE analysis_jobs SET status = 'finished', updated_at = now()
 |---|---|---|---|
 | 404 | `VIDEO_NOT_FOUND` | 없는 영상이거나 남의 영상 | 목록으로 |
 | 409 | `INVALID_STATE` | `ready`·`batch_running`이 아님(이미 끝남 등). `message`에 현재 상태를 적는다 | 상태를 다시 조회한다(9번) |
+| 409 | `NO_PINNED_INCIDENTS` | 해당 작업에 고정이 0개 (D-110) | 화면을 다시 그린다(12번). 고정이 0개라 버튼이 사라진다 |
 
 ## 5.10 이 장에서 미정으로 남는 것
 
@@ -1160,7 +1237,7 @@ flowchart TD
   ST -->|"exhausted"| O{"candidate_total"}
   O -->|"1건 이상"| O1["모든 후보를 확인했습니다<br/>고정한 것이 있으면 목록 (15)"]
   O -->|"0건"| O2["후보 구간이 탐지되지 않았습니다<br/>사건 없음으로 쓰지 않는다"]
-  ST -->|"failed"| Q["분석 실패 안내<br/>이유는 API가 주지 않는다"]
+  ST -->|"failed"| Q["분석 실패 안내<br/>문구는 error_kind로 고른다<br/>can_retry면 [분석 다시 시도] (19)"]
 ```
 
 9번 응답의 값이 어느 결정에 쓰이는지:
@@ -1171,6 +1248,8 @@ flowchart TD
 | `queue_ahead` | "앞에 N건" 문구. `queued`일 때와, `stage1_done`이면서 `input_done`이 `true`일 때 온다 | 04장 4.5, D-81 |
 | `input_done` | 입력 화면을 열지, 대기 화면을 보여줄지. `true`면 고칠 수 없다 | D-49, D-66 |
 | `candidate_total` | `exhausted`의 두 문구 중 어느 쪽인지 | D-50 |
+| `candidate_unavailable` | 완료 문구에서 열람 불가 N건을 알릴지, 전부 열람 불가 안내를 보일지 | D-109 |
+| `error_kind`·`can_retry`·`retry_left` | `failed`일 때 실패 문구와 [분석 다시 시도] 버튼, "N회 남음" | D-112 |
 | `masked_deleted` | 10·12·15번을 부를지, 보관 기간 종료 안내로 대체할지 | D-57 |
 | `duration_sec` | 1단계 전에는 `null`이다. 없을 때의 표시를 정해 둔다 | 5.5 |
 
@@ -1185,14 +1264,14 @@ flowchart TD
 | 영상 목록 | 8 | | 목록을 다시 부르는 시점은 07장에서 정한다 |
 | 업로드 링크 발급 | **없음** | 4 — [링크 다시 발급]을 눌렀을 때만 | |
 | 관리자 업로드 (링크) | 5 | 6 → S3 `PUT` → (남은 시간 3분) 16 → 7 | |
-| 영상 상태·대기 | 9 | | **9번, 5초** (D-138) |
+| 영상 상태·대기 | 9 | 19 [분석 다시 시도] (`failed`이고 `can_retry`일 때) | **9번, 5초** (D-138) |
 | 차량·파손 부위 입력 | 10 | 18 → S3 `PUT` (사진을 넣을 때), 11 | 9 |
 | 후보 확인 | 12, 15 ("확정됨" 표시) | 12 탭 바꾸기 (`?list=`), [이전]·[다음] (`?batch_no=`), 13 [다음 묶음 받기], 14 [찾음], 17 [확인 끝내기] | 9 |
 | 완료 (`exhausted`) | 9, 15 (고정한 것이 있으면 목록) | | |
 | 결과 (`finished`) | 15 | | |
 
 - **업로드 링크 발급 화면은 열 때 4번을 부르면 안 된다.** 발급하면 이전 링크가 죽어서, 화면을 새로 고치는 것만으로 관리자에게 보낸 링크가 무효가 된다 (5.4, D-28).
-- **주기 조회는 9번 하나뿐이다.** 끝 상태(`finished`·`exhausted`·`failed`)에서는 멈춘다. 사용자가 움직여야만 바뀌는 상태(`ready`)에서도 멈출지는 07장에서 정한다. 다른 API를 주기적으로 부르지 않는다 (D-19).
+- **주기 조회는 9번 하나뿐이다.** 끝 상태(`finished`·`exhausted`·`failed`)에서는 멈춘다. 19번이 접수되면 다시 시작한다. 사용자가 움직여야만 바뀌는 상태(`ready`)에서도 멈출지는 07장에서 정한다. 다른 API를 주기적으로 부르지 않는다 (D-19).
 
 ### 에러 `code` 한눈에 보기
 
@@ -1200,19 +1279,23 @@ flowchart TD
 
 | `code` | HTTP | 나오는 API | 프론트가 하는 일 |
 |---|---|---|---|
-| `UNAUTHENTICATED` | 401 | 쿠키를 쓰는 모든 API (3·4·8~16·17·18) | 로그인 화면으로 |
+| `UNAUTHENTICATED` | 401 | 쿠키를 쓰는 모든 API (3·4·8~16·17·18·19) | 로그인 화면으로 |
 | `LOGIN_FAILED` | 401 | 1 | "아이디 또는 비밀번호가 틀렸다" 안내. 로그인 화면에 머문다 |
-| `VIDEO_NOT_FOUND` | 404 | 9~15·17·18 | 목록으로 |
-| `INVALID_STATE` | 409 | 7·10·11·12·13·14·16·17·18 | 9번을 다시 불러 화면을 새로 그린다 |
+| `VIDEO_NOT_FOUND` | 404 | 9~15·17·18·19 | 목록으로 |
+| `INVALID_STATE` | 409 | 7·10·11·12·13·14·16·17·18·19 | 9번을 다시 불러 화면을 새로 그린다 |
+| `NO_PINNED_INCIDENTS` | 409 | 17 | 12번을 다시 불러 화면을 새로 그린다 (D-110) |
+| `RETRY_NOT_ALLOWED` | 409 | 19 | 9번을 다시 불러 화면을 새로 그린다. 파일 확인·재업로드 안내가 나온다 (D-112) |
+| `RETRY_LIMIT_REACHED` | 409 | 19 | 9번을 다시 불러 화면을 새로 그린다. 버튼 없이 문의 안내가 나온다 (D-112) |
 | `VALIDATION_FAILED` | 422 | 1·6·11·12·13·14·18 | 입력을 다시 받는다. 12번이면 쿼리 없이 다시 부른다 |
-| `INTERNAL_ERROR` | 500 | 7·11·13 | 아무것도 바뀌지 않았다. 잠시 후 다시 보낸다 |
+| `AGREEMENT_REQUIRED` | 422 | 6 | 동의 화면으로 돌아간다. 버전이 달랐으면 새로고침해 새 문구를 보인다 (D-147) |
+| `INTERNAL_ERROR` | 500 | 7·11·13·19 | 아무것도 바뀌지 않았다. 잠시 후 다시 보낸다 |
 | `UPLOAD_TOKEN_NOT_FOUND` | 404 | 5·6·7·16 | 링크 주소를 다시 확인하라는 안내 |
 | `UPLOAD_TOKEN_USED` | 410 | 5·6 | 이미 쓴 링크. 새 링크를 받으라는 안내 |
 | `UPLOAD_TOKEN_EXPIRED` | 410 | 5·6 | 만료된 링크. 새 링크를 받으라는 안내 |
 | `UNSUPPORTED_FILE_TYPE` | 422 | 6·18 | 다른 파일을 고르게 한다. 프론트가 먼저 막는다 (D-43, D-83) |
 | `FILE_TOO_LARGE` | 422 | 6·18 | 같다. 5GB(6번)·20MB(18번)는 프론트가 먼저 막는다 (D-22, D-83) |
 | `CLIP_NOT_FOUND` | 404 | 14 | 12번(결과 화면이면 15번)을 다시 불러 화면을 새로 그린다 |
-| `RAW_EXPIRED` | 409 | 11·13·18 | 9번을 다시 불러 화면을 새로 그린다. 마스킹본도 함께 파기돼 보관 기간 종료 안내가 나온다 |
+| `RAW_EXPIRED` | 409 | 11·13·18·19 | 9번을 다시 불러 화면을 새로 그린다. 마스킹본도 함께 파기돼 보관 기간 종료 안내가 나온다 |
 | `MASKED_EXPIRED` | 409 | 10·12·14·15 | 9번을 다시 불러 보관 기간 종료(30일) 안내로 바꾼다 (D-57, D-64) |
 
 - **409는 대부분 "화면이 낡았다"는 뜻이다.** 서버 상태가 이미 바뀌었으니 다시 조회해 그리기만 하면 맞는 화면이 나온다 (5.1).
@@ -1233,13 +1316,13 @@ flowchart TD
 | 고르기와 드래그 사이에는 서버를 부르지 않는다. 11번 한 번으로 같이 저장한다. 사진만 18번으로 먼저 올리고 받은 `photo_key`를 11번에 담는다 | D-36, D-83 |
 | 텍스트 설명은 500자, 사진은 20MB·`.jpg` `.jpeg` `.png` `.heic`까지다. 프론트가 먼저 막는다 | 01장 1.6, D-83 |
 | **저장 전에 확인창을 띄운다. 저장 뒤에는 고칠 수 없고 [다시 입력]은 없다.** `input_done`이 `true`면 입력 화면을 열지 않는다 | D-66 |
-| 6·13·14·17번은 보내는 즉시 버튼을 막는다. 두 번 눌러도 한쪽만 처리된다(14번은 두 번째도 200) | 5.4, 5.8, 5.9 |
+| 6·13·14·17·19번은 보내는 즉시 버튼을 막는다. 두 번 눌러도 한쪽만 처리된다(14번은 두 번째도 200) | 5.4, 5.5, 5.8, 5.9 |
 | 고정(14번) 전에 확인창을 띄운다. 고정 해제 API는 없다 | D-40 |
 | [확인 끝내기] ([17번](#17-post-apivideosvideo_idfinish-확인-끝내기))는 고정이 1개 이상일 때만 보이고, 누르기 전에 확인창을 띄운다 | D-80 |
 | [다음 묶음 받기] ([13번](#13-post-apivideosvideo_idbatchnext-다음-묶음-전체-못-찾음))는 그 탭의 `latest_batch_no` 묶음을 보고 그 탭의 `done`이 `false`일 때만 보인다. 이전 묶음 사이를 오가거나 탭을 바꿀 때는 12번만 부른다 | 5.8, D-79, D-99 |
 | 마지막 [다음]의 확인창은 다른 탭의 `done`도 `true`일 때만 띄운다. 다른 탭에 볼 후보가 남았으면 작업이 끝나지 않는다 | 5.8, D-99 |
 | 다운로드 버튼을 두지 않는다. `clip_url`은 `<video>` 재생용이다 | 불변 조건 8 |
-| VLM 점수·후보 번호·실패 이유는 API가 주지 않는다. 화면에도 없다 | 5.8, 5.5 |
+| VLM 점수·후보 번호·실패 이유 원문(`error_message`)은 API가 주지 않는다. 화면에도 없다. 실패는 `error_kind`로만 나눈다 | 5.8, 5.5 |
 
 ## 관련 결정·조건
 
@@ -1273,7 +1356,7 @@ flowchart TD
 - 정지 장면은 시작 장면 1장, 1단계에서 만든다: D-48
 - 입력 수정은 1단계가 끝나기 전까지, 상태 조회에 `input_done`: D-49 → **입력은 한 번만, 저장 전 확인창: D-66**
 - 후보 0건이면 `exhausted`로 보내고 `candidate_total`로 구분: D-50
-- 클립 생성에 실패한 후보는 이번 묶음에서 빠지고, 다시 만들지 않는다: D-51
+- 클립은 총 3번까지 시도하고, 끝내 실패한 후보는 `verdict = 'unavailable'`(열람 불가): D-109 (D-51 대체)
 - 원본·트랙 파기와 `raw_deleted`·`RAW_EXPIRED`: D-52, D-64 / 열람·파기 기록: D-53
 - 마스킹본 파기와 `masked_deleted`·`MASKED_EXPIRED`: D-57 / 파기 시점은 업로드 완료 30일 뒤 하나: D-64, D-80
 - 부하 대응(무거운 일 금지, 조회 주기, 무상태): D-19, [02장 2.12](02-architecture.md#212-부하-대응)

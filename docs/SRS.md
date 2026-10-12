@@ -7,7 +7,7 @@
 > **2026-10-08 팀장 결정 — REQ-010·011 보완(D-109): 후보 클립 생성의 재시도 가능한 오류는 최초 포함 총 3회까지 시도한다. 복구 불가능한 오류 또는 재시도 소진은 열람 불가로 구분한다. 정상 클립은 제공하고, 열람 불가 후보는 `not_found`로 기록하지 않는다. 묶음·완료 응답과 화면에서 실패 수 및 실제 확인 범위를 구분하고 전체 클립 실패도 종료 가능해야 한다. 필드·집계 상세는 04·05장에 반영 필요하다.**
 
 > 프로젝트: 마스킹 기반 주차장 CCTV 후보선별 서비스
-> 작성일: 2026-10-01 · 마지막 수정: 2026-10-06 · 관리 위치: 로컬 개발 문서
+> 작성일: 2026-10-01 · 마지막 수정: 2026-10-12 · 관리 위치: 로컬 개발 문서
 > 기준: 현재 팀6 요구사항명세서의 요구사항 16개, PRD, 설계 문서 및 사용자의 최신 결정.
 
 ## 1. 목적과 범위
@@ -107,7 +107,7 @@ S3는 비공개 버킷 3개(원본·마스킹·분석 결과)로 나눈다. 원�
 | 요구사항분류(대상) | 서비스 |
 | 우선순위 | 필수 |
 | 관련화면 | 관리자 업로드, 영상 목록 |
-| 관련API·DB | POST /api/uploads/{token}/presign POST /api/uploads/{token}/complete DB: videos, analysis_jobs; 저장소: S3. 위탁계약 동의 저장 API·DB는 반영 필요(D-147, 담당자 결정) |
+| 관련API·DB | POST /api/uploads/{token}/presign POST /api/uploads/{token}/complete DB: videos, analysis_jobs, upload_agreements; 저장소: S3. 위탁계약 동의는 presign 요청에 함께 보내 저장한다(D-147) |
 | 기능설명 | 관리자는 링크로 접속해 개인정보 처리위탁 계약에 동의한 뒤 CCTV 파일을 직접 업로드하고 진행률과 완료 여부를 확인할 수 있어야 한다. |
 | 입력항목 | 위탁계약 동의: 확인 체크 3개(필수). 입력칸은 없고, 본인인증을 거친 것으로 가정한다. 손서명은 받지 않는다(D-147). 영상 1개 MP4·AVI·MKV·MOV, H.264·H.265. 영상 첫 장면의 녹화 시작 시각은 선택 입력한다. 시연 프로그램은 파일 1개 최대 5GB로 제한한다. 운영 전환 시 브라우저 분할 전송을 적용한다(부록 A, 제출 보고서에서는 제외). |
 | 처리조건 | 동의 기록(체크 항목, 계약 문구 버전, 동의 시각, 접속 IP)을 링크에 연결해 저장하고 동의한 때부터 90일 보관한다. 동의 기록이 없으면 업로드 URL을 발급하지 않는다. 크기·확장자를 검사하고 업로드 URL 발급 시 링크를 사용 처리한다. S3 직접 업로드의 완료를 확인한 뒤 1단계 작업을 등록하고 코덱을 검사한다. |
@@ -337,7 +337,7 @@ S3는 비공개 버킷 3개(원본·마스킹·분석 결과)로 나눈다. 원�
 
 ### 5.4 데이터 관리
 
-기존 12개 엔티티(users, sessions, upload_tokens, videos, analysis_jobs, still_frames, vehicle_selections, damage_inputs, candidates, candidate_clips, pinned_incidents, access_logs)를 유지한다. 관리자 위탁계약 동의 기록의 저장 위치(새 테이블 또는 칼럼)는 반영 필요다(D-147, 담당자 결정). 새 파손 사진 버킷·테이블이나 열람기한 저장 칼럼을 추가하지 않는다. 입력은 JSONB에 버전 5로 저장한다 (D-99). 상세 필드·상태 전이·S3 경로는 [데이터 설계](design/04-data-model.md)를 따른다.
+기존 12개 엔티티(users, sessions, upload_tokens, videos, analysis_jobs, still_frames, vehicle_selections, damage_inputs, candidates, candidate_clips, pinned_incidents, access_logs)를 유지하고, 관리자 위탁계약 동의 기록용 `upload_agreements`를 더한다(D-147). 새 파손 사진 버킷·테이블이나 열람기한 저장 칼럼을 추가하지 않는다. 입력은 JSONB에 버전 5로 저장한다 (D-99). 상세 필드·상태 전이·S3 경로는 [데이터 설계](design/04-data-model.md)를 따른다.
 
 ## 6. 테스트 및 AI 성능 평가
 
