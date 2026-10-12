@@ -11,6 +11,7 @@ Task.md
 
 # Codex
 .codex/
+.agents/
 AGENTS.md
 AGENTS.override.md
 
