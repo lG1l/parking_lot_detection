@@ -66,7 +66,7 @@ EC2에 백엔드·비전을 컨테이너로 배포할지는 별도 CD 결정이�
 
 - 원본 메타데이터: 자료 식별명, 파일 상대경로, 실제 해상도·길이, 녹화 시작 시각(선택). `video_id`·`job_id`·`still_frame_id` 등 DB ID는 업로드/적재 시 생성된 값으로 연결하며 고정 숫자를 복사하지 않는다.
 - 정지 장면: `t_sec=0`, 이미지 상대경로, `detections`. `det_id`는 그 이미지 안에서 유일하다.
-- 입력 예시: `vehicle.det_id`가 실제 탐지 항목을 가리키게 한다. 보임의 damage_bbox는 선택 차량 내부, 안 보임은 화면 내부다. floor_corners는 정해진 순서의 4개 원본 좌표, damage_edges는 1개 또는 이웃한 2개다. 미정 크기 제한을 새로 만들지 않는다.
+- 입력 예시: `vehicle.det_id`가 실제 탐지 항목을 가리키게 한다. 보임·안 보임 모두 damage_bbox는 선택 차량 내부다. floor_corners는 정해진 순서의 4개 원본 좌표, damage_edges는 1개 또는 이웃한 2개다. 미정 크기 제한을 새로 만들지 않는다.
 - 후보: 04장의 `judged_at_sec`, `list_kind`, `rank`, VLM 결과와 클립 연결에 필요한 값을 사용한다. 미정인 rule_name·병합 규칙은 테스트용임을 구분하고 알고리즘 결정으로 취급하지 않는다.
 - 시간: `incident_at_sec = judged_at_sec + 5`, `start_sec = max(0, judged_at_sec - 10)`, `end_sec = min(duration_sec, judged_at_sec + 20)`를 따른다. 정상 샘플은 사건 지점이 원본 범위 안에 있도록 고른다. 원본 끝 5초 이내 후보의 사건 지점 처리처럼 아직 불명확한 경계는 별도 명세 확인 대상으로 남긴다.
 - 클립: 파일 경로·start_sec·end_sec·crop_bbox가 실제 샘플과 맞아야 한다. 성공 결과만 재생 파일과 연결하고 열람 불가 결과에는 정상 재생 URL을 만들지 않는다.
