@@ -29,7 +29,7 @@
 
 - `video_player` 패키지는 브라우저의 `<video>` 태그로 영상을 재생한다. 브라우저가 재생할 수 있는 형식이어야 하므로 후보 클립은 **H.264 코덱 MP4**로 만든다. (06장 조건)
 - 기본 주소 형식이 `/#/경로`라서 새로고침해도 404가 나지 않는다.
-- 로컬에서 `flutter run -d chrome`으로 개발하면 프론트와 API의 포트가 달라 CORS 설정이 필요하다. CORS는 출처(주소 + 포트)가 다른 서버로의 요청을 브라우저가 막는 규칙이다. 배포 환경은 같은 출처라 필요 없다. (U-03)
+- 로컬에서 `flutter run -d chrome`으로 개발하면 프론트와 API의 포트가 다르다. API에는 CORS(출처가 다른 서버로의 요청을 브라우저가 막는 규칙)를 켜지 않고, Flutter 개발 서버가 `/api/` 요청을 백엔드로 넘기게 한다(`frontend/web_dev_config.yaml`). 브라우저가 백엔드로 직접 보내는 로컬 파일 URL(`/_local/*`)에만 S3와 같은 CORS를 붙인다. 배포 환경은 같은 출처라 필요 없다. (D-164)
 - 단, 브라우저에서 S3로 직접 업로드할 때는 출처가 달라 **S3 버킷에 CORS 설정**이 필요하다. 데모는 허용 출처 `*`, 메서드 `PUT`만 허용한다. (D-18, D-22)
 - 첫 로딩이 수 MB로 무겁지만 데모에는 문제없다.
 - 키보드 조작(PRD 4장 접근성)은 Focus·Shortcuts 위젯으로 따로 구현해야 한다.
@@ -92,4 +92,4 @@ parking_lot_detection/
 - DB 마이그레이션은 Alembic으로 한다. `backend/pyproject.toml` 의존성에 넣어 `uv.lock`으로 버전을 고정한다. 변경은 `op.execute`에 SQL로 직접 쓰고 자동 생성(autogenerate)은 쓰지 않는다. (D-151)
 - `backend/`의 DB 코드는 SQLAlchemy `text()`로 SQL을 직접 쓰고 값은 파라미터로 바인딩한다. ORM 모델은 만들지 않는다. 쓰기는 `engine.begin()` 안에서 하고, 외부 호출(S3·SQS·EC2)은 커밋한 뒤 블록 밖에서 한다. Ruff에 `S608`·`PGH004`를 더하고, `# noqa: S608`은 허용 목록 값을 넣은 줄에만 쓴다. (D-156)
 - `backend/` API는 동기(`def`)로 짜고 `async def`는 쓰지 않는다. DB 엔진은 `create_engine("postgresql+psycopg://...")`(psycopg 3)이다. boto3·bcrypt는 그대로 부른다. (D-157)
-- Flutter 버전, `pipeline/`의 포맷터·린터는 🚧 (U-03, 10장 문답 후 결정)
+- Flutter 버전, `pipeline/`의 포맷터·린터는 🚧 (U-03, 10장 문답 후 결정). Flutter는 3.38 이상이어야 한다(D-164 개발 서버 프록시)
