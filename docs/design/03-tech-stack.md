@@ -90,4 +90,5 @@ parking_lot_detection/
 - GitHub Actions에서 빌려 쓰는 액션은 큰 번호 태그로 적는다(`actions/checkout@v7`, `astral-sh/setup-uv@v10`). `hashicorp/setup-terraform@v4`를 쓰면 `terraform_version: 1.16.5`를 함께 적는다. (D-150)
 - DB 마이그레이션은 Alembic으로 한다. `backend/pyproject.toml` 의존성에 넣어 `uv.lock`으로 버전을 고정한다. 변경은 `op.execute`에 SQL로 직접 쓰고 자동 생성(autogenerate)은 쓰지 않는다. (D-151)
 - `backend/`의 DB 코드는 SQLAlchemy `text()`로 SQL을 직접 쓰고 값은 파라미터로 바인딩한다. ORM 모델은 만들지 않는다. 쓰기는 `engine.begin()` 안에서 하고, 외부 호출(S3·SQS·EC2)은 커밋한 뒤 블록 밖에서 한다. Ruff에 `S608`·`PGH004`를 더하고, `# noqa: S608`은 허용 목록 값을 넣은 줄에만 쓴다. (D-156)
+- `backend/` API는 동기(`def`)로 짜고 `async def`는 쓰지 않는다. DB 엔진은 `create_engine("postgresql+psycopg://...")`(psycopg 3)이다. boto3·bcrypt는 그대로 부른다. (D-157)
 - Flutter 버전, `pipeline/`의 포맷터·린터는 🚧 (U-03, 10장 문답 후 결정)
