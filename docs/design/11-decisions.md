@@ -2029,7 +2029,7 @@ SELECT EXISTS (
   - 회원가입 API와 화면을 두지 않는다. 피해자 계정은 **백엔드 서버에서 스크립트로 미리 만든다.**
 
 ```bash
-python scripts/create_user.py --login-id victim1 --name 홍길동
+uv run python -m scripts.create_user --login-id victim1 --name 홍길동   # backend/ 폴더에서
 # 비밀번호는 명령어 인자로 받지 않고 실행 중에 입력받는다 (셸 기록에 남지 않게)
 ```
 

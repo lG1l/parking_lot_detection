@@ -22,10 +22,14 @@
 
 회원가입 화면을 두지 않는다. 계정은 서버에서 스크립트로 미리 만든다. (D-44)
 
+`backend/` 폴더에서 실행한다.
+
 ```
-python scripts/create_user.py --login-id victim1 --name 홍길동
+uv run python -m scripts.create_user --login-id victim1 --name 홍길동
 Password: (입력한 문자는 보이지 않는다)
 ```
+
+`python scripts/create_user.py`처럼 파일 경로로 실행하면 `app` 모듈을 찾지 못해 실패한다. `-m`으로 모듈로 실행한다.
 
 - 비밀번호는 **실행 중에 `getpass`로 입력받는다.** 명령행 인자로 받지 않는다. 인자는 셸 기록과 `ps` 출력에 남는다.
 - 스크립트는 8.3의 `hash_password()`를 **로그인 API와 같은 모듈에서 가져다 쓴다.** 두 곳에 따로 구현하면 알고리즘이 갈라진다.
