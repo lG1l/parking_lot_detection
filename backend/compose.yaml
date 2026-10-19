@@ -1,0 +1,16 @@
+# 로컬 개발용 PostgreSQL (D-116). 이 비밀번호는 로컬 전용 공개 값이다.
+# 127.0.0.1에만 열어 같은 네트워크의 다른 PC가 접속하지 못하게 한다.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
