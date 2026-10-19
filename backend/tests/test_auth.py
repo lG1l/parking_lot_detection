@@ -83,13 +83,11 @@ def test_logout_without_cookie_is_204(client):
 
 
 def test_logout_ends_only_this_browser(client):
-    from fastapi.testclient import TestClient
-
-    from app.main import app
+    from tests.conftest import make_client
 
     make_user()
     body = {"login_id": "demo", "password": "demo-password"}
-    other = TestClient(app)
+    other = make_client()
     client.post("/api/auth/login", json=body)
     other.post("/api/auth/login", json=body)
     client.post("/api/auth/logout")

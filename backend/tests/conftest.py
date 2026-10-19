@@ -1,4 +1,6 @@
 import os
+import shutil
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -16,6 +18,9 @@ TEST_URL = os.environ.get(
 os.environ["APP_MODE"] = "local"
 os.environ["DATABASE_URL"] = TEST_URL
 os.environ["LOCAL_URL_SECRET"] = "0" * 64
+# 파일 저장과 폴더 큐도 저장소의 local_storage/ 대신 임시 폴더에 만든다
+# tests.conftest로 다시 import돼도 같은 폴더를 쓰도록 이미 정해졌으면 그 값을 쓴다
+STORAGE = Path(os.environ.setdefault("LOCAL_STORAGE_DIR", tempfile.mkdtemp(prefix="test_storage_")))
 
 BACKEND = Path(__file__).resolve().parent.parent
 TABLES = (
@@ -48,10 +53,21 @@ def _clean_tables(_database):
         conn.execute(text(f"TRUNCATE {TABLES} RESTART IDENTITY CASCADE"))
 
 
-@pytest.fixture
-def client():
+@pytest.fixture(autouse=True)
+def _clean_storage():
+    yield
+    for child in STORAGE.iterdir():
+        shutil.rmtree(child, ignore_errors=True)
+
+
+def make_client(**kwargs):
     from fastapi.testclient import TestClient
 
     from app.main import app
 
-    return TestClient(app)
+    return TestClient(app, client=("127.0.0.1", 50000), **kwargs)
+
+
+@pytest.fixture
+def client():
+    return make_client()

@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     app_mode: Literal["local", "aws"]  # 기본값 없음 (D-158)
     database_url: str
     local_url_secret: str = ""
+    local_base_url: str = "http://localhost:8000"
+    local_storage_dir: str = ""  # 비면 저장소 루트의 local_storage/ (D-121)
     aws_region: str = ""
     s3_bucket_prefix: str = ""
     sqs_queue_url: str = ""
