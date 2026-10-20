@@ -9,6 +9,10 @@ from app.db import get_engine
 logger = logging.getLogger(__name__)
 
 LOGIN = "login"
+ISSUE_UPLOAD_LINK = "issue_upload_link"
+VIEW_STILL = "view_still"
+VIEW_CLIP = "view_clip"
+PIN_INCIDENT = "pin_incident"
 
 
 def client_ip(request: Request) -> str | None:

@@ -288,3 +288,25 @@ def test_view_url_is_capped_by_view_expiry():
     short = datetime.now().astimezone() + timedelta(seconds=60)
     exp = int(storage.make_view_url("k", short).split("exp=")[1].split("&")[0])
     assert exp - datetime.now().timestamp() <= 61
+
+
+# ---- 열람 기록 (05장 5.1) ----
+
+
+def logs():
+    return [tuple(r) for r in sql("SELECT action, user_id, video_id FROM access_logs ORDER BY id")]
+
+
+def test_still_view_is_logged_only_on_success(admin):
+    me = user_id()
+    vid, job = add_video(me, status="stage1_done")
+    admin.get(f"/api/videos/{vid}/still")  # 409, 장면이 없다
+    assert [a for a, *_ in logs() if a == "view_still"] == []
+    add_still(job, vid)
+    admin.get(f"/api/videos/{vid}/still")
+    assert ("view_still", me, vid) in logs()
+
+
+def test_issue_upload_link_is_logged(admin):
+    admin.post("/api/upload-links")
+    assert ("issue_upload_link", user_id(), None) in logs()

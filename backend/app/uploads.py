@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Request, Response
 from pydantic import AwareDatetime, BaseModel, Field, StrictBool
 from sqlalchemy import text
 
-from app import jobs, storage
+from app import access_log, jobs, storage
 from app.access_log import client_ip
 from app.auth import current_user
 from app.db import get_engine
@@ -66,7 +66,7 @@ def _used_link(conn, token: str):
 
 
 @router.post("/api/upload-links", status_code=201)
-def create_upload_link(user: Annotated[dict, Depends(current_user)]):
+def create_upload_link(request: Request, user: Annotated[dict, Depends(current_user)]):
     token = new_token()
     with get_engine().begin() as conn:
         # 같은 사용자의 발급을 한 줄로 세워, 살아 있는 링크가 하나만 남게 한다 (D-103)
@@ -85,6 +85,7 @@ def create_upload_link(user: Annotated[dict, Depends(current_user)]):
             ),
             {"h": token_hash(token), "u": user["id"], "n": LINK_HOURS},
         ).scalar_one()
+    access_log.write_access_log(access_log.ISSUE_UPLOAD_LINK, request, user_id=user["id"])
     return {"token": token, "expires_at": _iso(expires_at)}
 
 

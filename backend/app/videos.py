@@ -1,10 +1,10 @@
 from datetime import datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import text
 
-from app import storage
+from app import access_log, storage
 from app.auth import current_user
 from app.db import get_engine
 from app.errors import ApiError
@@ -134,7 +134,7 @@ def get_video(video_id: int, user: Annotated[dict, Depends(current_user)]):
 
 
 @router.get("/{video_id}/still")
-def get_still(video_id: int, user: Annotated[dict, Depends(current_user)]):
+def get_still(video_id: int, request: Request, user: Annotated[dict, Depends(current_user)]):
     with get_engine().connect() as conn:
         row = _owned_video(conn, video_id, user["id"])
         expires_at = _view_expires_at(row.upload_completed_at)
@@ -151,6 +151,9 @@ def get_still(video_id: int, user: Annotated[dict, Depends(current_user)]):
         ).one_or_none()
     if still is None:
         raise ApiError(409, "INVALID_STATE", f"still frame is not ready (status: {row.status})")
+    access_log.write_access_log(
+        access_log.VIEW_STILL, request, user_id=user["id"], video_id=video_id
+    )
     return {
         "still_frame_id": still.id,
         "t_sec": still.t_sec,
