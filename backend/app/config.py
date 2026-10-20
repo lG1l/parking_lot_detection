@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     s3_bucket_prefix: str = ""
     sqs_queue_url: str = ""
     gpu_instance_id: str = ""
+    requeue_after_minutes: int = 10  # 멈춘 작업 재전송 기준 시간 (D-153)
 
     @model_validator(mode="after")
     def _check_mode_keys(self) -> Self:
