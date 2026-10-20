@@ -410,7 +410,7 @@ users ──┬──< sessions        (로그인 세션)
 | `login` | 로그인 성공 (5.3) | 열람 요구자 특정 (표준지침 제44조⑤) |
 | `issue_upload_link` | 업로드 링크 발급 (5.4) | 수집 경로 기록 |
 | `view_still` | 정지 장면 조회 (5.6) | **열람** |
-| `view_clip` | 후보 클립 재생 URL 발급 (5.8) | **열람** |
+| `view_clip` | 후보 클립 재생 URL 발급 (5.8, 5.9의 14·15번) | **열람** |
 | `pin_incident` | 사건 지점 고정 (5.9). 고정 한 건마다 한 행 | 이용 기록 (표준지침 제42조) |
 | `delete_raw` | 원본 파기 주기 작업 (D-52) | 파기 기록 (표준지침 제42조) |
 | `delete_masked` | 마스킹본·분석 결과 파기 주기 작업 (D-57) | 파기 기록 (표준지침 제42조) |
@@ -472,7 +472,7 @@ users ──┬──< sessions        (로그인 세션)
   |---|---|---|---|---|
   | 1 | `stage1_ended_at`이 비어 있음 | `queued` | `stage1` | 1단계를 처음부터 (전이 2) |
   | 2 | `stage2_ended_at`이 비어 있음 | `stage1_done` (입력 유지) | `stage2` | `processed_sec`부터 (전이 7, 4.4) |
-  | 3 | 지금 보여주는 묶음(`current_batch_no`·`current_failed_batch_no`)의 후보 중 클립이 `pending`·`running`인 것이 있음 | `batch_running` | `next_batch` | `pending` 클립부터 (4.4) |
+  | 3 | 지금 보여주는 묶음(`current_batch_no`·`current_failed_batch_no`) 중 만드는 중인 것이 있음. 후보의 클립이 `pending`·`running`이거나, 그 묶음 번호가 매겨진 후보가 아직 없다 (D-169, D-171) | `batch_running` | `next_batch` | `pending` 클립부터, 번호가 없으면 번호부터 (4.4) |
   | 4 | 그 밖. 보여줄 묶음은 준비됐고 다음 묶음을 미리 만들다 실패했다 | `ready` | `next_batch` | 같다 |
 
   - 3과 4를 가르는 이유: 미리 만들다 실패한 작업을 `batch_running`으로 되돌리면, 이미 준비된 지금 묶음까지 만드는 중으로 막힌다.

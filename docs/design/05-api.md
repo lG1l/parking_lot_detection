@@ -84,7 +84,7 @@
 | 1. 로그인 | `login` | `user_id`, `requested_ip` |
 | 4. 업로드 링크 발급 | `issue_upload_link` | `user_id`, `requested_ip` |
 | 10. 정지 장면 조회 | `view_still` | `user_id`, `video_id`, `requested_ip` |
-| 12·15. 재생 URL이 들어가는 조회 | `view_clip` | `user_id`, `video_id`, `requested_ip` |
+| 12·14·15. 재생 URL이 들어가는 조회·고정 | `view_clip` | `user_id`, `video_id`, `requested_ip` |
 | 14. 사건 지점 고정 | `pin_incident` | `user_id`, `video_id`, `requested_ip` |
 | (API 아님) 원본 파기 주기 작업 | `delete_raw` | `video_id`. `user_id`·`requested_ip`는 비어 있다 (D-52) |
 | (API 아님) 마스킹본·분석 결과 파기 주기 작업 | `delete_masked` | `video_id`. `user_id`·`requested_ip`는 비어 있다 (D-57) |
@@ -1057,7 +1057,7 @@ SELECT list_kind,
 ```
 
 - **상태를 바꾸지 않는다.** 행 하나를 넣을 뿐이라 트랜잭션을 따로 묶지 않는다. 2)의 SELECT에 `FOR SHARE`를 붙여 17번·13번과 순서를 정한다(직렬화). 고정이 먼저면 고정을 포함한 채로 끝나고, 끝내기가 먼저면 409 `INVALID_STATE`다 (04장 `pinned_incidents`, D-101).
-- **같은 클립을 두 번 고르면 200이다.** 버튼을 빠르게 두 번 누른 경우라 에러로 알릴 이유가 없다. `access_logs`의 `pin_incident`는 새 행이 생겼을 때만 남긴다.
+- **같은 클립을 두 번 고르면 200이다.** 버튼을 빠르게 두 번 누른 경우라 에러로 알릴 이유가 없다. `access_logs`의 `pin_incident`는 새 행이 생겼을 때만 남긴다. 응답에 재생 URL이 클립마다 나가므로 `view_clip`도 15번처럼 응답의 클립마다 한 행씩 남긴다 (D-170).
 - 1)의 확인이 빠지면 남의 클립 번호로 고정해 그 재생 URL을 받을 수 있다. FK는 클립이 있는지만 볼 뿐 어느 작업의 것인지는 보지 않는다 (D-35).
 - **이전 묶음의 클립으로도 고정된다**(`verdict`가 `not_found`여도 막지 않는다). [다음]으로 넘긴 뒤에 이전 묶음에 사건이 있었다는 것을 깨닫는 경우를 위해서다 (D-79).
   - `batch_running`(다음 묶음을 만드는 중)에도 고정된다. 상태가 바뀌지 않으므로 만들던 묶음도 그대로 이어진다.
