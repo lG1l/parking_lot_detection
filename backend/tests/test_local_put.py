@@ -49,7 +49,8 @@ def test_put_cannot_overwrite(client, upload_url):
 
 def test_put_rejects_bad_signature(client, upload_url):
     path, query = upload_url.split("?")
-    assert put(client, f"{path}?{query[:-1]}0").status_code == 403
+    wrong = "1" if query.endswith("0") else "0"  # 마지막 글자가 원래와 다르게 한다
+    assert put(client, f"{path}?{query[:-1]}{wrong}").status_code == 403
     assert put(client, f"{path.replace('videos/', 'videos/9')}?{query}").status_code == 403
     assert raw_files() == []
 
