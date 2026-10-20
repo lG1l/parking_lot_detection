@@ -1,12 +1,19 @@
 import json
+import threading
 
 import pytest
 
+from local import fake_worker
 from tests.conftest import make_client
 from tests.test_batches import make_ready
 from tests.test_input import login_again
 from tests.test_uploads import login, queue_files
 from tests.test_videos import add_video, sql, user_id
+
+
+@pytest.fixture(autouse=True)
+def fast(monkeypatch):
+    monkeypatch.setattr(fake_worker, "STEP_SECONDS", 0)
 
 
 @pytest.fixture
@@ -125,3 +132,20 @@ def test_queue_failure_rolls_back_retry(me, monkeypatch):
     monkeypatch.setattr("app.jobs.send_job", boom)
     assert retry(client, vid).status_code == 500
     assert job_state() == ("failed", 0, "vlm_outage", "x")
+
+
+def test_concurrent_retry_with_one_left_accepts_one(me):
+    """10장 9번: 재시도를 2번 쓴 뒤 두 요청이 동시에 와도 마지막 1번만 접수한다."""
+    vid, job = add_video(me, "a.mp4", "failed", failure_kind="vlm_outage", retries=2)
+    fail(job)
+    clients = [login_again(make_client()) for _ in range(2)]
+    codes = []
+    threads = [
+        threading.Thread(target=lambda c=c: codes.append(retry(c, vid).status_code))
+        for c in clients
+    ]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert sorted(codes) == [202, 409]
+    assert job_state()[:2] == ("queued", 3)
+    assert queued_kinds() == ["stage1"]

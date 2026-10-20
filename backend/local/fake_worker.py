@@ -22,18 +22,26 @@ STEP_SECONDS = 2  # 상태를 바꾸는 UPDATE 사이의 대기 (D-160)
 POLL_SECONDS = 1
 STILL = Path(__file__).parent / "still.jpg"  # 합성 이미지 1920x1080. 팀장 fixtures가 오면 교체한다
 
-# 허용 목록 (D-161 2번). 클립 실패 시나리오는 4d에서 더한다.
+# 허용 목록 (D-161 2번)
 SCENARIOS = (
     "normal",
     "many",
     "no_vehicles",
     "zero_candidates",
+    "clip_fail_retry_ok",
+    "clip_fail_final",
+    "clip_fail_all",
     "input_error",
     "stage1_fail_once",
     "stage1_fail_always",
     "stage2_fail_once",
     "stage2_fail_always",
+    "batch_fail_once",
+    "batch_fail_always",
 )
+# 다음 묶음이 있어야 [다음]이 next_batch를 넣으므로 batch_fail도 many의 후보 수를 쓴다
+MANY = ("many", "batch_fail_once", "batch_fail_always")
+CLIP_TRIES = 3  # 최초 포함 (D-109)
 
 # 정지 장면에서 탐지된 차량. 이미지 속 사각형 위치와 같다
 DETECTIONS = [
@@ -186,7 +194,7 @@ class Worker:
     # ---- 후보·클립 (04장 4.4) ----
     def make_candidates(self, job_id: int) -> None:
         """후보를 만들고 목록마다 점수순 rank를 매긴다. 묶음 1·2에 번호를 매겨 클립 행을 만든다."""
-        main_count, failed_count = (25, 3) if self.scenario == "many" else (3, 0)
+        main_count, failed_count = (25, 3) if self.scenario in MANY else (3, 0)
         with self.engine.begin() as conn:
             if conn.execute(
                 text("SELECT 1 FROM candidates WHERE analysis_job_id = :j LIMIT 1"), {"j": job_id}
@@ -262,6 +270,46 @@ class Worker:
                     break
         return made
 
+    def clip_failures(self, list_kind: str, rank: int) -> int:
+        """이 후보의 클립이 처음부터 몇 번 실패할지 (D-161 5번 표)."""
+        if self.scenario == "clip_fail_all":
+            return CLIP_TRIES
+        if list_kind != "main":
+            return 0
+        if self.scenario == "clip_fail_retry_ok":
+            return {1: 1, 2: 2}.get(rank, 0)  # 1위는 2번째, 2위는 3번째 시도에 성공
+        if self.scenario == "clip_fail_final":
+            return CLIP_TRIES if rank == 2 else 0
+        return 0
+
+    def fail_clip(self, clip_id: int, candidate_id: int, tries: int) -> None:
+        """running 클립을 failed로 바꾼다. 3번째면 후보를 unavailable로, 아니면 새 pending 행을 만든다 (04장 candidate_clips)."""
+        with self.engine.begin() as conn:
+            moved = conn.execute(
+                text(
+                    "UPDATE candidate_clips SET status = 'failed' WHERE id = :c AND status = 'running'"
+                ),
+                {"c": clip_id},
+            ).rowcount
+            if moved != 1:
+                return
+            if tries < CLIP_TRIES:
+                conn.execute(
+                    text(
+                        "INSERT INTO candidate_clips (candidate_id, start_sec, end_sec, crop_bbox) "
+                        "SELECT candidate_id, start_sec, end_sec, crop_bbox FROM candidate_clips "
+                        "WHERE id = :c"
+                    ),
+                    {"c": clip_id},
+                )
+            else:
+                conn.execute(
+                    text(
+                        "UPDATE candidates SET verdict = 'unavailable' WHERE id = :d AND verdict = 'unseen'"
+                    ),
+                    {"d": candidate_id},
+                )
+
     def make_pending_clips(self, job_id: int) -> None:
         """pending 클립을 하나씩 가져가(pending → running) 파일을 쓰고 done으로 바꾼다."""
         while True:
@@ -276,8 +324,20 @@ class Worker:
                     ),
                     {"j": job_id},
                 ).one_or_none()
+                if clip is not None:
+                    info = conn.execute(
+                        text(
+                            "SELECT d.list_kind, d.rank, count(c.id) AS tries FROM candidates d "
+                            "JOIN candidate_clips c ON c.candidate_id = d.id WHERE d.id = :d "
+                            "GROUP BY d.id"
+                        ),
+                        {"d": clip.candidate_id},
+                    ).one()
             if clip is None:
                 return
+            if info.tries <= self.clip_failures(info.list_kind, info.rank):
+                self.fail_clip(clip.id, clip.candidate_id, info.tries)
+                continue
             video_id = self.job(job_id).video_id
             key = f"videos/{video_id}/clips/{clip.id}.mp4"
             target = storage_root() / "masked" / key
@@ -294,7 +354,13 @@ class Worker:
 
     def next_batch(self, job_id: int) -> bool:
         """미리 만들던 pending 클립부터 마치고, 앞서 있지 않은 목록에 한 묶음을 더 만든다 (04장 4.4)."""
-        if self.job(job_id) is None:
+        row = self.job(job_id)
+        if row is None:
+            return True
+        if row.status in ("ready", "batch_running") and self.should_fail(
+            "batch_fail", row.user_retry_count
+        ):
+            self.fail(job_id, row.status, "worker_died", "fake worker: injected failure")
             return True
         self.make_pending_clips(job_id)
         with self.engine.begin() as conn:

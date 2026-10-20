@@ -26,6 +26,7 @@ def make_ready(me, scenario="normal"):
     """워커가 2단계를 끝낸 영상(ready)."""
     vid, job = add_video(me, status="stage1_done", input_done=True)
     sql("UPDATE videos SET width = 1920, height = 1080 WHERE id = :v", v=vid)
+    sql("UPDATE analysis_jobs SET stage1_ended_at = now() WHERE id = :j", j=job)
     fake_worker.Worker(scenario, step=False).handle(job, "stage2")
     return vid, job
 
@@ -240,3 +241,82 @@ def test_concurrent_next_yields_one_success(me):
     [t.join() for t in threads]
     assert sorted(codes) == [200, 409]
     assert sql("SELECT current_batch_no FROM analysis_jobs").scalar_one() == 2
+
+
+# ---- 클립·다음 묶음 실패 시나리오 (10장 7·8번, D-161) ----
+
+
+def clip_rows(rank):
+    return [
+        r.status
+        for r in sql(
+            "SELECT c.status FROM candidate_clips c JOIN candidates d ON d.id = c.candidate_id "
+            "WHERE d.list_kind = 'main' AND d.rank = :r ORDER BY c.id",
+            r=rank,
+        )
+    ]
+
+
+def test_clip_fail_retry_ok_shows_every_candidate(client, me):
+    vid, job = make_ready(me, "clip_fail_retry_ok")
+    assert job_row(job).status == "ready"
+    assert clip_rows(1) == ["failed", "done"]
+    assert clip_rows(2) == ["failed", "failed", "done"]
+    assert clip_rows(3) == ["done"]
+    body = batch(client, vid).json()
+    assert [c["rank"] for c in body["candidates"]] == [1, 2, 3]
+    assert body["unavailable"] == 0
+    done = sql("SELECT id FROM candidate_clips WHERE status = 'done' ORDER BY id").scalars().all()
+    assert sorted(c["candidate_clip_id"] for c in body["candidates"]) == done
+
+
+def test_clip_fail_final_marks_unavailable_and_keeps_it(client, me):
+    vid, _ = make_ready(me, "clip_fail_final")
+    assert clip_rows(2) == ["failed", "failed", "failed"]
+    body = batch(client, vid).json()
+    assert [c["rank"] for c in body["candidates"]] == [1, 3]
+    assert body["unavailable"] == 1
+    assert nxt(client, vid).json()["status"] == "exhausted"
+    verdicts = sql("SELECT rank, verdict FROM candidates ORDER BY rank").all()
+    assert [tuple(v) for v in verdicts] == [(1, "not_found"), (2, "unavailable"), (3, "not_found")]
+
+
+def test_clip_fail_all_leaves_nothing_to_watch(client, me):
+    vid, job = make_ready(me, "clip_fail_all")
+    assert job_row(job).status == "ready"
+    body = batch(client, vid).json()
+    assert body["candidates"] == [] and body["unavailable"] == 3
+    assert sql("SELECT count(*) FROM candidate_clips").scalar_one() == 9
+    assert nxt(client, vid).json()["status"] == "exhausted"
+
+
+def press_next_and_run(client, vid, job, scenario):
+    for f in queue_files():
+        f.unlink()
+    nxt(client, vid)
+    assert [p.name for p in queue_files()]
+    fake_worker.Worker(scenario, step=False).handle(job, "next_batch")
+
+
+def test_batch_fail_once_resumes_after_retry(client, me):
+    vid, job = make_ready(me, "batch_fail_once")
+    press_next_and_run(client, vid, job, "batch_fail_once")
+    row = job_row(job)
+    assert (row.status, row.failure_kind) == ("failed", "worker_died")
+    r = client.post(f"/api/videos/{vid}/retry")
+    assert (
+        r.status_code == 202 and r.json()["status"] == "ready"
+    )  # 묶음 2는 이미 준비됨 (4.3 표 4번)
+    fake_worker.Worker("batch_fail_once", step=False).handle(job, "next_batch")
+    assert job_row(job).status == "ready"
+    top = sql("SELECT max(batch_no) FROM candidates WHERE list_kind = 'main'").scalar_one()
+    assert top == 3
+
+
+def test_batch_fail_always_fails_again_after_retry(client, me):
+    vid, job = make_ready(me, "batch_fail_always")
+    press_next_and_run(client, vid, job, "batch_fail_always")
+    client.post(f"/api/videos/{vid}/retry")
+    fake_worker.Worker("batch_fail_always", step=False).handle(job, "next_batch")
+    row = job_row(job)
+    assert (row.status, row.user_retry_count) == ("failed", 1)

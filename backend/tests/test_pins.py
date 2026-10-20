@@ -2,10 +2,17 @@ import threading
 
 import pytest
 
+from local import fake_worker
 from tests.conftest import make_client
 from tests.test_batches import batch, make_ready, nxt
 from tests.test_input import login_again
+from tests.test_uploads import new_link, presign
 from tests.test_videos import add_video, sql
+
+
+@pytest.fixture(autouse=True)
+def fast(monkeypatch):
+    monkeypatch.setattr(fake_worker, "STEP_SECONDS", 0)
 
 
 @pytest.fixture
@@ -224,3 +231,18 @@ def test_concurrent_pin_and_finish_never_pin_after_finish(me):
     assert codes["finish"] == 200
     # 고정이 먼저면 포함해서 끝나고(200, 2행), 끝내기가 먼저면 거절된다(409, 1행)
     assert (codes["pin"], count("pinned_incidents")) in ((200, 2), (409, 1))
+
+
+def test_other_upload_keeps_review_in_progress(client, me):
+    """10장 6번: A를 확인하는 도중 B를 올리고 분석해도 A의 상태·고정·후보 판정은 그대로다."""
+    vid, _ = make_ready(me)
+    first = clip_ids(client, vid)[0]
+    pin(client, vid, first)
+    token = new_link(client)
+    presign(client, token)
+    assert client.post(f"/api/uploads/{token}/complete").status_code == 204
+    other = sql("SELECT id FROM analysis_jobs WHERE status = 'queued'").scalar_one()
+    fake_worker.Worker("normal", step=False).handle(other, "stage1")
+    assert client.get(f"/api/videos/{vid}").json()["status"] == "ready"
+    assert [p["candidate_clip_id"] for p in pinned(client, vid).json()] == [first]
+    assert count("candidates WHERE verdict != 'unseen'") == 0
