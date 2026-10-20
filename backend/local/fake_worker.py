@@ -22,9 +22,10 @@ STEP_SECONDS = 2  # 상태를 바꾸는 UPDATE 사이의 대기 (D-160)
 POLL_SECONDS = 1
 STILL = Path(__file__).parent / "still.jpg"  # 합성 이미지 1920x1080. 팀장 fixtures가 오면 교체한다
 
-# 허용 목록 (D-161 2번). 나머지 시나리오는 단계 4에서 후보·클립과 함께 더한다.
+# 허용 목록 (D-161 2번). 클립 실패 시나리오는 4d에서 더한다.
 SCENARIOS = (
     "normal",
+    "many",
     "no_vehicles",
     "zero_candidates",
     "input_error",
@@ -39,6 +40,10 @@ DETECTIONS = [
     {"det_id": 1, "bbox": [810, 440, 960, 620], "conf": 0.91},
     {"det_id": 2, "bbox": [950, 435, 1120, 625], "conf": 0.88},
 ]
+# ffmpeg가 없는 환경에서도 돌도록 클립 파일은 자리표시 바이트다. API·상태 흐름만 확인하며 재생은 안 된다.
+FAKE_CLIP = b"fake mp4 clip for local api checks"
+CROP_BBOX = [800, 430, 1130, 630]
+BATCH_SIZE = 10  # 01장 1.6
 FAKE_VIDEO = {"d": 86400.0, "f": 30.0, "w": 1920, "h": 1080}  # 길이(초)·fps·가로·세로
 
 
@@ -165,14 +170,188 @@ class Worker:
             self.pause(job_id, "stage2_running → exhausted")
             self.move(job_id, "stage2_running", "exhausted", "stage2_ended_at = now(), ")
             return True
-        self.log(job_id, "this scenario needs candidates (not built yet); message stays in taken/")
-        return False
+        self.pause(job_id, "stage2_running → ready")
+        self.make_candidates(job_id)
+        self.make_pending_clips(job_id)
+        self.move(
+            job_id,
+            "stage2_running",
+            "ready",
+            "stage2_ended_at = now(), current_batch_no = 1, current_failed_batch_no = ("
+            "SELECT 1 FROM candidates WHERE analysis_job_id = :j AND list_kind = 'parse_failed' "
+            "LIMIT 1), ",
+        )
+        return True
+
+    # ---- 후보·클립 (04장 4.4) ----
+    def make_candidates(self, job_id: int) -> None:
+        """후보를 만들고 목록마다 점수순 rank를 매긴다. 묶음 1·2에 번호를 매겨 클립 행을 만든다."""
+        main_count, failed_count = (25, 3) if self.scenario == "many" else (3, 0)
+        with self.engine.begin() as conn:
+            if conn.execute(
+                text("SELECT 1 FROM candidates WHERE analysis_job_id = :j LIMIT 1"), {"j": job_id}
+            ).first():
+                return  # 재전달된 메시지가 후보를 두 번 만들지 않는다
+            for i in range(main_count + failed_count):
+                failed = i >= main_count
+                conn.execute(
+                    text(
+                        "INSERT INTO candidates (analysis_job_id, judged_at_sec, channel, rule_name, "
+                        "track_id, vlm_pass1, vlm_score, list_kind, rank) "
+                        "VALUES (:j, :t, 'A', 'fake_rule', :tr, :p1, :sc, :lk, :rk)"
+                    ),
+                    {
+                        "j": job_id,
+                        "t": 600.0 + i * 120,
+                        "tr": i + 1,
+                        "p1": None if failed else True,
+                        "sc": None if failed else 95 - i,
+                        "lk": "parse_failed" if failed else "main",
+                        "rk": i - main_count + 1 if failed else i + 1,
+                    },
+                )
+            self.number_batches(conn, job_id, ("main", "parse_failed"), upto=2)
+
+    def number_batches(
+        self, conn, job_id: int, kinds: tuple[str, ...], upto: int | None = None
+    ) -> bool:
+        """번호 없는 후보 10개에 다음 batch_no를 매기고 pending 클립 행을 만든다. 목록마다 따로 센다.
+
+        upto가 있으면 그 번호까지, 없으면 목록마다 한 묶음만 만든다. 하나라도 만들었으면 True.
+        """
+        made = False
+        for kind in kinds:
+            while True:
+                top = conn.execute(
+                    text(
+                        "SELECT coalesce(max(batch_no), 0) FROM candidates "
+                        "WHERE analysis_job_id = :j AND list_kind = :k"
+                    ),
+                    {"j": job_id, "k": kind},
+                ).scalar_one()
+                if upto is not None and top >= upto:
+                    break
+                ids = conn.execute(
+                    text(
+                        "SELECT id, judged_at_sec FROM candidates WHERE analysis_job_id = :j "
+                        "AND list_kind = :k AND batch_no IS NULL ORDER BY rank LIMIT :n"
+                    ),
+                    {"j": job_id, "k": kind, "n": BATCH_SIZE},
+                ).all()
+                if not ids:
+                    break
+                made = True
+                for row in ids:
+                    conn.execute(
+                        text("UPDATE candidates SET batch_no = :b WHERE id = :c"),
+                        {"b": top + 1, "c": row.id},
+                    )
+                    conn.execute(
+                        text(
+                            "INSERT INTO candidate_clips (candidate_id, start_sec, end_sec, crop_bbox) "
+                            "VALUES (:c, :s, :e, :box)"
+                        ),
+                        {
+                            "c": row.id,
+                            "s": row.judged_at_sec - 15,
+                            "e": row.judged_at_sec + 15,
+                            "box": CROP_BBOX,
+                        },
+                    )
+                if upto is None:
+                    break
+        return made
+
+    def make_pending_clips(self, job_id: int) -> None:
+        """pending 클립을 하나씩 가져가(pending → running) 파일을 쓰고 done으로 바꾼다."""
+        while True:
+            with self.engine.begin() as conn:
+                clip = conn.execute(
+                    text(
+                        "UPDATE candidate_clips SET status = 'running' WHERE id = ("
+                        "SELECT c.id FROM candidate_clips c JOIN candidates d ON d.id = c.candidate_id "
+                        "WHERE d.analysis_job_id = :j AND c.status = 'pending' "
+                        "ORDER BY c.id LIMIT 1 FOR UPDATE SKIP LOCKED) AND status = 'pending' "
+                        "RETURNING id, candidate_id"
+                    ),
+                    {"j": job_id},
+                ).one_or_none()
+            if clip is None:
+                return
+            video_id = self.job(job_id).video_id
+            key = f"videos/{video_id}/clips/{clip.id}.mp4"
+            target = storage_root() / "masked" / key
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(FAKE_CLIP)
+            with self.engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "UPDATE candidate_clips SET status = 'done', masked_s3_key = :k "
+                        "WHERE id = :c AND status = 'running'"
+                    ),
+                    {"k": key, "c": clip.id},
+                )
+
+    def next_batch(self, job_id: int) -> bool:
+        """미리 만들던 pending 클립부터 마치고, 앞서 있지 않은 목록에 한 묶음을 더 만든다 (04장 4.4)."""
+        if self.job(job_id) is None:
+            return True
+        self.make_pending_clips(job_id)
+        with self.engine.begin() as conn:
+            job = conn.execute(
+                text(
+                    "SELECT status, current_batch_no, current_failed_batch_no "
+                    "FROM analysis_jobs WHERE id = :j FOR UPDATE"
+                ),
+                {"j": job_id},
+            ).one()
+            if job.status not in ("ready", "batch_running"):
+                return True
+            current = {"main": job.current_batch_no, "parse_failed": job.current_failed_batch_no}
+            made = False
+            for kind, cur in current.items():
+                if cur is None:
+                    continue
+                top = conn.execute(
+                    text(
+                        "SELECT coalesce(max(batch_no), 0) FROM candidates "
+                        "WHERE analysis_job_id = :j AND list_kind = :k"
+                    ),
+                    {"j": job_id, "k": kind},
+                ).scalar_one()
+                if top >= cur + 1:
+                    continue  # 이미 한 묶음 앞서 있다
+                made |= self.number_batches(conn, job_id, (kind,))
+        if not made:
+            self.finish_batch(job_id)
+            return True
+        self.pause(job_id, "batch_running → ready")
+        self.make_pending_clips(job_id)
+        self.finish_batch(job_id)
+        return True
+
+    def finish_batch(self, job_id: int) -> None:
+        """전이 11: 두 목록의 지금 묶음 클립이 모두 만들어졌으면 batch_running → ready."""
+        with self.engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE analysis_jobs j SET status = 'ready', updated_at = now() "
+                    "WHERE j.id = :j AND j.status = 'batch_running' AND NOT EXISTS ("
+                    "SELECT 1 FROM candidate_clips c JOIN candidates d ON d.id = c.candidate_id "
+                    "WHERE d.analysis_job_id = j.id AND c.status IN ('pending', 'running') "
+                    "AND d.batch_no = CASE d.list_kind WHEN 'main' THEN j.current_batch_no "
+                    "ELSE j.current_failed_batch_no END)"
+                ),
+                {"j": job_id},
+            )
 
     def handle(self, job_id: int, kind: str) -> bool:
         if kind == "stage1":
             return self.stage1(job_id)
         if kind == "stage2":
             return self.stage2(job_id)
+        if kind == "next_batch":
+            return self.next_batch(job_id)
         self.log(job_id, f"{kind} is not built yet; message stays in taken/")
         return False
 

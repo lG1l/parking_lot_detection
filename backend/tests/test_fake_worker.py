@@ -98,7 +98,6 @@ def test_stage2_failure_is_vlm_outage(me):
 
 def test_unbuilt_paths_keep_message(me):
     _, job = add_video(me, status="stage1_done", input_done=True)
-    assert run("normal", job, "stage2") is False  # 후보 시나리오는 단계 4
     assert run("normal", job, "clip") is False
 
 
