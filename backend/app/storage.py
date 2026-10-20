@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import time
+from datetime import datetime
 from pathlib import Path
 
 import boto3
@@ -54,4 +55,28 @@ def make_upload_url(key: str) -> str:
             "IfNoneMatch": "*",
         },
         ExpiresIn=UPLOAD_URL_SECONDS,
+    )
+
+
+def make_view_url(key: str, valid_until: datetime) -> str:
+    """마스킹본 버킷의 파일을 읽는 주소. 유효 시간은 15분과 남은 열람기한 중 짧은 쪽 (D-41, D-92)."""
+    settings = get_settings()
+    seconds = min(
+        UPLOAD_URL_SECONDS, int((valid_until - datetime.now(valid_until.tzinfo)).total_seconds())
+    )
+    seconds = max(seconds, 1)
+    if settings.app_mode == "local":
+        exp = int(time.time()) + seconds
+        sig = _signature("GET", "masked", key, exp)
+        return f"{settings.local_base_url}/_local/masked/{key}?exp={exp}&sig={sig}"
+    s3 = boto3.client(
+        "s3",
+        region_name=settings.aws_region,
+        endpoint_url=f"https://s3.{settings.aws_region}.amazonaws.com",
+        config=Config(s3={"addressing_style": "virtual"}),
+    )
+    return s3.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": f"{settings.s3_bucket_prefix}-masked", "Key": key},
+        ExpiresIn=seconds,
     )

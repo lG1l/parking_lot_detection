@@ -1,3 +1,4 @@
+import subprocess
 import sys
 
 from fastapi import FastAPI
@@ -50,4 +51,9 @@ def test_validation_and_api_error_and_500():
 
 
 def test_app_does_not_import_local():
-    assert not [m for m in sys.modules if m == "local" or m.startswith("local.")]
+    # 다른 테스트가 local을 import하므로 새 프로세스에서 확인한다
+    code = (
+        "import sys, app.main; "
+        "sys.exit(any(m == 'local' or m.startswith('local.') for m in sys.modules))"
+    )
+    assert subprocess.run([sys.executable, "-c", code], check=False).returncode == 0
