@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 from pathlib import Path
 
@@ -25,13 +26,16 @@ def _area_path(area: str, key: str) -> Path:
 async def put_raw(key: str, request: Request, exp: int, sig: str):
     if not storage.verify_local_signature("PUT", "raw", key, exp, sig):
         raise ApiError(403, "FORBIDDEN", "invalid or expired signature")
-    if request.headers.get("if-none-match") != "*":
+    # 파손 사진은 다시 올리면 덮어쓴다(05장 18번). 영상 원본은 덮어쓰지 못한다 (D-100)
+    is_photo = re.fullmatch(storage.PHOTO_KEY_PATTERN, key) is not None
+    limit = storage.MAX_PHOTO_BYTES if is_photo else storage.MAX_UPLOAD_BYTES
+    if not is_photo and request.headers.get("if-none-match") != "*":
         raise ApiError(403, "FORBIDDEN", "If-None-Match: * is required")
     final = _area_path("raw", key)
-    if final.exists():
+    if not is_photo and final.exists():
         raise ApiError(412, "PRECONDITION_FAILED", "object already exists")
     declared = request.headers.get("content-length")
-    if declared and declared.isdigit() and int(declared) > storage.MAX_UPLOAD_BYTES:
+    if declared and declared.isdigit() and int(declared) > limit:
         raise ApiError(413, "TOO_LARGE", "object is too large")
 
     tmp_dir = final.parent
@@ -42,13 +46,16 @@ async def put_raw(key: str, request: Request, exp: int, sig: str):
         with tmp.open("wb") as out:
             async for chunk in request.stream():
                 received += len(chunk)
-                if received > storage.MAX_UPLOAD_BYTES:
+                if received > limit:
                     raise ApiError(413, "TOO_LARGE", "object is too large")
                 await run_in_threadpool(out.write, chunk)
-        try:
-            os.link(tmp, final)  # 이미 있으면 실패해서 덮어쓰지 않는다
-        except FileExistsError:
-            raise ApiError(412, "PRECONDITION_FAILED", "object already exists") from None
+        if is_photo:
+            os.replace(tmp, final)
+        else:
+            try:
+                os.link(tmp, final)  # 이미 있으면 실패해서 덮어쓰지 않는다
+            except FileExistsError:
+                raise ApiError(412, "PRECONDITION_FAILED", "object already exists") from None
     finally:
         tmp.unlink(missing_ok=True)
     return Response(status_code=200)

@@ -11,6 +11,8 @@ from app.config import get_settings
 
 UPLOAD_URL_SECONDS = 900  # 01장 1.6, D-41
 MAX_UPLOAD_BYTES = 5 * 1024**3  # 01장 1.6, D-22
+MAX_PHOTO_BYTES = 20 * 1024**2  # 01장 1.6, D-83
+PHOTO_KEY_PATTERN = r"videos/\d+/inputs/photo\.(jpg|jpeg|png|heic)"  # 04장 4.9
 
 
 def storage_root() -> Path:
@@ -78,5 +80,37 @@ def make_view_url(key: str, valid_until: datetime) -> str:
     return s3.generate_presigned_url(
         "get_object",
         Params={"Bucket": f"{settings.s3_bucket_prefix}-masked", "Key": key},
+        ExpiresIn=seconds,
+    )
+
+
+def make_photo_upload_url(key: str, size_bytes: int, valid_until: datetime) -> str:
+    """파손 사진을 원본 버킷에 PUT할 주소. 다시 받으면 같은 키를 덮어쓴다 (05장 18번, D-83)."""
+    settings = get_settings()
+    seconds = max(
+        min(
+            UPLOAD_URL_SECONDS,
+            int((valid_until - datetime.now(valid_until.tzinfo)).total_seconds()),
+        ),
+        1,
+    )
+    if settings.app_mode == "local":
+        exp = int(time.time()) + seconds
+        sig = _signature("PUT", "raw", key, exp)
+        return f"{settings.local_base_url}/_local/raw/{key}?exp={exp}&sig={sig}"
+    s3 = boto3.client(
+        "s3",
+        region_name=settings.aws_region,
+        endpoint_url=f"https://s3.{settings.aws_region}.amazonaws.com",
+        config=Config(s3={"addressing_style": "virtual"}),
+    )
+    return s3.generate_presigned_url(
+        "put_object",
+        # ContentLength가 서명에 들어가 알려준 크기와 다른 파일은 S3가 거절한다
+        Params={
+            "Bucket": f"{settings.s3_bucket_prefix}-raw",
+            "Key": key,
+            "ContentLength": size_bytes,
+        },
         ExpiresIn=seconds,
     )
