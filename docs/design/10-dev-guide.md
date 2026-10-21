@@ -183,7 +183,7 @@ uvicorn에 `--host 0.0.0.0`을 붙이지 않는다. 기본값 `127.0.0.1`은 내
   uv run ruff format --check .
   uv run pytest
   ```
-  CI는 `postgres:16` 서비스 컨테이너를 띄우고 `TEST_DATABASE_URL`을 지정한다. `app_test` DB 생성과 마이그레이션은 `tests/conftest.py`가 한다. Secrets·AWS 자격 증명을 쓰지 않고, `GITHUB_TOKEN`은 읽기 권한(`contents: read`)만 갖는다. 프론트·비전 작업은 명령을 받으면 같은 파일에 추가한다.
+  CI는 `ubuntu-24.04` 러너(D-172)에서 `postgres:16` 서비스 컨테이너를 띄우고 `TEST_DATABASE_URL`을 지정한다. `app_test` DB 생성과 마이그레이션은 `tests/conftest.py`가 한다. Secrets·AWS 자격 증명을 쓰지 않고, `GITHUB_TOKEN`은 읽기 권한(`contents: read`)만 갖는다. 프론트·비전 작업은 명령을 받으면 같은 파일에 추가한다.
 - 테스트는 기능 구현과 함께 추가한다. 현재 문서는 요구사항이며 워크플로·테스트가 구현되거나 통과했다는 뜻이 아니다.
 
 ### 배포와의 관계
