@@ -174,7 +174,7 @@ uvicorn에 `--host 0.0.0.0`을 붙이지 않는다. 기본값 `127.0.0.1`은 내
 - DB가 필요한 검사에는 CI 실행 안에서 임시 PostgreSQL을 준비한다. 실제 서비스 DB나 팀원 로컬 DB에 연결하지 않는다.
 - 테스트 DB에 마이그레이션과 필요한 테스트 데이터를 적용한 뒤 검사를 실행한다. 실행별로 독립된 데이터를 사용하며 다음 CI 실행에 결과를 보존할 필요는 없다.
 - 팀원 2가 `.github/workflows/ci.yml` 같은 워크플로 파일에 `main` 푸시 트리거, 코드 내려받기, 환경·의존성 설치, 임시 DB 준비, 분야별 검사 명령을 설정한다. 파일명과 작업 분할·도구·구체 명령은 담당자가 정한다.
-- 워크플로에서 쓰는 액션은 큰 번호 태그로 적는다(`actions/checkout@v7`, `astral-sh/setup-uv@v10`). 버그 수정은 자동으로 받고 다음 큰 번호로는 넘어가지 않는다. `hashicorp/setup-terraform@v4`를 쓰면 `terraform_version: 1.16.5`를 함께 적는다. (D-150)
+- 워크플로에서 쓰는 액션은 큰 번호 태그로 적는다(`actions/checkout@v7`, `astral-sh/setup-uv@v10.3.0`. setup-uv는 큰 번호 태그가 없어 정확한 버전을 적는다). 버그 수정은 자동으로 받고 다음 큰 번호로는 넘어가지 않는다. `hashicorp/setup-terraform@v4`를 쓰면 `terraform_version: 1.16.5`를 함께 적는다. (D-150)
 - 팀원 1과 팀장은 자기 분야 테스트 및 필요한 의존성·실행 명령을 팀원 2에게 전달한다. 로컬과 CI에서 같은 검사를 재현할 수 있도록 실제 명령을 이 장에 보완한다.
 - 백엔드 검사는 `.github/workflows/ci.yml`의 `backend` 작업이 `backend/` 폴더에서 아래 순서로 실행한다. 로컬에서는 `docker compose up -d` 뒤 같은 명령으로 재현한다.
   ```
