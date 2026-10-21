@@ -31,15 +31,18 @@
 |---|---|---|---|
 | 업로드 presigned URL | `backend/app/storage.py` `make_upload_url` | 발급한 URL로 실제 PUT이 성공하는가. 지역 주소(`s3.<region>.amazonaws.com`)와 virtual 스타일 주소에서 리디렉션이 나오지 않는가. 만료(15분) 뒤 403인가 | 백엔드 |
 | `If-None-Match` | 같은 곳 `IfNoneMatch` | 서명에 포함된 `If-None-Match: *`를 프론트가 보내야 통과한다. 같은 키에 두 번째 PUT이 `412`로 막히는가 (D-100) | 백엔드 + 프론트 |
+| 열람 presigned URL | `backend/app/storage.py` `make_view_url` | 마스킹본 버킷 GET URL로 클립·사진이 실제로 재생·표시되는가. 유효 시간이 15분과 남은 열람기한 중 짧은 쪽인가 (D-41, D-92). 만료 뒤 403인가 | 백엔드 + 프론트 |
+| 사진 업로드 presigned URL | `backend/app/storage.py` `make_photo_upload_url` | 서명에 `ContentLength`가 들어가, 알려준 `size_bytes`와 크기가 다른 파일을 S3가 거절하는가. 같은 키로 다시 올리면 덮어쓰는가 (05장 18번, D-83) | 백엔드 + 프론트 |
 | 버킷 CORS | Terraform | 브라우저가 S3로 직접 PUT할 때 `PUT` 메서드와 `If-None-Match` 헤더가 허용되는가 (D-158 "대신 잃는 것") | 백엔드 |
 | SQS 보내기 | `backend/app/jobs.py` `send_job` | 백엔드 EC2 역할에 `sqs:SendMessage`가 있는가. `SQS_QUEUE_URL` 값이 맞는가. 보내기에 실패하면 D-46대로 롤백되고 500이 나는가 | 백엔드 |
-| SQS 재전달 | 06장, 04장 4.4 | 워커가 죽으면 가시성 제한 시간 뒤 메시지가 다시 전달되는가. 10분 넘게 `queued`에 멈춘 작업을 백엔드가 다시 보내는가 (D-56). 가짜 워커로 대신 검증하지 않는다 | 백엔드 + 팀장 |
+| SQS 재전달 | 06장, 04장 4.4, `backend/app/periodic.py` `requeue_stalled` | 워커가 죽으면 가시성 제한 시간 뒤 메시지가 다시 전달되는가. 10분 넘게 `queued`·`batch_running`·입력을 마친 `stage1_done`에 멈춘 작업을 백엔드가 다시 보내는가 (D-56, D-153). 가짜 워커로 대신 검증하지 않는다 | 백엔드 + 팀장 |
 | GPU 켜기 | `backend/app/jobs.py` `start_gpu` | 역할에 `ec2:StartInstances`가 있는가. 실패해도 API가 204를 주므로(D-42) 응답이 아니라 로그(`gpu start failed: <예외 타입>`)로 확인한다. 예외 타입만 남기므로 원인을 가리기 어려우면 로그 내용을 늘릴지 판단한다 | 백엔드 |
+| GPU 켜기 점검 | `backend/app/periodic.py` `GpuCheck` | 역할에 `ec2:DescribeInstances`가 있는가. 기다리는 작업이 있고 GPU가 `stopped`일 때만 `StartInstances`를 부르는가. 실패 로그는 `GPU start failed: <에러 코드>`이고, 같은 코드가 이어지면 한 번만 남는가. 다시 성공하면 `GPU start succeeded after N failures`가 남는가 (D-42) | 백엔드 |
 | 자격 증명 | 코드 전체 | 액세스 키 없이 EC2 역할(boto3 기본 체인)만으로 위 호출이 모두 되는가 (D-123) | 백엔드 |
 
 ## 로컬 PostgreSQL (D-116)
 
-DB만 Docker Compose로 실행한다. 프론트·백엔드·비전 코드는 각 PC에서 직접 실행한다. 팀원 2가 버전을 고정한 Compose 설정, 로컬 연결 환경변수, 데이터 볼륨, 실행·중지·명시적 테스트 초기화 명령을 작성한다. 컨테이너를 껐다 켜는 동작과 DB 데이터 삭제를 구분한다. 실제 Compose 파일은 아직 작성하지 않았다.
+DB만 Docker Compose로 실행한다. 프론트·백엔드·비전 코드는 각 PC에서 직접 실행한다. 팀원 2가 버전을 고정한 Compose 설정, 로컬 연결 환경변수, 데이터 볼륨, 실행·중지·명시적 테스트 초기화 명령을 작성한다. 컨테이너를 껐다 켜는 동작과 DB 데이터 삭제를 구분한다. Compose 파일은 `backend/compose.yaml`이다.
 
 - DB 데이터는 named volume에 둔다. bind mount로 저장소 안에 두지 않는다. 평소 끌 때는 `docker compose down`, 볼륨을 지우는 `down -v`는 테스트 초기화 명령으로만 쓴다. (D-121)
 - 👤 팀원 2 결정 필요: 볼륨 이름 고정(`name:`) 여부, 위 명령을 안내하는 실제 명령어. (D-121)
@@ -54,6 +57,26 @@ EC2에 백엔드·비전을 컨테이너로 배포할지는 별도 CD 결정이�
 - **실행 중 생성 파일은 모두 `local_storage/`에만 만든다** (`.gitignore` 등록됨, D-121). `raw/` `masked/` `analysis/`는 S3 버킷 3개를 대신하며 안의 경로는 04장 4.9의 S3 키를 그대로 쓴다. 그 밖의 실행 결과는 `local_storage/scratch/<폴더명>/`에 둔다.
 - 테스트 초기화는 별도 명시적 명령으로 수행하며 마이그레이션 실행 때 분석 상태·고정 결과를 자동 삭제하지 않는다. 공통 테스트 원본과 AWS 데이터는 초기화 대상이 아니다.
 - 팀원 2가 도구 선택 후 최초 실행·변경 적용·데이터 입력·초기화의 실제 명령을 작성한다. 마이그레이션 도구는 Alembic이다. 변경 적용은 `uv run alembic upgrade head`, 새 파일 만들기는 `uv run alembic revision -m "<설명>"`이다. 변경 내용은 `op.execute`에 SQL로 직접 쓴다(D-151). PostgreSQL은 16이다(D-144). 버전 변경은 기존 볼륨 호환성·이전 방법을 별도로 확인한다.
+
+### 백엔드 로컬 실행
+
+`backend/` 폴더에서 실행한다.
+
+```
+cp .env.example .env                 # LOCAL_URL_SECRET만 채운다
+docker compose up -d                 # DB 켜기 (끌 때 docker compose down)
+uv sync
+uv run alembic upgrade head          # 처음과 git pull 뒤마다
+uv run python -m scripts.create_user --login-id victim1 --name 홍길동
+uv run uvicorn app.main:app          # API 서버 (터미널 1)
+uv run python -m local.fake_worker   # 가짜 워커 (터미널 2, --scenario·--step)
+uv run python -m app.periodic        # 주기 작업 (터미널 3, D-105)
+uv run pytest                        # 테스트 (app_test DB를 따로 쓴다)
+```
+
+API 서버만 띄우면 업로드·조회는 되지만, 멈춘 작업 재전송과 파기 표시는 주기 작업을 띄워야 돈다. 로컬 모드에서 주기 작업은 GPU 점검을 하지 않는다. 테스트 초기화는 `docker compose down -v`이며 로컬 DB 데이터가 모두 지워진다 (D-121).
+
+uvicorn에 `--host 0.0.0.0`을 붙이지 않는다. 기본값 `127.0.0.1`은 내 PC에서만 접속되지만, `0.0.0.0`으로 띄우면 같은 네트워크의 다른 PC도 API에 접근할 수 있다.
 
 ## 로컬 테스트 자료 명세
 
@@ -153,6 +176,14 @@ EC2에 백엔드·비전을 컨테이너로 배포할지는 별도 CD 결정이�
 - 팀원 2가 `.github/workflows/ci.yml` 같은 워크플로 파일에 `main` 푸시 트리거, 코드 내려받기, 환경·의존성 설치, 임시 DB 준비, 분야별 검사 명령을 설정한다. 파일명과 작업 분할·도구·구체 명령은 담당자가 정한다.
 - 워크플로에서 쓰는 액션은 큰 번호 태그로 적는다(`actions/checkout@v7`, `astral-sh/setup-uv@v10`). 버그 수정은 자동으로 받고 다음 큰 번호로는 넘어가지 않는다. `hashicorp/setup-terraform@v4`를 쓰면 `terraform_version: 1.16.5`를 함께 적는다. (D-150)
 - 팀원 1과 팀장은 자기 분야 테스트 및 필요한 의존성·실행 명령을 팀원 2에게 전달한다. 로컬과 CI에서 같은 검사를 재현할 수 있도록 실제 명령을 이 장에 보완한다.
+- 백엔드 검사는 `.github/workflows/ci.yml`의 `backend` 작업이 `backend/` 폴더에서 아래 순서로 실행한다. 로컬에서는 `docker compose up -d` 뒤 같은 명령으로 재현한다.
+  ```
+  uv sync --locked
+  uv run ruff check .
+  uv run ruff format --check .
+  uv run pytest
+  ```
+  CI는 `postgres:16` 서비스 컨테이너를 띄우고 `TEST_DATABASE_URL`을 지정한다. `app_test` DB 생성과 마이그레이션은 `tests/conftest.py`가 한다. Secrets·AWS 자격 증명을 쓰지 않고, `GITHUB_TOKEN`은 읽기 권한(`contents: read`)만 갖는다. 프론트·비전 작업은 명령을 받으면 같은 파일에 추가한다.
 - 테스트는 기능 구현과 함께 추가한다. 현재 문서는 요구사항이며 워크플로·테스트가 구현되거나 통과했다는 뜻이 아니다.
 
 ### 배포와의 관계
