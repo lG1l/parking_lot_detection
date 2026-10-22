@@ -1,0 +1,7 @@
+# flutter run -d chrome 개발 서버 설정 (D-164)
+# /api/ 요청을 로컬 백엔드로 넘긴다. 배포 빌드(flutter build web)에는 쓰이지 않는다.
+server:
+  port: 8080
+  proxy:
+    - prefix: "/api/"
+      target: "http://localhost:8000/"
