@@ -69,7 +69,7 @@ def _error_kind(row, expires_at: datetime | None) -> tuple[str, bool]:
         return "expired", False
     if row.failure_kind == "vlm_outage":
         return "temporary", retry_left > 0
-    return "service", retry_left > 0  # vlm_parse_rate·worker_died. 🚧 팀장 확인(05장 9번)
+    return "service", retry_left > 0  # vlm_parse_rate·worker_died (D-173)
 
 
 @router.get("")
