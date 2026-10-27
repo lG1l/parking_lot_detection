@@ -12,6 +12,46 @@ from app.errors import ApiError
 
 router = APIRouter(prefix="/_local")
 
+# S3 버킷 CORS와 같은 응답 헤더 (D-164 3번). 영역별로 메서드·요청 헤더가 다르다.
+_CORS = {
+    "/_local/raw/": ("PUT", "Content-Type, If-None-Match"),
+    "/_local/masked/": ("GET", "Range"),
+}
+
+
+class LocalCors:
+    """/_local/* 응답에만 CORS 헤더를 붙인다. 403·412 같은 오류 응답에도 붙여 프론트가 상태 코드를 읽는다."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        rule = None
+        if scope["type"] == "http":
+            rule = next((v for p, v in _CORS.items() if scope["path"].startswith(p)), None)
+        if rule is None:
+            await self.app(scope, receive, send)
+            return
+        methods, allow_headers = rule
+        headers = [(b"access-control-allow-origin", b"*")]
+        if scope["method"] == "OPTIONS":  # preflight는 라우트에 보내지 않고 여기서 답한다
+            headers += [
+                (b"access-control-allow-methods", methods.encode()),
+                (b"access-control-allow-headers", allow_headers.encode()),
+                (b"access-control-max-age", b"3600"),
+                (b"content-length", b"0"),
+            ]
+            await send({"type": "http.response.start", "status": 204, "headers": headers})
+            await send({"type": "http.response.body", "body": b""})
+            return
+
+        async def send_with_cors(message):
+            if message["type"] == "http.response.start":
+                message["headers"] = [*message["headers"], *headers]
+            await send(message)
+
+        await self.app(scope, receive, send_with_cors)
+
 
 def _area_path(area: str, key: str) -> Path:
     root = (storage.storage_root() / area).resolve()
