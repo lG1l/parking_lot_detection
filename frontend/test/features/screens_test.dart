@@ -62,6 +62,22 @@ void main() {
     expect(find.text('2026-11-19 10:00까지 열람 가능'), findsOneWidget);
   });
 
+  testWidgets('비밀번호 칸의 눈 아이콘으로 보기와 숨기기를 바꾼다 (2.1, D-181)', (tester) async {
+    final backend = FakeBackend({'GET /api/auth/me': (_) => apiError(401, 'UNAUTHENTICATED')});
+    await pumpApp(tester, backend, '/');
+    bool obscured() =>
+        tester.widget<TextField>(find.widgetWithText(TextField, '비밀번호')).obscureText;
+    expect(obscured(), isTrue);
+
+    await tester.tap(find.byTooltip('비밀번호 보기'));
+    await tester.pump();
+    expect(obscured(), isFalse);
+
+    await tester.tap(find.byTooltip('비밀번호 숨기기'));
+    await tester.pump();
+    expect(obscured(), isTrue);
+  });
+
   testWidgets('업로드 링크는 버튼을 눌렀을 때만 발급한다 (2.3)', (tester) async {
     final backend = FakeBackend({
       'POST /api/upload-links': (_) =>

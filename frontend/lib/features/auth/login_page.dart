@@ -21,6 +21,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _id = TextEditingController();
   final _password = TextEditingController();
   bool _busy = false;
+  bool _showPassword = false;
 
   @override
   void dispose() {
@@ -83,8 +84,20 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       const SizedBox(height: 12),
                       TextField(
                         controller: _password,
-                        decoration: const InputDecoration(labelText: '비밀번호'),
-                        obscureText: true,
+                        decoration: InputDecoration(
+                          labelText: '비밀번호',
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _showPassword
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
+                            ),
+                            tooltip: _showPassword ? '비밀번호 숨기기' : '비밀번호 보기',
+                            onPressed: () =>
+                                setState(() => _showPassword = !_showPassword),
+                          ),
+                        ),
+                        obscureText: !_showPassword,
                         autofillHints: const [AutofillHints.password],
                         onSubmitted: (_) => _login(),
                       ),
