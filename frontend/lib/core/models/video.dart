@@ -25,12 +25,12 @@ String statusLabel(String status) => switch (status) {
   VideoStatus.stage2Running => '분석 중',
   VideoStatus.ready || VideoStatus.batchRunning => '확인 가능',
   VideoStatus.finished => '확인 끝남',
-  VideoStatus.exhausted => '확인 끝남', // finished와 같은 이름 (D-185)
+  VideoStatus.exhausted => '확인 끝남', // finished와 같은 이름 (D-186)
   VideoStatus.failed => '분석 실패',
   _ => status,
 };
 
-/// 목록 칩 색을 정하는 상태 묶음 (07장 2.2, D-182). ended는 보관 기간 종료 (D-185).
+/// 목록 칩 색을 정하는 상태 묶음 (07장 2.2, D-183). ended는 보관 기간 종료 (D-186).
 enum StatusGroup { todo, problem, waiting, done, ended }
 
 StatusGroup statusGroup(String status) => switch (status) {
@@ -60,13 +60,13 @@ class VideoSummary {
   final String status;
   final String? viewExpiresAt;
 
-  /// 열람기한이 지났는지. 목록 칩 표시에만 쓴다. 영상을 열 수 있는지는 서버(9번)가 정한다 (D-185).
+  /// 열람기한이 지났는지. 목록 칩 표시에만 쓴다. 영상을 열 수 있는지는 서버(9번)가 정한다 (D-186).
   bool get ended {
     final expires = viewExpiresAt;
     return expires != null && DateTime.parse(expires).isBefore(DateTime.now());
   }
 
-  /// 열람기한이 지났으면 상태와 관계없이 "종료됨" (D-185).
+  /// 열람기한이 지났으면 상태와 관계없이 "종료됨" (D-186).
   String get listLabel => ended ? '종료됨' : statusLabel(status);
 
   StatusGroup get listGroup => ended ? StatusGroup.ended : statusGroup(status);

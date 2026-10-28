@@ -34,7 +34,7 @@ abstract class Browser {
   /// 개발 중 확인용 콘솔 출력 (07장 2.4 403 처리).
   void log(String message);
 
-  /// 앱 안에 이전 기록이 있으면 브라우저 뒤로 가기를 하고 true. 없으면 false (D-184).
+  /// 앱 안에 이전 기록이 있으면 브라우저 뒤로 가기를 하고 true. 없으면 false (D-185).
   bool historyBack();
 }
 

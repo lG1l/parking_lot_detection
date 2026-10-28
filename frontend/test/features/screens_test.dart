@@ -64,7 +64,7 @@ void main() {
     expect(find.text('2026-11-19 10:00까지 열람 가능'), findsOneWidget);
   });
 
-  testWidgets('입력필요순 정렬은 서버를 다시 부르지 않고 순서만 바꾼다 (2.2, D-182, D-185)', (tester) async {
+  testWidgets('입력필요순 정렬은 서버를 다시 부르지 않고 순서만 바꾼다 (2.2, D-183, D-186)', (tester) async {
     Map<String, Object?> item(int id, String name, String status, {bool expired = false}) => {
       'video_id': id,
       'original_filename': name,
@@ -113,7 +113,7 @@ void main() {
     expect(backend.calls.where((c) => c == 'GET /api/videos').length, 1);
   });
 
-  testWidgets('빈 칸이면 서버를 부르지 않고 안내를 보인다 (2.1, D-181)', (tester) async {
+  testWidgets('빈 칸이면 서버를 부르지 않고 안내를 보인다 (2.1, D-182)', (tester) async {
     final backend = FakeBackend({'GET /api/auth/me': (_) => apiError(401, 'UNAUTHENTICATED')});
     await pumpApp(tester, backend, '/');
 
@@ -129,7 +129,7 @@ void main() {
     expect(find.text('비밀번호를 입력하세요'), findsOneWidget);
   });
 
-  testWidgets('비밀번호 칸의 눈 아이콘으로 보기와 숨기기를 바꾼다 (2.1, D-181)', (tester) async {
+  testWidgets('비밀번호 칸의 눈 아이콘으로 보기와 숨기기를 바꾼다 (2.1, D-182)', (tester) async {
     final backend = FakeBackend({'GET /api/auth/me': (_) => apiError(401, 'UNAUTHENTICATED')});
     await pumpApp(tester, backend, '/');
     bool obscured() =>
@@ -160,7 +160,7 @@ void main() {
     expect(find.text('링크는 2026-10-23 14:03까지 한 번만 쓸 수 있습니다.'), findsOneWidget);
   });
 
-  testWidgets('상단 바 로고를 누르면 영상 목록으로 간다 (D-184)', (tester) async {
+  testWidgets('상단 바 로고를 누르면 영상 목록으로 간다 (D-185)', (tester) async {
     final backend = FakeBackend({'GET /api/videos': (_) => json([])});
     await pumpApp(tester, backend, '/videos/upload-link');
     await tester.tap(find.text(serviceName));
@@ -168,7 +168,7 @@ void main() {
     expect(find.textContaining('아직 올라온 영상이 없습니다'), findsOneWidget);
   });
 
-  testWidgets('[←]는 이전 기록이 없으면 영상 목록으로 가고, 영상 목록에는 [←]가 없다 (D-184)', (tester) async {
+  testWidgets('[←]는 이전 기록이 없으면 영상 목록으로 가고, 영상 목록에는 [←]가 없다 (D-185)', (tester) async {
     final backend = FakeBackend({'GET /api/videos': (_) => json([])});
     await pumpApp(tester, backend, '/videos/upload-link');
     await tester.tap(find.byTooltip('이전 화면'));
@@ -177,7 +177,7 @@ void main() {
     expect(find.byTooltip('이전 화면'), findsNothing);
   });
 
-  testWidgets('관리자 업로드 화면의 로고는 눌러도 그대로다 (D-184)', (tester) async {
+  testWidgets('관리자 업로드 화면의 로고는 눌러도 그대로다 (D-185)', (tester) async {
     final backend = FakeBackend({
       'GET /api/uploads/tok': (_) => apiError(410, 'UPLOAD_TOKEN_USED'),
     });

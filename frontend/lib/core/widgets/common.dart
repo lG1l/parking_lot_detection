@@ -25,7 +25,7 @@ Future<void> backendNotice(BuildContext context, WidgetRef ref, String action) a
 }
 
 /// 사용자가 누르지 않았는데 앱이 다른 화면으로 보내는 이동. 브라우저 기록을 새로 쌓지 않고
-/// 지금 기록을 바꿔, 뒤로 가기가 사용자가 연 이전 화면으로 가게 한다 (D-184).
+/// 지금 기록을 바꿔, 뒤로 가기가 사용자가 연 이전 화면으로 가게 한다 (D-185).
 void redirectTo(BuildContext context, String path) =>
     Router.neglect(context, () => context.go(path));
 
@@ -75,7 +75,7 @@ Future<bool> confirm(
 }
 
 /// 화면 공통 틀. PC 브라우저 기준이라 가운데 최대 폭을 둔다.
-/// 상단 바 왼쪽은 어느 화면이든 같은 로고이고, 화면 제목은 본문 맨 위에 둔다 (D-184).
+/// 상단 바 왼쪽은 어느 화면이든 같은 로고이고, 화면 제목은 본문 맨 위에 둔다 (D-185).
 class PageFrame extends StatelessWidget {
   const PageFrame({
     super.key,
@@ -93,10 +93,10 @@ class PageFrame extends StatelessWidget {
   final List<Widget> actions;
   final double maxWidth;
 
-  /// 로고를 누르면 영상 목록으로 갈지. 관리자 업로드 화면은 false (D-184).
+  /// 로고를 누르면 영상 목록으로 갈지. 관리자 업로드 화면은 false (D-185).
   final bool homeLink;
 
-  /// 제목 왼쪽 [←]. 관리자 업로드 화면은 false (D-184).
+  /// 제목 왼쪽 [←]. 관리자 업로드 화면은 false (D-185).
   final bool showBack;
 
   @override
@@ -137,7 +137,7 @@ class PageFrame extends StatelessWidget {
   }
 }
 
-/// [←] 이전 화면. 브라우저 뒤로 가기와 같고, 이전 기록이 없으면 영상 목록 (D-184).
+/// [←] 이전 화면. 브라우저 뒤로 가기와 같고, 이전 기록이 없으면 영상 목록 (D-185).
 /// 서버를 부르지 않는다 (07장 3.7).
 class _BackButton extends ConsumerWidget {
   const _BackButton();

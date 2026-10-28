@@ -40,7 +40,7 @@
 
 ### 글꼴 (Pretendard)
 
-- Pretendard는 SIL OFL 1.1 라이선스다. 앱에 넣어 배포할 수 있고, 라이선스 파일(`LICENSE.txt`)을 글꼴 파일과 함께 둔다. (D-183)
+- Pretendard는 SIL OFL 1.1 라이선스다. 앱에 넣어 배포할 수 있고, 라이선스 파일(`LICENSE.txt`)을 글꼴 파일과 함께 둔다. (D-184)
 - ByteTrack을 추적기로 내장 지원한다.
 
 ### Bedrock VLM

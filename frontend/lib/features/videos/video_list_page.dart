@@ -9,7 +9,7 @@ import '../../core/format.dart';
 import '../../core/models/video.dart';
 import '../../core/widgets/common.dart';
 
-/// 목록 정렬 (D-182-4). 화면에서만 정렬하고 8번을 다시 부르지 않는다.
+/// 목록 정렬 (D-183-4). 화면에서만 정렬하고 8번을 다시 부르지 않는다.
 enum _Sort { latest, needsInput }
 
 /// 2.2 영상 목록. 언제든 돌아오는 중심 화면이다 (D-110, D-111).
@@ -167,7 +167,7 @@ class _VideoListPageState extends ConsumerState<VideoListPage> {
   }
 }
 
-/// 상태 묶음별 색·아이콘 칩 (D-182, D-185).
+/// 상태 묶음별 색·아이콘 칩 (D-183, D-186).
 class _StatusChip extends StatelessWidget {
   const _StatusChip(this.video);
 
