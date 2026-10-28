@@ -52,7 +52,11 @@ class DemoApi extends Api {
       'candidate_total': 12,
       'candidate_unavailable': 2,
     });
-    add(11, '11_보관기간종료.mp4', VideoStatus.finished, {'masked_deleted': true, 'raw_deleted': true});
+    add(11, '11_보관기간종료.mp4', VideoStatus.finished, {
+      'masked_deleted': true,
+      'raw_deleted': true,
+      'view_expires_at': _iso(DateTime.now().subtract(const Duration(days: 1))),
+    });
 
     _pins[3] = [_pinOf(_clip(3, 1)), _pinOf(_clip(3, 3))];
   }

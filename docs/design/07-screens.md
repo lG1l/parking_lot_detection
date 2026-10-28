@@ -69,7 +69,7 @@
 | `finished` | 확인 끝남 | 끝남 |
 | `exhausted` | 확인 끝남 **(D-185, `finished`와 같은 이름)** | 끝남 |
 | `failed` | 분석 실패 | 문제 |
-| (상태와 관계없이 `masked_deleted == true`) | 종료됨 **(D-185)** | 종료(입력필요순 맨 뒤) |
+| (상태와 관계없이 `view_expires_at`이 지남, 화면이 지금 시각과 비교) | 종료됨 **(D-185)** | 종료(입력필요순 맨 뒤) |
 
 **(D-183, D-185)** 칩 색: 입력 필요 `tertiary`(#45586B), 확인 가능 청록 #2E6B5E, 확인 끝남 보라회색 #5B4B8A(모두 흰 글자), 기다림 `secondaryContainer`, 문제 `errorContainer`, 종료됨 `secondaryContainer` 50%(글자 `onSurfaceVariant`). 자세한 것은 3.8.
 

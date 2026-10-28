@@ -65,13 +65,13 @@ void main() {
   });
 
   testWidgets('입력필요순 정렬은 서버를 다시 부르지 않고 순서만 바꾼다 (2.2, D-182, D-185)', (tester) async {
-    Map<String, Object?> item(int id, String name, String status, {bool masked = false}) => {
+    Map<String, Object?> item(int id, String name, String status, {bool expired = false}) => {
       'video_id': id,
       'original_filename': name,
       'status': status,
-      'masked_deleted': masked,
       'created_at': '2026-10-20T09:00:00+09:00',
-      'view_expires_at': '2026-11-19T10:00:00+09:00',
+      // 종료됨은 지금 시각과 비교하므로, 날짜가 지나도 결과가 같게 아주 먼 과거·미래를 쓴다
+      'view_expires_at': expired ? '2000-01-01T10:00:00+09:00' : '2999-01-01T10:00:00+09:00',
     };
     final backend = FakeBackend({
       'GET /api/auth/me': (_) => json({'id': 1, 'login_id': 'demo', 'name': '시연용'}),
@@ -82,7 +82,7 @@ void main() {
         item(4, 'D_확인가능.mp4', 'ready'),
         item(5, 'E_실패.mp4', 'failed'),
         item(6, 'F_끝남.mp4', 'exhausted'),
-        item(7, 'G_종료됨.mp4', 'finished', masked: true),
+        item(7, 'G_종료됨.mp4', 'finished', expired: true),
       ]),
     });
     await pumpApp(tester, backend, '/videos');
