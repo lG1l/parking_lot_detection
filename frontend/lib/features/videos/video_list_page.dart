@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api.dart';
 import '../../core/api/api_error.dart';
-import '../../core/config.dart';
 import '../../core/format.dart';
 import '../../core/models/video.dart';
 import '../../core/widgets/common.dart';
@@ -101,13 +100,6 @@ class _VideoListPageState extends ConsumerState<VideoListPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (!useBackend) ...[
-            const Notice(
-              '데모 화면입니다. 백엔드 없이 예시 데이터로 보여줍니다. 영상마다 상태가 달라 눌러 보면 각 화면을 볼 수 있습니다.',
-              icon: Icons.science_outlined,
-            ),
-            const SizedBox(height: 16),
-          ],
           Row(
             children: [
               Text(videos == null ? '영상' : '영상 ${videos.length}건', style: Theme.of(context).textTheme.titleMedium),
