@@ -64,11 +64,12 @@ void main() {
     expect(find.text('2026-11-19 10:00까지 열람 가능'), findsOneWidget);
   });
 
-  testWidgets('입력필요순 정렬은 서버를 다시 부르지 않고 순서만 바꾼다 (2.2, D-182)', (tester) async {
-    Map<String, Object?> item(int id, String name, String status) => {
+  testWidgets('입력필요순 정렬은 서버를 다시 부르지 않고 순서만 바꾼다 (2.2, D-182, D-185)', (tester) async {
+    Map<String, Object?> item(int id, String name, String status, {bool masked = false}) => {
       'video_id': id,
       'original_filename': name,
       'status': status,
+      'masked_deleted': masked,
       'created_at': '2026-10-20T09:00:00+09:00',
       'view_expires_at': '2026-11-19T10:00:00+09:00',
     };
@@ -80,6 +81,8 @@ void main() {
         item(3, 'C_입력필요.mp4', 'stage1_done'),
         item(4, 'D_확인가능.mp4', 'ready'),
         item(5, 'E_실패.mp4', 'failed'),
+        item(6, 'F_끝남.mp4', 'exhausted'),
+        item(7, 'G_종료됨.mp4', 'finished', masked: true),
       ]),
     });
     await pumpApp(tester, backend, '/videos');
@@ -87,23 +90,25 @@ void main() {
 
     double top(String name) => tester.getTopLeft(find.text(name)).dy;
     List<String> order() {
-      final names = ['A_끝남.mp4', 'B_기다림.mp4', 'C_입력필요.mp4', 'D_확인가능.mp4', 'E_실패.mp4'];
+      final names = ['A_끝남.mp4', 'B_기다림.mp4', 'C_입력필요.mp4', 'D_확인가능.mp4', 'E_실패.mp4', 'F_끝남.mp4', 'G_종료됨.mp4'];
       return (names..sort((a, b) => top(a).compareTo(top(b)))).map((n) => n[0]).toList();
     }
 
-    expect(order(), ['A', 'B', 'C', 'D', 'E']);
+    expect(order(), ['A', 'B', 'C', 'D', 'E', 'F', 'G']);
+    expect(find.text('확인 끝남'), findsNWidgets(2)); // finished·exhausted 같은 이름
+    expect(find.text('종료됨'), findsOneWidget);
 
     await tester.tap(find.text('최신순'));
     await settle(tester);
     await tester.tap(find.text('입력필요순').last);
     await settle(tester);
-    expect(order(), ['C', 'D', 'E', 'B', 'A']);
+    expect(order(), ['C', 'D', 'E', 'B', 'A', 'F', 'G']);
 
     await tester.tap(find.text('입력필요순'));
     await settle(tester);
     await tester.tap(find.text('최신순').last);
     await settle(tester);
-    expect(order(), ['A', 'B', 'C', 'D', 'E']);
+    expect(order(), ['A', 'B', 'C', 'D', 'E', 'F', 'G']);
 
     expect(backend.calls.where((c) => c == 'GET /api/videos').length, 1);
   });

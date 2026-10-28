@@ -55,15 +55,13 @@ class _VideoListPageState extends ConsumerState<VideoListPage> {
     if (mounted) redirectTo(context, '/login');
   }
 
-  // 입력필요순 순위: 입력 필요 0 → 확인 가능 1 → 문제 2 → 기다림 3 → 끝남 4
-  int _rank(String status) => switch (status) {
-    VideoStatus.stage1Done => 0,
-    VideoStatus.ready || VideoStatus.batchRunning => 1,
-    _ => switch (statusGroup(status)) {
-      StatusGroup.problem => 2,
-      StatusGroup.waiting => 3,
-      _ => 4,
-    },
+  // 입력필요순 순위: 입력 필요 0 → 확인 가능 1 → 문제 2 → 기다림 3 → 끝남 4 → 종료됨 5
+  int _rank(VideoSummary v) => switch (v.listGroup) {
+    StatusGroup.ended => 5,
+    StatusGroup.todo => v.status == VideoStatus.stage1Done ? 0 : 1,
+    StatusGroup.problem => 2,
+    StatusGroup.waiting => 3,
+    StatusGroup.done => 4,
   };
 
   /// 받은 순서(최신순)를 기본으로 하고, 입력필요순은 순위가 같으면 받은 순서를 지킨다.
@@ -72,7 +70,7 @@ class _VideoListPageState extends ConsumerState<VideoListPage> {
     if (_sort == _Sort.latest) return videos;
     final indexed = videos.indexed.toList()
       ..sort((a, b) {
-        final byRank = _rank(a.$2.status).compareTo(_rank(b.$2.status));
+        final byRank = _rank(a.$2).compareTo(_rank(b.$2));
         return byRank != 0 ? byRank : a.$1.compareTo(b.$1);
       });
     return [for (final e in indexed) e.$2];
@@ -156,7 +154,7 @@ class _VideoListPageState extends ConsumerState<VideoListPage> {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _StatusChip(v.status),
+                      _StatusChip(v),
                       const Icon(Icons.chevron_right),
                     ],
                   ),
@@ -171,24 +169,30 @@ class _VideoListPageState extends ConsumerState<VideoListPage> {
 
 /// 상태 묶음별 색·아이콘 칩 (D-182, D-185).
 class _StatusChip extends StatelessWidget {
-  const _StatusChip(this.status);
+  const _StatusChip(this.video);
 
-  final String status;
+  final VideoSummary video;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final (background, foreground, icon) = switch (statusGroup(status)) {
-      StatusGroup.todo when status == VideoStatus.stage1Done =>
+    final (background, foreground, icon) = switch (video.listGroup) {
+      StatusGroup.todo when video.status == VideoStatus.stage1Done =>
         (scheme.tertiary, scheme.onTertiary, Icons.touch_app_outlined),
       StatusGroup.todo => (reviewChipColor, Colors.white, Icons.touch_app_outlined),
       StatusGroup.waiting => (scheme.secondaryContainer, scheme.onSecondaryContainer, Icons.hourglass_empty),
       StatusGroup.done => (doneChipColor, Colors.white, Icons.check),
       StatusGroup.problem => (scheme.errorContainer, scheme.onErrorContainer, Icons.priority_high),
+      // 기다림(업로드 중 등)과 같은 색을 더 연하게
+      StatusGroup.ended => (
+        scheme.secondaryContainer.withValues(alpha: 0.5),
+        scheme.onSurfaceVariant,
+        Icons.inventory_2_outlined,
+      ),
     };
     return Chip(
       avatar: Icon(icon, size: 18, color: foreground),
-      label: Text(statusLabel(status)),
+      label: Text(video.listLabel),
       labelStyle: TextStyle(color: foreground),
       backgroundColor: background,
       side: BorderSide.none,

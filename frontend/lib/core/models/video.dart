@@ -30,8 +30,8 @@ String statusLabel(String status) => switch (status) {
   _ => status,
 };
 
-/// 목록 칩 색을 정하는 상태 묶음 (07장 2.2, D-182).
-enum StatusGroup { todo, problem, waiting, done }
+/// 목록 칩 색을 정하는 상태 묶음 (07장 2.2, D-182). ended는 보관 기간 종료 (D-185).
+enum StatusGroup { todo, problem, waiting, done, ended }
 
 StatusGroup statusGroup(String status) => switch (status) {
   VideoStatus.stage1Done || VideoStatus.ready || VideoStatus.batchRunning => StatusGroup.todo,
@@ -46,6 +46,7 @@ class VideoSummary {
     required this.originalFilename,
     required this.status,
     required this.viewExpiresAt,
+    required this.maskedDeleted,
   });
 
   factory VideoSummary.fromJson(Map<String, dynamic> j) => VideoSummary(
@@ -53,12 +54,20 @@ class VideoSummary {
     originalFilename: j['original_filename'] as String,
     status: j['status'] as String,
     viewExpiresAt: j['view_expires_at'] as String?,
+    // D-185에서 8번에 더한 값. 백엔드가 반영하기 전에는 오지 않으므로 없으면 false
+    maskedDeleted: j['masked_deleted'] as bool? ?? false,
   );
 
   final int videoId;
   final String originalFilename;
   final String status;
   final String? viewExpiresAt;
+  final bool maskedDeleted;
+
+  /// 보관 기간이 끝났으면 상태와 관계없이 "종료됨" (D-185).
+  String get listLabel => maskedDeleted ? '종료됨' : statusLabel(status);
+
+  StatusGroup get listGroup => maskedDeleted ? StatusGroup.ended : statusGroup(status);
 }
 
 class VideoDetail {
