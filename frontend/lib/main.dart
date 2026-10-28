@@ -31,6 +31,7 @@ class _AppState extends State<App> {
   Widget build(BuildContext context) {
     return MaterialApp.router(
       title: '주차장 가해 차량 탐색',
+      debugShowCheckedModeBanner: false,
       theme: appTheme,
       routerConfig: _router,
     );
