@@ -62,16 +62,16 @@ ThemeData _buildTheme() {
         borderRadius: BorderRadius.circular(_largeRadius),
       ),
     ),
+    // 상단 바는 화면 배경과 한 면으로 보이게 같은 색, 선 없음 (D-184)
     appBarTheme: AppBarTheme(
-      backgroundColor: colorScheme.surface,
+      backgroundColor: colorScheme.surfaceContainerLow,
+      surfaceTintColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: false,
       titleTextStyle: textTheme.titleLarge?.copyWith(
         color: colorScheme.onSurface,
       ),
-      // 상단 바 아래 1px 선
-      shape: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
     ),
   );
 }
