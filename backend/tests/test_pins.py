@@ -32,6 +32,10 @@ def pinned(client, vid):
     return client.get(f"/api/videos/{vid}/pin")
 
 
+def unpin(client, vid, clip_id):
+    return client.delete(f"/api/videos/{vid}/pin/{clip_id}")
+
+
 def finish(client, vid):
     return client.post(f"/api/videos/{vid}/finish")
 
@@ -246,3 +250,65 @@ def test_other_upload_keeps_review_in_progress(client, me):
     assert client.get(f"/api/videos/{vid}").json()["status"] == "ready"
     assert [p["candidate_clip_id"] for p in pinned(client, vid).json()] == [first]
     assert count("candidates WHERE verdict != 'unseen'") == 0
+
+
+# ---- API 20 ----
+
+
+def test_unpin_removes_row_returns_remaining_and_allows_repin(client, me):
+    vid, _ = make_ready(me)
+    first, second = clip_ids(client, vid)[:2]
+    pin(client, vid, first)
+    pin(client, vid, second)
+    r = unpin(client, vid, first)
+    assert r.status_code == 200
+    assert [p["candidate_clip_id"] for p in r.json()] == [second]
+    assert count("pinned_incidents") == 1
+    assert client.get(f"/api/videos/{vid}").json()["status"] == "ready"
+    assert pin(client, vid, first).status_code == 200  # 해제한 뒤 다시 고정할 수 있다
+    assert count("pinned_incidents") == 2
+
+
+def test_unpin_not_pinned_is_200(client, me):
+    vid, _ = make_ready(me)
+    first, second = clip_ids(client, vid)[:2]
+    pin(client, vid, first)
+    r = unpin(client, vid, second)
+    assert r.status_code == 200 and len(r.json()) == 1
+    assert unpin(client, vid, 999999).status_code == 200
+    assert count("pinned_incidents") == 1
+
+
+def test_unpin_to_zero_blocks_finish(client, me):
+    vid, _ = make_ready(me)
+    first = clip_ids(client, vid)[0]
+    pin(client, vid, first)
+    assert unpin(client, vid, first).json() == []
+    r = finish(client, vid)
+    assert r.status_code == 409 and r.json()["error"]["code"] == "NO_PINNED_INCIDENTS"
+
+
+def test_unpin_after_finish_is_409_and_keeps_row(client, me):
+    vid, _ = make_ready(me)
+    first = clip_ids(client, vid)[0]
+    pin(client, vid, first)
+    assert finish(client, vid).status_code == 200
+    assert unpin(client, vid, first).json()["error"]["code"] == "INVALID_STATE"
+    assert count("pinned_incidents") == 1
+
+
+def test_unpin_with_other_jobs_clip_keeps_row(client, me):
+    vid, _ = make_ready(me)
+    other_vid, _ = make_ready(me)
+    first = clip_ids(client, vid)[0]
+    pin(client, vid, first)
+    assert unpin(client, other_vid, first).status_code == 200  # 다른 작업의 고정은 지우지 않는다
+    assert count("pinned_incidents") == 1
+    assert unpin(client, 99999, first).status_code == 404
+
+
+def test_unpin_expired_and_requires_login(client, me):
+    old, _ = make_ready(me)
+    sql("UPDATE videos SET upload_completed_at = now() - interval '31 days' WHERE id = :v", v=old)
+    assert unpin(client, old, 1).json()["error"]["code"] == "MASKED_EXPIRED"
+    assert make_client().delete(f"/api/videos/{old}/pin/1").status_code == 401

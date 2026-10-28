@@ -103,6 +103,31 @@ def pin(
     return _list_pinned(video_id, row.job_id, request, user["id"], row)
 
 
+@router.delete("/{video_id}/pin/{candidate_clip_id}")
+def unpin(
+    video_id: int,
+    candidate_clip_id: int,
+    request: Request,
+    user: Annotated[dict, Depends(current_user)],
+):
+    with get_engine().begin() as conn:
+        row = _owned_video(conn, video_id, user["id"])
+        _check_masked_alive(row, _view_expires_at(row.upload_completed_at))
+        # FOR SHARE로 [확인 끝내기]·마지막 [다음]과 순서를 정한다 (D-101, D-181)
+        status = conn.execute(
+            text("SELECT status FROM analysis_jobs WHERE id = :j FOR SHARE"), {"j": row.job_id}
+        ).scalar_one_or_none()
+        if status not in OPEN_STATES:
+            raise ApiError(409, "INVALID_STATE", f"cannot unpin (status: {status})")
+        conn.execute(
+            text(
+                "DELETE FROM pinned_incidents WHERE analysis_job_id = :j AND candidate_clip_id = :c"
+            ),
+            {"j": row.job_id, "c": candidate_clip_id},
+        )
+    return _list_pinned(video_id, row.job_id, request, user["id"], row)
+
+
 @router.get("/{video_id}/pin")
 def get_pinned(video_id: int, request: Request, user: Annotated[dict, Depends(current_user)]):
     with get_engine().connect() as conn:
