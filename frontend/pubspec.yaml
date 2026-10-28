@@ -58,6 +58,17 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # 앱 기본 글꼴. 굵기별 파일을 따로 등록한다(D-183).
+  fonts:
+    - family: Pretendard
+      fonts:
+      - asset: assets/fonts/pretendard/Pretendard-Regular.otf
+        weight: 400
+      - asset: assets/fonts/pretendard/Pretendard-Medium.otf
+        weight: 500
+      - asset: assets/fonts/pretendard/Pretendard-SemiBold.otf
+        weight: 600
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
