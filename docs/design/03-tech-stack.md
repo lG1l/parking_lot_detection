@@ -37,6 +37,10 @@
 ### YOLO (Ultralytics 라이브러리를 쓸 경우)
 
 - Ultralytics 라이브러리는 AGPL-3.0 라이선스다. 학교 프로젝트에는 문제없지만, 실서비스화할 때는 라이선스를 다시 검토해야 한다.
+
+### 글꼴 (Pretendard)
+
+- Pretendard는 SIL OFL 1.1 라이선스다. 앱에 넣어 배포할 수 있고, 라이선스 파일(`LICENSE.txt`)을 글꼴 파일과 함께 둔다. (D-183)
 - ByteTrack을 추적기로 내장 지원한다.
 
 ### Bedrock VLM
