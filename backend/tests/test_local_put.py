@@ -103,7 +103,9 @@ def test_local_routes_absent_in_aws_mode(monkeypatch):
 
 def test_preflight_allows_put_and_if_none_match(client, upload_url):
     path = upload_url.split("localhost:8000")[-1] if "localhost:8000" in upload_url else upload_url
-    r = client.options(path, headers={"Origin": "http://localhost:8080", "Access-Control-Request-Method": "PUT"})
+    r = client.options(
+        path, headers={"Origin": "http://localhost:8080", "Access-Control-Request-Method": "PUT"}
+    )
     assert r.status_code == 204
     assert r.headers["access-control-allow-origin"] == "*"
     assert "If-None-Match" in r.headers["access-control-allow-headers"]
