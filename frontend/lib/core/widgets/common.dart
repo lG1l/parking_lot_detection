@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../api/api_error.dart';
 import '../config.dart';
+import '../constants.dart';
 
 /// 데모에서 백엔드로 보내야 하는 버튼을 눌렀을 때 팝업을 띄울지. 테스트에서는 끈다.
 final backendNoticeProvider = Provider<bool>((ref) => !useBackend);
@@ -68,32 +69,80 @@ Future<bool> confirm(
 }
 
 /// 화면 공통 틀. PC 브라우저 기준이라 가운데 최대 폭을 둔다.
+/// 상단 바 왼쪽은 어느 화면이든 같은 로고이고, 화면 제목은 본문 맨 위에 둔다 (D-184).
 class PageFrame extends StatelessWidget {
   const PageFrame({
     super.key,
-    required this.title,
+    this.title,
     required this.child,
     this.actions = const [],
     this.maxWidth = 960,
+    this.homeLink = true,
   });
 
-  final String title;
+  /// 본문 맨 위 제목. 없으면 두지 않는다(영상 목록).
+  final String? title;
   final Widget child;
   final List<Widget> actions;
   final double maxWidth;
 
+  /// 로고를 누르면 영상 목록으로 갈지. 관리자 업로드 화면은 false (D-184).
+  final bool homeLink;
+
   @override
   Widget build(BuildContext context) {
+    final title = this.title;
     return Scaffold(
-      appBar: AppBar(title: Text(title), actions: actions, automaticallyImplyLeading: false),
+      appBar: AppBar(
+        title: _AppLogo(homeLink: homeLink),
+        actions: actions,
+        automaticallyImplyLeading: false,
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Center(
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: maxWidth),
-            child: child,
+            child: title == null
+                ? child
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(title, style: Theme.of(context).textTheme.headlineSmall),
+                      const SizedBox(height: 16),
+                      child,
+                    ],
+                  ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// 상단 바 로고 + 서비스 이름. 로고 이미지를 받기 전까지 로그인 화면과 같은 주차 아이콘을 쓴다.
+class _AppLogo extends StatelessWidget {
+  const _AppLogo({required this.homeLink});
+
+  final bool homeLink;
+
+  @override
+  Widget build(BuildContext context) {
+    final logo = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.local_parking, size: 28, color: Theme.of(context).colorScheme.primary),
+        const SizedBox(width: 8),
+        const Text(serviceName),
+      ],
+    );
+    if (!homeLink) return logo;
+    return Tooltip(
+      message: '영상 목록으로',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => context.go('/videos'),
+        child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4), child: logo),
       ),
     );
   }

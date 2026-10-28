@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:parking_lot_frontend/core/constants.dart';
+
 import '../fake_backend.dart';
 
 Map<String, Object?> video(String status, {Map<String, Object?> extra = const {}}) => {
@@ -151,6 +153,24 @@ void main() {
     expect(backend.calls, ['POST /api/upload-links']);
     expect(find.textContaining('#/upload/tok123'), findsOneWidget);
     expect(find.text('링크는 2026-10-23 14:03까지 한 번만 쓸 수 있습니다.'), findsOneWidget);
+  });
+
+  testWidgets('상단 바 로고를 누르면 영상 목록으로 간다 (D-184)', (tester) async {
+    final backend = FakeBackend({'GET /api/videos': (_) => json([])});
+    await pumpApp(tester, backend, '/videos/upload-link');
+    await tester.tap(find.text(serviceName));
+    await settle(tester);
+    expect(find.textContaining('아직 올라온 영상이 없습니다'), findsOneWidget);
+  });
+
+  testWidgets('관리자 업로드 화면의 로고는 눌러도 그대로다 (D-184)', (tester) async {
+    final backend = FakeBackend({
+      'GET /api/uploads/tok': (_) => apiError(410, 'UPLOAD_TOKEN_USED'),
+    });
+    await pumpApp(tester, backend, '/upload/tok');
+    await tester.tap(find.text(serviceName));
+    await settle(tester);
+    expect(find.text('영상 업로드'), findsOneWidget);
   });
 
   testWidgets('대기 중이면 앞에 N건을 보이고 5초마다 다시 부른다 (2.5)', (tester) async {

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/router.dart';
 import 'app/theme.dart';
+import 'core/constants.dart';
 
 void main() {
   runApp(const ProviderScope(child: App()));
@@ -30,7 +31,7 @@ class _AppState extends State<App> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: '마스킹 기반 주차장 CCTV 후보선별 서비스',
+      title: serviceName,
       debugShowCheckedModeBanner: false,
       theme: appTheme,
       routerConfig: _router,

@@ -4,10 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api.dart';
 import '../../core/api/api_error.dart';
+import '../../core/constants.dart';
 import '../../core/widgets/common.dart';
-
-/// 서비스 이름. PRD 1장 프로젝트명 (D-181).
-const _serviceName = '마스킹 기반 주차장 CCTV 후보선별 서비스';
 
 /// 2.1 로그인. 회원가입은 없다 (D-44).
 class LoginPage extends ConsumerStatefulWidget {
@@ -82,7 +80,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        _serviceName,
+                        serviceName,
                         textAlign: TextAlign.center,
                         style: theme.textTheme.titleMedium,
                       ),

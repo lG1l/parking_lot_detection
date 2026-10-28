@@ -88,7 +88,6 @@ class _VideoListPageState extends ConsumerState<VideoListPage> {
   Widget build(BuildContext context) {
     final videos = _videos;
     return PageFrame(
-      title: '내 영상',
       actions: [
         IconButton(
           tooltip: '새로고침',
