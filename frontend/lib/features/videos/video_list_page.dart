@@ -9,6 +9,9 @@ import '../../core/format.dart';
 import '../../core/models/video.dart';
 import '../../core/widgets/common.dart';
 
+/// 목록 정렬 (D-182-4). 화면에서만 정렬하고 8번을 다시 부르지 않는다.
+enum _Sort { latest, needsInput }
+
 /// 2.2 영상 목록. 언제든 돌아오는 중심 화면이다 (D-110, D-111).
 /// 8번은 열 때와 [새로고침]에서만 부른다. 주기적으로 부르지 않는다.
 class VideoListPage extends ConsumerStatefulWidget {
@@ -21,6 +24,7 @@ class VideoListPage extends ConsumerStatefulWidget {
 class _VideoListPageState extends ConsumerState<VideoListPage> {
   List<VideoSummary>? _videos;
   bool _loading = false;
+  _Sort _sort = _Sort.latest;
 
   @override
   void initState() {
@@ -49,6 +53,29 @@ class _VideoListPageState extends ConsumerState<VideoListPage> {
       // 로그아웃은 실패해도 로그인 화면으로 간다
     }
     if (mounted) context.go('/login');
+  }
+
+  // 입력필요순 순위: 입력 필요 0 → 확인 가능 1 → 문제 2 → 기다림 3 → 끝남 4
+  int _rank(String status) => switch (status) {
+    VideoStatus.stage1Done => 0,
+    VideoStatus.ready || VideoStatus.batchRunning => 1,
+    _ => switch (statusGroup(status)) {
+      StatusGroup.problem => 2,
+      StatusGroup.waiting => 3,
+      _ => 4,
+    },
+  };
+
+  /// 받은 순서(최신순)를 기본으로 하고, 입력필요순은 순위가 같으면 받은 순서를 지킨다.
+  /// Dart의 List.sort는 안정 정렬이 아니라서 원래 위치를 함께 비교한다.
+  List<VideoSummary> _sorted(List<VideoSummary> videos) {
+    if (_sort == _Sort.latest) return videos;
+    final indexed = videos.indexed.toList()
+      ..sort((a, b) {
+        final byRank = _rank(a.$2.status).compareTo(_rank(b.$2.status));
+        return byRank != 0 ? byRank : a.$1.compareTo(b.$1);
+      });
+    return [for (final e in indexed) e.$2];
   }
 
   // 확인이 끝나지 않은 영상이 있어도 늘 누를 수 있다 (D-110)
@@ -89,13 +116,22 @@ class _VideoListPageState extends ConsumerState<VideoListPage> {
             ],
           ),
           const SizedBox(height: 12),
-          // 정렬 드롭다운은 이 줄 오른쪽에 들어간다 (D-182-3)
           Row(
             children: [
               Icon(Icons.info_outline, size: 18, color: Theme.of(context).colorScheme.outline),
               const SizedBox(width: 8),
               const Expanded(
                 child: Text('확인을 끝내지 않은 영상도 목록에서 다시 열어 이어서 볼 수 있습니다. 영상마다 열람기한이 다릅니다.'),
+              ),
+              const SizedBox(width: 8),
+              DropdownButton<_Sort>(
+                value: _sort,
+                underline: const SizedBox.shrink(),
+                items: const [
+                  DropdownMenuItem(value: _Sort.latest, child: Text('최신순')),
+                  DropdownMenuItem(value: _Sort.needsInput, child: Text('입력필요순')),
+                ],
+                onChanged: (v) => setState(() => _sort = v ?? _sort),
               ),
             ],
           ),
@@ -119,7 +155,7 @@ class _VideoListPageState extends ConsumerState<VideoListPage> {
               ),
             )
           else
-            for (final v in videos)
+            for (final v in _sorted(videos))
               Card(
                 child: ListTile(
                   leading: const Icon(Icons.movie_outlined),

@@ -62,6 +62,50 @@ void main() {
     expect(find.text('2026-11-19 10:00까지 열람 가능'), findsOneWidget);
   });
 
+  testWidgets('입력필요순 정렬은 서버를 다시 부르지 않고 순서만 바꾼다 (2.2, D-182)', (tester) async {
+    Map<String, Object?> item(int id, String name, String status) => {
+      'video_id': id,
+      'original_filename': name,
+      'status': status,
+      'created_at': '2026-10-20T09:00:00+09:00',
+      'view_expires_at': '2026-11-19T10:00:00+09:00',
+    };
+    final backend = FakeBackend({
+      'GET /api/auth/me': (_) => json({'id': 1, 'login_id': 'demo', 'name': '시연용'}),
+      'GET /api/videos': (_) => json([
+        item(1, 'A_끝남.mp4', 'finished'),
+        item(2, 'B_기다림.mp4', 'queued'),
+        item(3, 'C_입력필요.mp4', 'stage1_done'),
+        item(4, 'D_확인가능.mp4', 'ready'),
+        item(5, 'E_실패.mp4', 'failed'),
+      ]),
+    });
+    await pumpApp(tester, backend, '/videos');
+    await settle(tester);
+
+    double top(String name) => tester.getTopLeft(find.text(name)).dy;
+    List<String> order() {
+      final names = ['A_끝남.mp4', 'B_기다림.mp4', 'C_입력필요.mp4', 'D_확인가능.mp4', 'E_실패.mp4'];
+      return (names..sort((a, b) => top(a).compareTo(top(b)))).map((n) => n[0]).toList();
+    }
+
+    expect(order(), ['A', 'B', 'C', 'D', 'E']);
+
+    await tester.tap(find.text('최신순'));
+    await settle(tester);
+    await tester.tap(find.text('입력필요순').last);
+    await settle(tester);
+    expect(order(), ['C', 'D', 'E', 'B', 'A']);
+
+    await tester.tap(find.text('입력필요순'));
+    await settle(tester);
+    await tester.tap(find.text('최신순').last);
+    await settle(tester);
+    expect(order(), ['A', 'B', 'C', 'D', 'E']);
+
+    expect(backend.calls.where((c) => c == 'GET /api/videos').length, 1);
+  });
+
   testWidgets('빈 칸이면 서버를 부르지 않고 안내를 보인다 (2.1, D-181)', (tester) async {
     final backend = FakeBackend({'GET /api/auth/me': (_) => apiError(401, 'UNAUTHENTICATED')});
     await pumpApp(tester, backend, '/');
