@@ -500,17 +500,18 @@ END
 
 ```json
 [
-  {"video_id": 18, "original_filename": "CH03_0919.mp4", "status": "uploading",
+  {"video_id": 18, "original_filename": "CH03_0919.mp4", "status": "uploading", "masked_deleted": false,
    "created_at": "2026-09-20T14:05:00+09:00", "view_expires_at": null},
-  {"video_id": 17, "original_filename": "CH01_0918.mp4", "status": "queued",
+  {"video_id": 17, "original_filename": "CH01_0918.mp4", "status": "queued", "masked_deleted": false,
    "created_at": "2026-09-19T09:12:00+09:00", "view_expires_at": "2026-10-19T10:00:00+09:00"},
-  {"video_id": 12, "original_filename": "CH01_0915.mp4", "status": "finished",
+  {"video_id": 12, "original_filename": "CH01_0915.mp4", "status": "finished", "masked_deleted": false,
    "created_at": "2026-09-15T20:41:00+09:00", "view_expires_at": "2026-10-15T21:00:00+09:00"}
 ]
 ```
 
 - 내 영상만 나온다(`owner_user_id`). 최신순(`created_at` 내림차순)이다.
 - `view_expires_at`은 열람기한이다. 업로드 완료 시각(`upload_completed_at`) + 30일을 시간대가 붙은 ISO 8601로 주고, 완료 전에는 `null`이다. `created_at`은 URL 발급 시각이라 계산에 쓰지 않는다. 예시의 완료 시각은 각각 9월 19일 10:00, 9월 15일 21:00이다 (D-92).
+- **(D-185, 계약 변경)** `masked_deleted`는 9번과 같은 뜻이다(마스킹본 파기 여부, `videos.masked_deleted_at`이 차 있는지). 화면은 `true`면 상태 대신 "종료됨"을 보인다.
 - **"앞에 N건"(`queue_ahead`)은 목록에 넣지 않는다.** 영상마다 세는 조회라 목록에서 한꺼번에 하면 무거워진다 (D-19). 대기 순서는 영상을 연 뒤 9번에서 본다.
 - 페이지 나누기는 두지 않는다. 한 사람의 영상이 몇 건뿐인 데모 규모다. 실제 운영에서 늘어나면 `limit`·`cursor`를 더한다.
 
@@ -1251,7 +1252,7 @@ flowchart TD
 | `duration_sec` | 1단계 전에는 `null`이다. 없을 때의 표시를 정해 둔다 | 5.5 |
 
 - **`masked_deleted`를 `status`보다 먼저 본다.** 파기돼도 `status`는 `finished`·`ready` 그대로라, 상태만 보고 화면을 고르면 10·12·15번에서 409 `MASKED_EXPIRED`를 받는다.
-- 목록(8번)에는 `queue_ahead`·`input_done`·`raw_deleted`·`masked_deleted`가 없다. 목록은 `status`만 보여주고, 나머지는 영상을 연 뒤 9번에서 본다 (D-19).
+- 목록(8번)에는 `queue_ahead`·`input_done`·`raw_deleted`가 없다. `masked_deleted`는 목록의 "종료됨" 표시에 쓰려고 D-185에서 더했다. 목록은 `status`만 보여주고, 나머지는 영상을 연 뒤 9번에서 본다 (D-19).
 
 ### 화면별 API 호출
 
