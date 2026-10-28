@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/theme.dart';
 import '../../core/api/api.dart';
 import '../../core/api/api_error.dart';
 import '../../core/format.dart';
@@ -168,7 +169,7 @@ class _VideoListPageState extends ConsumerState<VideoListPage> {
   }
 }
 
-/// 상태 묶음별 색·아이콘 칩 (D-182). 색은 테마 이름으로만 쓴다.
+/// 상태 묶음별 색·아이콘 칩 (D-182, D-185).
 class _StatusChip extends StatelessWidget {
   const _StatusChip(this.status);
 
@@ -178,9 +179,11 @@ class _StatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final (background, foreground, icon) = switch (statusGroup(status)) {
-      StatusGroup.todo => (scheme.tertiary, scheme.onTertiary, Icons.touch_app_outlined),
+      StatusGroup.todo when status == VideoStatus.stage1Done =>
+        (scheme.tertiary, scheme.onTertiary, Icons.touch_app_outlined),
+      StatusGroup.todo => (reviewChipColor, Colors.white, Icons.touch_app_outlined),
       StatusGroup.waiting => (scheme.secondaryContainer, scheme.onSecondaryContainer, Icons.hourglass_empty),
-      StatusGroup.done => (scheme.inverseSurface, scheme.onInverseSurface, Icons.check),
+      StatusGroup.done => (doneChipColor, Colors.white, Icons.check),
       StatusGroup.problem => (scheme.errorContainer, scheme.onErrorContainer, Icons.priority_high),
     };
     return Chip(

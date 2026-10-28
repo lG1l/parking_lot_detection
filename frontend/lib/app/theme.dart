@@ -3,7 +3,11 @@ import 'package:flutter/material.dart';
 // 색 코드는 여기 한 번만 적는다(D-183).
 const _grayAccent = Color(0xFF6E767B); // 강조색. 흰 글자와 명암비 4.63:1
 const _pointColor = Color(0xFF45586B); // 영상 목록 "할 일" 칩
-const _blackColor = Color(0xFF121212); // "끝남" 칩, 스낵바 바탕
+const _blackColor = Color(0xFF121212); // 스낵바 바탕
+
+// 영상 목록 칩 전용 색. ColorScheme에 맞는 자리가 없어 이름으로 내보낸다 (D-185).
+const reviewChipColor = Color(0xFF2E6B5E); // "확인 가능" 청록. 흰 글자와 6.2:1
+const doneChipColor = Color(0xFF5B4B8A); // "확인 끝남" 보라회색. 흰 글자와 7.5:1
 
 const _fontFamily = 'Pretendard';
 

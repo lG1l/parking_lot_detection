@@ -25,7 +25,7 @@ String statusLabel(String status) => switch (status) {
   VideoStatus.stage2Running => '분석 중',
   VideoStatus.ready || VideoStatus.batchRunning => '확인 가능',
   VideoStatus.finished => '확인 끝남',
-  VideoStatus.exhausted => '후보 확인 완료',
+  VideoStatus.exhausted => '확인 끝남', // finished와 같은 이름 (D-185)
   VideoStatus.failed => '분석 실패',
   _ => status,
 };
