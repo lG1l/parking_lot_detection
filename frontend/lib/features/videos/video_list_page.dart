@@ -101,14 +101,46 @@ class _VideoListPageState extends ConsumerState<VideoListPage> {
             for (final v in videos)
               Card(
                 child: ListTile(
+                  leading: const Icon(Icons.movie_outlined),
                   title: Text(v.originalFilename),
                   subtitle: Text(viewExpiresText(v.viewExpiresAt)),
-                  trailing: Chip(label: Text(statusLabel(v.status))),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _StatusChip(v.status),
+                      const Icon(Icons.chevron_right),
+                    ],
+                  ),
                   onTap: () => context.go('/videos/${v.videoId}'),
                 ),
               ),
         ],
       ),
+    );
+  }
+}
+
+/// 상태 묶음별 색·아이콘 칩 (D-182). 색은 테마 이름으로만 쓴다.
+class _StatusChip extends StatelessWidget {
+  const _StatusChip(this.status);
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final (background, foreground, icon) = switch (statusGroup(status)) {
+      StatusGroup.todo => (scheme.primary, scheme.onPrimary, Icons.touch_app_outlined),
+      StatusGroup.waiting => (scheme.secondaryContainer, scheme.onSecondaryContainer, Icons.hourglass_empty),
+      StatusGroup.done => (scheme.inverseSurface, scheme.onInverseSurface, Icons.check),
+      StatusGroup.problem => (scheme.errorContainer, scheme.onErrorContainer, Icons.priority_high),
+    };
+    return Chip(
+      avatar: Icon(icon, size: 18, color: foreground),
+      label: Text(statusLabel(status)),
+      labelStyle: TextStyle(color: foreground),
+      backgroundColor: background,
+      side: BorderSide.none,
     );
   }
 }

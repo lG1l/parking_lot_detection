@@ -30,6 +30,16 @@ String statusLabel(String status) => switch (status) {
   _ => status,
 };
 
+/// 목록 칩 색을 정하는 상태 묶음 (07장 2.2, D-182).
+enum StatusGroup { todo, problem, waiting, done }
+
+StatusGroup statusGroup(String status) => switch (status) {
+  VideoStatus.stage1Done || VideoStatus.ready || VideoStatus.batchRunning => StatusGroup.todo,
+  VideoStatus.uploadFailed || VideoStatus.failed => StatusGroup.problem,
+  VideoStatus.finished || VideoStatus.exhausted => StatusGroup.done,
+  _ => StatusGroup.waiting,
+};
+
 class VideoSummary {
   VideoSummary({
     required this.videoId,
