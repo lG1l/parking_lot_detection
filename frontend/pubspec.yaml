@@ -58,6 +58,10 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # 상단 바 로고 (D-184)
+  assets:
+    - assets/images/logo.png
+
   # 앱 기본 글꼴. 굵기별 파일을 따로 등록한다(D-183).
   fonts:
     - family: Pretendard

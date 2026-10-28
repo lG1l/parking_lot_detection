@@ -152,7 +152,7 @@ class _BackButton extends ConsumerWidget {
   );
 }
 
-/// 상단 바 로고 + 서비스 이름. 로고 이미지를 받기 전까지 로그인 화면과 같은 주차 아이콘을 쓴다.
+/// 상단 바 로고 + 서비스 이름.
 class _AppLogo extends StatelessWidget {
   const _AppLogo({required this.homeLink});
 
@@ -163,7 +163,7 @@ class _AppLogo extends StatelessWidget {
     final logo = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.local_parking, size: 28, color: Theme.of(context).colorScheme.primary),
+        Image.asset('assets/images/logo.png', height: 32, semanticLabel: '로고'),
         const SizedBox(width: 8),
         const Text(serviceName),
       ],
