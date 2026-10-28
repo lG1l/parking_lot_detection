@@ -54,6 +54,9 @@ class FakeBrowser implements Browser {
 
   @override
   void log(String message) {}
+
+  @override
+  bool historyBack() => false;
 }
 
 /// 넓은 PC 화면으로 앱을 띄운다.

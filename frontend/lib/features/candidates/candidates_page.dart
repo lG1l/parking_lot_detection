@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../core/api/api.dart';
 import '../../core/api/api_error.dart';
@@ -212,7 +211,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
     await backendNotice(context, ref, '확인 끝내기');
     await _run(() async {
       await _api.finish(_id); // 17
-      if (mounted) context.go('/videos/$_id/results');
+      if (mounted) redirectTo(context, '/videos/$_id/results');
     });
   }
 

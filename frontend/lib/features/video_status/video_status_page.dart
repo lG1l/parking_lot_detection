@@ -26,7 +26,7 @@ String? screenPath(int videoId, StatusScreen screen) => switch (screen) {
 /// [expired]: 서버가 MASKED_EXPIRED·RAW_EXPIRED로 답했다. 열람기한이 지났어도 파기 작업이 돌기
 /// 전에는 9번의 masked_deleted가 false라, 이 표시 없이 9번만 보면 같은 화면을 오가게 된다.
 void goStatus(BuildContext context, int videoId, {bool expired = false}) =>
-    context.go(expired ? '/videos/$videoId?expired=1' : '/videos/$videoId');
+    redirectTo(context, expired ? '/videos/$videoId?expired=1' : '/videos/$videoId');
 
 bool isExpiredCode(String code) => code == 'MASKED_EXPIRED' || code == 'RAW_EXPIRED';
 
@@ -78,7 +78,7 @@ class _VideoStatusPageState extends ConsumerState<VideoStatusPage> {
       }
       final path = screenPath(_id, screen);
       if (path != null) {
-        context.go(path);
+        redirectTo(context, path);
         return;
       }
       setState(() {

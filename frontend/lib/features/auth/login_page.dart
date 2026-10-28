@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../core/api/api.dart';
 import '../../core/api/api_error.dart';
@@ -47,7 +46,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     await backendNotice(context, ref, '로그인');
     try {
       await ref.read(apiProvider).login(_id.text, _password.text);
-      if (mounted) context.go('/videos');
+      if (mounted) redirectTo(context, '/videos');
     } on ApiException catch (e) {
       if (mounted) showMessage(context, errorMessage(e.code));
     } finally {

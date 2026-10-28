@@ -51,7 +51,7 @@ class _VideoListPageState extends ConsumerState<VideoListPage> {
     } on ApiException {
       // 로그아웃은 실패해도 로그인 화면으로 간다
     }
-    if (mounted) context.go('/login');
+    if (mounted) redirectTo(context, '/login');
   }
 
   // 입력필요순 순위: 입력 필요 0 → 확인 가능 1 → 문제 2 → 기다림 3 → 끝남 4

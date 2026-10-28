@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../api/api_error.dart';
+import '../browser/browser.dart';
 import '../config.dart';
 import '../constants.dart';
 
@@ -23,6 +24,11 @@ Future<void> backendNotice(BuildContext context, WidgetRef ref, String action) a
   );
 }
 
+/// 사용자가 누르지 않았는데 앱이 다른 화면으로 보내는 이동. 브라우저 기록을 새로 쌓지 않고
+/// 지금 기록을 바꿔, 뒤로 가기가 사용자가 연 이전 화면으로 가게 한다 (D-184).
+void redirectTo(BuildContext context, String path) =>
+    Router.neglect(context, () => context.go(path));
+
 /// 에러 문구를 스낵바로 보인다 (07장 3.1).
 void showMessage(BuildContext context, String message) {
   ScaffoldMessenger.of(context)
@@ -37,10 +43,10 @@ bool handleCommonError(BuildContext context, Object error) {
   showMessage(context, errorMessage(code));
   switch (code) {
     case 'UNAUTHENTICATED':
-      context.go('/login');
+      redirectTo(context, '/login');
       return true;
     case 'VIDEO_NOT_FOUND':
-      context.go('/videos');
+      redirectTo(context, '/videos');
       return true;
   }
   return false;
@@ -78,6 +84,7 @@ class PageFrame extends StatelessWidget {
     this.actions = const [],
     this.maxWidth = 960,
     this.homeLink = true,
+    this.showBack = true,
   });
 
   /// 본문 맨 위 제목. 없으면 두지 않는다(영상 목록).
@@ -88,6 +95,9 @@ class PageFrame extends StatelessWidget {
 
   /// 로고를 누르면 영상 목록으로 갈지. 관리자 업로드 화면은 false (D-184).
   final bool homeLink;
+
+  /// 제목 왼쪽 [←]. 관리자 업로드 화면은 false (D-184).
+  final bool showBack;
 
   @override
   Widget build(BuildContext context) {
@@ -108,7 +118,14 @@ class PageFrame extends StatelessWidget {
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text(title, style: Theme.of(context).textTheme.headlineSmall),
+                      Row(
+                        children: [
+                          if (showBack) ...[const _BackButton(), const SizedBox(width: 8)],
+                          Expanded(
+                            child: Text(title, style: Theme.of(context).textTheme.headlineSmall),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 16),
                       child,
                     ],
@@ -118,6 +135,21 @@ class PageFrame extends StatelessWidget {
       ),
     );
   }
+}
+
+/// [←] 이전 화면. 브라우저 뒤로 가기와 같고, 이전 기록이 없으면 영상 목록 (D-184).
+/// 서버를 부르지 않는다 (07장 3.7).
+class _BackButton extends ConsumerWidget {
+  const _BackButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => IconButton(
+    tooltip: '이전 화면',
+    icon: const Icon(Icons.arrow_back),
+    onPressed: () {
+      if (!ref.read(browserProvider).historyBack()) context.go('/videos');
+    },
+  );
 }
 
 /// 상단 바 로고 + 서비스 이름. 로고 이미지를 받기 전까지 로그인 화면과 같은 주차 아이콘을 쓴다.

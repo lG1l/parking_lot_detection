@@ -33,6 +33,9 @@ abstract class Browser {
 
   /// 개발 중 확인용 콘솔 출력 (07장 2.4 403 처리).
   void log(String message);
+
+  /// 앱 안에 이전 기록이 있으면 브라우저 뒤로 가기를 하고 true. 없으면 false (D-184).
+  bool historyBack();
 }
 
 // 백엔드 연결 필요: 데모에서는 S3에 올리지 않고 진행률만 흉내 낸다
@@ -68,4 +71,7 @@ class DemoBrowser implements Browser {
 
   @override
   void log(String message) => _real.log(message);
+
+  @override
+  bool historyBack() => _real.historyBack();
 }

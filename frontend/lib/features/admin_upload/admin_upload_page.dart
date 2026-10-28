@@ -196,6 +196,7 @@ class _AdminUploadPageState extends ConsumerState<AdminUploadPage> {
     return PageFrame(
       title: '영상 업로드',
       homeLink: false,
+      showBack: false,
       maxWidth: 800,
       child: blocked != null
           ? Notice(blocked, icon: Icons.error_outline)

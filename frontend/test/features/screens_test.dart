@@ -163,6 +163,15 @@ void main() {
     expect(find.textContaining('아직 올라온 영상이 없습니다'), findsOneWidget);
   });
 
+  testWidgets('[←]는 이전 기록이 없으면 영상 목록으로 가고, 영상 목록에는 [←]가 없다 (D-184)', (tester) async {
+    final backend = FakeBackend({'GET /api/videos': (_) => json([])});
+    await pumpApp(tester, backend, '/videos/upload-link');
+    await tester.tap(find.byTooltip('이전 화면'));
+    await settle(tester);
+    expect(find.textContaining('아직 올라온 영상이 없습니다'), findsOneWidget);
+    expect(find.byTooltip('이전 화면'), findsNothing);
+  });
+
   testWidgets('관리자 업로드 화면의 로고는 눌러도 그대로다 (D-184)', (tester) async {
     final backend = FakeBackend({
       'GET /api/uploads/tok': (_) => apiError(410, 'UPLOAD_TOKEN_USED'),
