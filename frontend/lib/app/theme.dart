@@ -7,6 +7,10 @@ const _blackColor = Color(0xFF121212); // "끝남" 칩, 스낵바 바탕
 
 const _fontFamily = 'Pretendard';
 
+// 모서리 둥글기: 버튼·입력칸·칩 / 카드·대화상자
+const _smallRadius = 8.0;
+const _largeRadius = 12.0;
+
 /// 앱 전체 겉모습을 정하는 곳. 화면은 색을 역할 이름(colorScheme.xxx)으로만 쓴다.
 final appTheme = _buildTheme();
 
@@ -23,7 +27,53 @@ ThemeData _buildTheme() {
   );
   final base = ThemeData(colorScheme: colorScheme, fontFamily: _fontFamily);
 
-  return base.copyWith(textTheme: _textTheme(base.textTheme));
+  final textTheme = _textTheme(base.textTheme);
+  final smallShape = RoundedRectangleBorder(
+    borderRadius: BorderRadius.circular(_smallRadius),
+  );
+
+  return base.copyWith(
+    textTheme: textTheme,
+    scaffoldBackgroundColor: colorScheme.surfaceContainerLow,
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(shape: smallShape),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(shape: smallShape),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(shape: smallShape),
+    ),
+    cardTheme: CardThemeData(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(_largeRadius),
+        side: BorderSide(color: colorScheme.outlineVariant),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(_smallRadius),
+      ),
+    ),
+    chipTheme: ChipThemeData(shape: smallShape),
+    dialogTheme: DialogThemeData(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(_largeRadius),
+      ),
+    ),
+    appBarTheme: AppBarTheme(
+      backgroundColor: colorScheme.surface,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      centerTitle: false,
+      titleTextStyle: textTheme.titleLarge?.copyWith(
+        color: colorScheme.onSurface,
+      ),
+      // 상단 바 아래 1px 선
+      shape: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
+    ),
+  );
 }
 
 /// 크기는 Material 3 기본 그대로. 굵기만 정하고 자간은 0으로 둔다
