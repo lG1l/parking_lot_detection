@@ -187,7 +187,7 @@ class _StatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final (background, foreground, icon) = switch (statusGroup(status)) {
-      StatusGroup.todo => (scheme.primary, scheme.onPrimary, Icons.touch_app_outlined),
+      StatusGroup.todo => (scheme.tertiary, scheme.onTertiary, Icons.touch_app_outlined),
       StatusGroup.waiting => (scheme.secondaryContainer, scheme.onSecondaryContainer, Icons.hourglass_empty),
       StatusGroup.done => (scheme.inverseSurface, scheme.onInverseSurface, Icons.check),
       StatusGroup.problem => (scheme.errorContainer, scheme.onErrorContainer, Icons.priority_high),
