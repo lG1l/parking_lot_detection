@@ -72,11 +72,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Icon(
-                        Icons.local_parking,
-                        size: 48,
-                        color: theme.colorScheme.primary,
-                      ),
+                      Image.asset('assets/images/logo.png', height: 72, semanticLabel: '로고'),
                       const SizedBox(height: 12),
                       Text(
                         serviceName,
