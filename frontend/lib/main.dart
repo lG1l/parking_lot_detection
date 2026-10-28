@@ -30,7 +30,7 @@ class _AppState extends State<App> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: '주차장 가해 차량 탐색',
+      title: '마스킹 기반 주차장 CCTV 후보선별 서비스',
       debugShowCheckedModeBanner: false,
       theme: appTheme,
       routerConfig: _router,
