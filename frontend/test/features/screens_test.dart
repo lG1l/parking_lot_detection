@@ -62,6 +62,22 @@ void main() {
     expect(find.text('2026-11-19 10:00까지 열람 가능'), findsOneWidget);
   });
 
+  testWidgets('빈 칸이면 서버를 부르지 않고 안내를 보인다 (2.1, D-181)', (tester) async {
+    final backend = FakeBackend({'GET /api/auth/me': (_) => apiError(401, 'UNAUTHENTICATED')});
+    await pumpApp(tester, backend, '/');
+
+    await tester.tap(find.widgetWithText(FilledButton, '로그인'));
+    await settle(tester);
+    expect(find.text('아이디를 입력하세요'), findsOneWidget);
+    expect(find.text('비밀번호를 입력하세요'), findsOneWidget);
+    expect(backend.calls, isNot(contains('POST /api/auth/login')));
+
+    await tester.enterText(find.widgetWithText(TextField, '아이디'), 'demo');
+    await tester.pump();
+    expect(find.text('아이디를 입력하세요'), findsNothing);
+    expect(find.text('비밀번호를 입력하세요'), findsOneWidget);
+  });
+
   testWidgets('비밀번호 칸의 눈 아이콘으로 보기와 숨기기를 바꾼다 (2.1, D-181)', (tester) async {
     final backend = FakeBackend({'GET /api/auth/me': (_) => apiError(401, 'UNAUTHENTICATED')});
     await pumpApp(tester, backend, '/');
