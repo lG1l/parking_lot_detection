@@ -502,16 +502,17 @@ END
 ```json
 [
   {"video_id": 18, "original_filename": "CH03_0919.mp4", "status": "uploading",
-   "created_at": "2026-09-20T14:05:00+09:00", "view_expires_at": null},
+   "masked_deleted": false, "created_at": "2026-09-20T14:05:00+09:00", "view_expires_at": null},
   {"video_id": 17, "original_filename": "CH01_0918.mp4", "status": "queued",
-   "created_at": "2026-09-19T09:12:00+09:00", "view_expires_at": "2026-10-19T10:00:00+09:00"},
+   "masked_deleted": false, "created_at": "2026-09-19T09:12:00+09:00", "view_expires_at": "2026-10-19T10:00:00+09:00"},
   {"video_id": 12, "original_filename": "CH01_0915.mp4", "status": "finished",
-   "created_at": "2026-09-15T20:41:00+09:00", "view_expires_at": "2026-10-15T21:00:00+09:00"}
+   "masked_deleted": true, "created_at": "2026-09-15T20:41:00+09:00", "view_expires_at": "2026-10-15T21:00:00+09:00"}
 ]
 ```
 
 - 내 영상만 나온다(`owner_user_id`). 최신순(`created_at` 내림차순)이다.
 - `view_expires_at`은 열람기한이다. 업로드 완료 시각(`upload_completed_at`) + 30일을 시간대가 붙은 ISO 8601로 주고, 완료 전에는 `null`이다. `created_at`은 URL 발급 시각이라 계산에 쓰지 않는다. 예시의 완료 시각은 각각 9월 19일 10:00, 9월 15일 21:00이다 (D-92).
+- `masked_deleted`는 마스킹본을 더 볼 수 없는지다. `masked_deleted_at`이 차 있거나 `view_expires_at`이 지났으면 `true`다. 목록이 "종료됨" 칩을 고르는 데 쓴다 (D-187).
 - **"앞에 N건"(`queue_ahead`)은 목록에 넣지 않는다.** 영상마다 세는 조회라 목록에서 한꺼번에 하면 무거워진다 (D-19). 대기 순서는 영상을 연 뒤 9번에서 본다.
 - 페이지 나누기는 두지 않는다. 한 사람의 영상이 몇 건뿐인 데모 규모다. 실제 운영에서 늘어나면 `limit`·`cursor`를 더한다.
 
@@ -543,7 +544,7 @@ END
 | `candidate_total` | `status`가 `exhausted`일 때만. 지금까지 만들어진 후보 총 수다. `0`이면 후보가 한 번도 만들어지지 않았다는 뜻이다 (04장 `candidates`를 세서 계산한다) |
 | `candidate_unavailable` | `status`가 `exhausted`일 때만. 클립을 끝내 만들지 못한 후보 수(`verdict = 'unavailable'`). 화면이 `candidate_total`과 비교해 "일부 열람 불가 / 전부 열람 불가" 문구를 고른다 (D-109) |
 | `raw_deleted` | 항상. 원본 영상**과 트랙 파일**이 파기됐는지(`videos.raw_deleted_at`이 차 있는지)다. 저장하지 않고 조회할 때 본다 (D-52, D-64) |
-| `masked_deleted` | 항상. 마스킹본이 파기됐는지(`videos.masked_deleted_at`이 차 있는지)다. 같은 방식으로 조회할 때 본다 (D-57, D-64) |
+| `masked_deleted` | 항상. 마스킹본을 더 볼 수 없는지다. `masked_deleted_at`이 차 있거나 `view_expires_at`이 지났으면 `true`다. 조회할 때 계산한다 (D-57, D-64, D-187) |
 | `duration_sec` | 워커가 1단계에서 채운 뒤부터. 그 전에는 `null` |
 | `error_kind` | `status`가 `failed`일 때만. 사용자용 실패 분류. `file` · `expired` · `temporary` · `service` 중 하나이고, 고르는 순서는 아래 표다 (D-112) |
 | `can_retry` | `status`가 `failed`일 때만. [분석 다시 시도]를 보여줄지. 19번이 요청을 받아 주는 조건과 같다 (D-112) |
@@ -565,7 +566,7 @@ END
   - `temporary`·`service`인데 `can_retry`가 `false`면 화면은 버튼 없이 문의 안내를 보인다 (D-145 10번).
 - **`input_done`이 따로 있는 이유**: `stage1_done`은 "입력을 기다리는 중"과 "입력을 받아 2단계 작업을 넣어 둔 중" 둘 다에서 나온다(5.7). 화면이 `status` 하나만 보면 이미 입력한 사용자에게 입력 화면을 다시 보여주게 된다. 두 값을 함께 보고 입력 화면을 열지 정한다 (D-49, 07장). **D-66 뒤로는 이 값이 "고칠 수 있는지"와 같다** — `true`면 어느 상태든 11번이 409다.
 - **`raw_deleted`·`masked_deleted`가 따로 있는 이유**: 업로드 완료에서 30일이 지나면 원본, 트랙 파일, 마스킹본이 한 번에 파기된다(D-52, D-57, D-64, D-80). 파기해도 `status`는 바뀌지 않으므로, 화면이 `masked_deleted`를 보고 "보관 기간이 끝나 삭제되었습니다"를 보여준다 (07장). 10·12·15번은 `masked_deleted`를, 13번은 `raw_deleted`를 보고 요청을 막는다(후보 클립은 원본에서 잘라내기 때문이다).
-  - 두 값은 같은 때 `true`가 된다. 파기 작업이 원본과 마스킹본을 지우는 도중 멈추면 잠깐 어긋날 수 있어 둘 다 둔다.
+  - `raw_deleted`는 파기 작업이 돈 뒤에 `true`가 되고, `masked_deleted`는 기한이 지나는 즉시 `true`가 된다. 그 사이에는 `masked_deleted`만 `true`다 (D-187).
   - `status`에 `expired` 같은 값을 더하지 않은 이유는 D-52에 적었다. 상태 목록·전이 표·KPI 집계를 건드리지 않기 위해서다.
 - **`candidate_total`이 따로 있는 이유**: `exhausted`는 "사용자가 후보를 전부 넘겼다"(전이 12)와 "후보가 0건이었다"(전이 14) 둘 다에서 나온다. 앞은 "모든 후보를 확인했습니다", 뒤는 "후보 구간이 탐지되지 않았습니다"여야 한다(PRD 3.5·3.6). `exhausted`일 때 12번은 409라 화면이 빈 배열로 알아낼 수도 없다. 그래서 여기서 구분값을 준다 (D-50, 07장).
 - 이 API는 무거운 일을 하지 않는다. 읽는 것은 `videos` 1행, `analysis_jobs` 1행, `queue_ahead`를 줄 때 count 1번, `exhausted`일 때 count 1번뿐이다 (D-19).
@@ -1281,7 +1282,7 @@ flowchart TD
 | `duration_sec` | 1단계 전에는 `null`이다. 없을 때의 표시를 정해 둔다 | 5.5 |
 
 - **`masked_deleted`를 `status`보다 먼저 본다.** 파기돼도 `status`는 `finished`·`ready` 그대로라, 상태만 보고 화면을 고르면 10·12·15번에서 409 `MASKED_EXPIRED`를 받는다.
-- 목록(8번)에는 `queue_ahead`·`input_done`·`raw_deleted`·`masked_deleted`가 없다. 목록은 `status`만 보여주고, 나머지는 영상을 연 뒤 9번에서 본다 (D-19).
+- 목록(8번)에는 `queue_ahead`·`input_done`·`raw_deleted`가 없고, `masked_deleted`만 있다. 목록은 `status`와 `masked_deleted`만 보여주고, 나머지는 영상을 연 뒤 9번에서 본다 (D-19, D-187).
 
 ### 화면별 API 호출
 
