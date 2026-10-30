@@ -271,6 +271,13 @@ class DemoApi extends Api {
   }
 
   @override
+  Future<List<PinnedIncident>> unpin(int id, int candidateClipId) async {
+    final pins = _pins[id] ?? [];
+    pins.removeWhere((p) => p['candidate_clip_id'] == candidateClipId);
+    return pinsFromJson(pins);
+  }
+
+  @override
   Future<List<PinnedIncident>> pins(int id) async {
     await _wait();
     if (_video(id)['masked_deleted'] == true) throw ApiException(409, 'MASKED_EXPIRED');
