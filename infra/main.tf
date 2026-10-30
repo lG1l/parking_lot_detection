@@ -12,14 +12,11 @@ terraform {
 provider "aws" {
   region = "ap-northeast-2"
 
-  default_tags {
-    tags = var.tags
+  # 계정이 리소스 생성 후 자동으로 붙이는 소유자 태그는 Terraform이 지우려 하지 않게 무시한다.
+  # default_tags로 직접 붙이면 규칙 생성(AuthorizeSecurityGroupIngress)이 거부된다.
+  ignore_tags {
+    keys = ["group", "username"]
   }
-}
-
-variable "tags" {
-  description = "모든 리소스에 붙일 태그. 계정 정책의 소유자 판정에 쓰이므로 값은 terraform.tfvars에만 둔다"
-  type        = map(string)
 }
 
 variable "name_prefix" {
