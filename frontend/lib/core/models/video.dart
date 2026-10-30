@@ -46,6 +46,7 @@ class VideoSummary {
     required this.originalFilename,
     required this.status,
     required this.viewExpiresAt,
+    required this.maskedDeleted,
   });
 
   factory VideoSummary.fromJson(Map<String, dynamic> j) => VideoSummary(
@@ -53,6 +54,7 @@ class VideoSummary {
     originalFilename: j['original_filename'] as String,
     status: j['status'] as String,
     viewExpiresAt: j['view_expires_at'] as String?,
+    maskedDeleted: j['masked_deleted'] as bool,
   );
 
   final int videoId;
@@ -60,16 +62,13 @@ class VideoSummary {
   final String status;
   final String? viewExpiresAt;
 
-  /// 열람기한이 지났는지. 목록 칩 표시에만 쓴다. 영상을 열 수 있는지는 서버(9번)가 정한다 (D-186).
-  bool get ended {
-    final expires = viewExpiresAt;
-    return expires != null && DateTime.parse(expires).isBefore(DateTime.now());
-  }
+  /// 마스킹본을 더 볼 수 없는지. 파기됐거나 열람기한이 지났으면 서버가 true로 준다 (D-187).
+  final bool maskedDeleted;
 
-  /// 열람기한이 지났으면 상태와 관계없이 "종료됨" (D-186).
-  String get listLabel => ended ? '종료됨' : statusLabel(status);
+  /// 보관 기간이 끝났으면 상태와 관계없이 "종료됨" (D-186, D-187).
+  String get listLabel => maskedDeleted ? '종료됨' : statusLabel(status);
 
-  StatusGroup get listGroup => ended ? StatusGroup.ended : statusGroup(status);
+  StatusGroup get listGroup => maskedDeleted ? StatusGroup.ended : statusGroup(status);
 }
 
 class VideoDetail {
