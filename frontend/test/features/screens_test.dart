@@ -343,7 +343,7 @@ void main() {
     'lists': lists(),
   });
 
-  testWidgets('[고정 해제]로 풀면 확정됨과 [확인 끝내기]가 사라지고 [찾음]이 돌아온다 (2.7, D-188)', (tester) async {
+  testWidgets('[고정 해제]로 풀면 확정됨과 [확인 끝내기]가 사라지고 [찾음]이 돌아온다 (2.7, D-189)', (tester) async {
     final backend = FakeBackend({
       'GET /api/videos/7': (_) => json(video('ready')),
       'GET /api/videos/7/batch': (_) => candidateBatch1187(),
@@ -365,7 +365,7 @@ void main() {
     expect(find.widgetWithText(FilledButton, '찾음'), findsOneWidget);
   });
 
-  testWidgets('다른 탭에서 이미 끝냈으면 해제가 INVALID_STATE로 거절되고 상태를 다시 읽는다 (2.7, D-188)', (tester) async {
+  testWidgets('다른 탭에서 이미 끝냈으면 해제가 INVALID_STATE로 거절되고 상태를 다시 읽는다 (2.7, D-189)', (tester) async {
     var finished = false; // 화면을 연 뒤 다른 탭에서 [확인 끝내기]를 눌렀다고 본다
     final backend = FakeBackend({
       'GET /api/videos/7': (_) => json(video(finished ? 'finished' : 'ready')),
