@@ -24,6 +24,13 @@ void main() {
     expect(canFetchNext(batch(2), s(2, 10, false), 'batch_running'), isFalse);
   });
 
+  test('마지막 페이지는 받을 후보가 없고 마지막 묶음을 아직 넘기지 않았을 때 (D-190)', () {
+    expect(isLastPage(batch(2), s(2, 0, false), 'ready'), isTrue);
+    expect(isLastPage(batch(2), s(2, 10, false), 'ready'), isFalse); // 받을 후보가 남았다 → [다음 ▶]
+    expect(isLastPage(batch(1), s(2, 0, false), 'ready'), isFalse); // 앞 묶음
+    expect(isLastPage(batch(2), s(2, 0, true), 'ready'), isFalse); // 이미 끝낸 탭
+  });
+
   test('마지막 [다음] 확인창은 다른 탭도 다 넘겼을 때만 (D-99)', () {
     expect(needsLastBatchConfirm({'main': s(3, 0, false), 'parse_failed': s(null, 0, true)}, 'main'), isTrue);
     expect(needsLastBatchConfirm({'main': s(3, 0, false), 'parse_failed': s(1, 2, false)}, 'main'), isFalse);
@@ -40,7 +47,7 @@ void main() {
   test('한 탭을 다 넘기고 다른 탭이 남았을 때 안내', () {
     expect(
       tabDoneMessage({'main': s(2, 0, true), 'parse_failed': s(1, 3, false)}, 'main'),
-      '이 목록의 후보를 모두 확인했습니다. 다른 탭에 확인할 후보가 남아 있습니다.',
+      '이 목록의 후보를 모두 확인했습니다. 점수 미산출에 확인할 후보가 남아 있습니다.',
     );
     expect(
       tabDoneMessage({'main': s(2, 0, true, unavailable: 1), 'parse_failed': s(1, 3, false)}, 'main'),

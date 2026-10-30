@@ -62,7 +62,7 @@ class DemoApi extends Api {
   }
 
   static const _mainBatches = 3;
-  static const _perBatch = 4;
+  static const _perBatch = 10; // 서버와 같은 묶음당 최대 개수 (01장)
 
   final _videos = <int, Map<String, Object?>>{};
   final _pins = <int, List<Map<String, Object?>>>{};

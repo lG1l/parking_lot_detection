@@ -30,6 +30,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  # 달력·시계 선택창 등 Material 기본 글자를 한국어로 (D-190)
+  flutter_localizations:
+    sdk: flutter
   go_router: ^18.1.1
   flutter_riverpod: ^3.4.3
   http: ^1.6.0

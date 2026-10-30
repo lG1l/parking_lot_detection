@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/theme.dart';
 import '../../core/api/api.dart';
 import '../../core/api/api_error.dart';
 import '../../core/constants.dart';
@@ -121,64 +122,92 @@ class _VideoStatusPageState extends ConsumerState<VideoStatusPage> {
   Widget build(BuildContext context) {
     final d = _detail;
     return PageFrame(
+      eyebrow: switch (_screen) {
+        StatusScreen.expired => '보관 기간 종료',
+        StatusScreen.exhausted => '후보 확인',
+        _ => null,
+      },
+      eyebrowNote: _screen == StatusScreen.exhausted && d != null ? resultExpiresText(d.viewExpiresAt) : null,
       title: d?.originalFilename ?? '영상 상태',
-      actions: const [BackToListButton()],
       child: d == null ? const Center(child: CircularProgressIndicator()) : _body(context, d),
     );
   }
 
   Widget _body(BuildContext context, VideoDetail d) {
-    final ending = const {
-      VideoStatus.finished,
-      VideoStatus.exhausted,
-      VideoStatus.failed,
-    }.contains(d.status);
+    final ending = const {VideoStatus.finished, VideoStatus.exhausted, VideoStatus.failed}.contains(d.status);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ...switch (_screen!) {
-          StatusScreen.expired => [const ExpiredView()],
-          StatusScreen.exhausted => [Notice(completionMessage(d))],
+        switch (_screen!) {
+          StatusScreen.expired => const ExpiredView(),
+          StatusScreen.exhausted => _completion(context, d),
           StatusScreen.failed => _failure(context, d),
-          _ => [
-            for (final m in waitingMessages(d)) Notice(m),
-            const SizedBox(height: 16),
-            const Center(child: CircularProgressIndicator()),
-          ],
+          _ => _waiting(d),
         },
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
         if (d.durationSec != null) SmallText('영상 길이 ${formatElapsed(d.durationSec!)}'),
         if (!ending && !d.maskedDeleted) SmallText(viewExpiresText(d.viewExpiresAt)),
       ],
     );
   }
 
-  List<Widget> _failure(BuildContext context, VideoDetail d) {
+  /// 대기·분석 중: 진행 표시 아래 첫 문구를 크게, 나머지를 보통 크기로 (D-190).
+  Widget _waiting(VideoDetail d) {
+    final messages = waitingMessages(d);
+    return PageCard(
+      padding: const EdgeInsets.all(32),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 380),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const BigSpinner(),
+            const SizedBox(height: 16),
+            Text(
+              messages.first,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, height: 1.5),
+            ),
+            for (final m in messages.skip(1)) ...[
+              const SizedBox(height: 16),
+              Text(m, textAlign: TextAlign.center, style: const TextStyle(fontSize: 15, height: 1.6)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 2.8 완료. 고정한 것이 없을 때만 여기서 그린다 (있으면 결과 화면).
+  Widget _completion(BuildContext context, VideoDetail d) {
+    final none = (d.candidateTotal ?? 0) == 0;
+    return StateCard(
+      icon: none ? Icons.search : Icons.check_circle_outline,
+      title: completionMessage(d),
+      messages: [if (none) '이 영상에서는 확인할 후보 구간을 찾지 못했습니다.'],
+      // 버튼 없이 안내만 둔다. 목록으로는 상단 메뉴로 간다 (D-190)
+    );
+  }
+
+  Widget _failure(BuildContext context, VideoDetail d) {
     final notice = failureNotice(d);
-    return [
-      Notice(notice.message, icon: Icons.error_outline),
-      const SizedBox(height: 16),
-      if (notice.action == FailureAction.retry) ...[
-        Row(
-          children: [
-            FilledButton(
-              onPressed: _retrying ? null : _retry,
-              child: const Text('분석 다시 시도'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Text(_retrying ? '다시 시도를 요청하는 중입니다.' : '다시 시도 가능: ${d.retryLeft ?? 0}회 남음'),
+    return StateCard(
+      icon: Icons.error_outline,
+      iconColor: failColor,
+      messages: [
+        notice.message,
+        if (notice.action == FailureAction.retry) _retrying ? '다시 시도를 요청하는 중입니다.' : '다시 시도 가능: ${d.retryLeft ?? 0}회 남음',
       ],
-      if (notice.action == FailureAction.uploadLink)
-        Row(
-          children: [
-            FilledButton(
-              onPressed: () => context.go('/videos/upload-link'),
-              child: const Text('업로드 링크 받기'),
-            ),
-          ],
-        ),
-    ];
+      actions: [
+        if (notice.action == FailureAction.retry)
+          FilledButton(style: largeButtonStyle, onPressed: _retrying ? null : _retry, child: const Text('분석 다시 시도')),
+        if (notice.action == FailureAction.uploadLink)
+          FilledButton(
+            style: largeButtonStyle,
+            onPressed: () => context.go('/videos/upload-link'),
+            child: const Text('업로드 링크 받기'),
+          ),
+      ],
+    );
   }
 }

@@ -50,7 +50,7 @@ List<String> waitingMessages(VideoDetail d) {
       '입력을 저장했습니다. 분석 차례를 기다리는 중입니다. 앞에 $ahead건이 있습니다.',
       laterNotice,
     ],
-    VideoStatus.stage2Running => ['영상을 분석하고 있습니다. 24시간 영상이면 약 20분 걸립니다.', laterNotice],
+    VideoStatus.stage2Running => ['영상을 분석하고 있습니다.\n24시간 영상 기준 약 20분 걸립니다.', laterNotice],
     _ => ['화면을 준비하고 있습니다.'],
   };
 }

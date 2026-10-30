@@ -21,11 +21,11 @@ String statusLabel(String status) => switch (status) {
   VideoStatus.uploadFailed => '업로드 확인 안 됨',
   VideoStatus.queued => '대기 중',
   VideoStatus.stillsRunning => '준비 중',
-  VideoStatus.stage1Done => '입력 필요',
+  VideoStatus.stage1Done => '사전 입력 필요',
   VideoStatus.stage2Running => '분석 중',
-  VideoStatus.ready || VideoStatus.batchRunning => '확인 가능',
-  VideoStatus.finished => '확인 끝남',
-  VideoStatus.exhausted => '확인 끝남', // finished와 같은 이름 (D-186)
+  VideoStatus.ready || VideoStatus.batchRunning => '후보 선택 가능',
+  VideoStatus.finished => '확인 완료',
+  VideoStatus.exhausted => '확인 완료', // finished와 같은 이름 (D-186, D-190)
   VideoStatus.failed => '분석 실패',
   _ => status,
 };
@@ -47,6 +47,7 @@ class VideoSummary {
     required this.status,
     required this.viewExpiresAt,
     required this.maskedDeleted,
+    this.createdAt,
   });
 
   factory VideoSummary.fromJson(Map<String, dynamic> j) => VideoSummary(
@@ -55,12 +56,16 @@ class VideoSummary {
     status: j['status'] as String,
     viewExpiresAt: j['view_expires_at'] as String?,
     maskedDeleted: j['masked_deleted'] as bool,
+    createdAt: j['created_at'] as String?,
   );
 
   final int videoId;
   final String originalFilename;
   final String status;
   final String? viewExpiresAt;
+
+  /// 영상 행을 만든 시각 = 관리자가 업로드를 시작한 시각(6번 URL 발급, 04장). 목록의 업로드 날짜 (D-190).
+  final String? createdAt;
 
   /// 마스킹본을 더 볼 수 없는지. 파기됐거나 열람기한이 지났으면 서버가 true로 준다 (D-187).
   final bool maskedDeleted;

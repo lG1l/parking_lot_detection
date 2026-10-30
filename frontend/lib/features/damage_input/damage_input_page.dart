@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/theme.dart';
 import '../../core/api/api.dart';
 import '../../core/api/api_error.dart';
 import '../../core/browser/browser.dart';
@@ -67,6 +68,7 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
   Api get _api => ref.read(apiProvider);
 
   String? _viewExpiresAt;
+  String? _filename;
   Still? _still;
   Size? _natural;
   DateTime? _lastStillReload;
@@ -119,6 +121,7 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
         return;
       }
       _viewExpiresAt = d.viewExpiresAt;
+      _filename = d.originalFilename;
       await _loadStill();
     } catch (e) {
       _onError(e);
@@ -172,8 +175,11 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
 
   void _hoverVehicle(double x, double y) {
     final hits = _still!.detections.where((d) => boxContainsPoint(d.bbox, x, y)).toList()
-      ..sort((a, b) => ((a.bbox[2] - a.bbox[0]) * (a.bbox[3] - a.bbox[1]))
-          .compareTo((b.bbox[2] - b.bbox[0]) * (b.bbox[3] - b.bbox[1])));
+      ..sort(
+        (a, b) => ((a.bbox[2] - a.bbox[0]) * (a.bbox[3] - a.bbox[1])).compareTo(
+          (b.bbox[2] - b.bbox[0]) * (b.bbox[3] - b.bbox[1]),
+        ),
+      );
     final id = hits.isEmpty ? null : hits.first.detId;
     if (id != _hoverDetId) setState(() => _hoverDetId = id);
   }
@@ -188,9 +194,7 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
     if (box == null) return;
     if (!boxInside(box, _vehicleBox!)) {
       setState(() => _damage = null);
-      _setError(_visible == true
-          ? '파손 부위가 차량을 벗어났습니다. 다시 그려주세요.'
-          : '파손 위치가 차량을 벗어났습니다. 다시 그려주세요.');
+      _setError(_visible == true ? '파손 부위가 차량을 벗어났습니다. 다시 그려주세요.' : '파손 위치가 차량을 벗어났습니다. 다시 그려주세요.');
       return;
     }
     setState(() => _damage = box);
@@ -233,18 +237,19 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
     });
   }
 
-  Future<void> _backToList() async {
-    if (_entered &&
-        !await confirm(context, '저장하지 않은 입력은 사라집니다. 목록으로 갈까요?',
-            okLabel: '목록으로', cancelLabel: '계속 입력')) {
-      return;
-    }
-    if (mounted) context.go('/videos');
-  }
-
   /// 사진이 있으면 18번 → S3 PUT, 그다음 11번 (D-83).
   Future<void> _save() async {
     if (_saving) return;
+    // 저장하면 고칠 수 없으므로 한 번 더 묻는다 (D-190)
+    if (!await confirm(
+      context,
+      '저장한 뒤에는 입력을 고칠 수 없고, 바로 영상 분석을 시작합니다.',
+      title: '입력을 저장할까요?',
+      okLabel: '저장',
+    )) {
+      return;
+    }
+    if (!mounted || _saving) return;
     setState(() => _saving = true); // 버튼을 바로 막는다
     // 백엔드 연결 필요: 18번 사진 URL 발급 → S3 PUT (사진이 있을 때) → 11번 입력 저장
     await backendNotice(context, ref, '저장');
@@ -299,10 +304,7 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
               onPressed: () => Navigator.pop(context, _PhotoFailChoice.withoutPhoto),
               child: const Text('사진 없이 저장'),
             ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, _PhotoFailChoice.retry),
-              child: const Text('다시 올리기'),
-            ),
+            FilledButton(onPressed: () => Navigator.pop(context, _PhotoFailChoice.retry), child: const Text('다시 올리기')),
           ],
         ),
       );
@@ -314,18 +316,18 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
   @override
   Widget build(BuildContext context) {
     return PageFrame(
-      title: '차량·파손 부위 입력',
-      maxWidth: 1100,
-      actions: [BackToListButton(onPressed: _backToList)],
+      canLeave: _confirmLeave,
+      title: _reupload || _stillFailed || _still == null ? (_filename ?? '차량·파손 부위 입력') : null,
       child: _reupload
           ? _reuploadView(context)
           : _stillFailed
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Notice('정지 장면을 불러오지 못했습니다.', icon: Icons.error_outline),
-                const SizedBox(height: 12),
+          ? StateCard(
+              icon: Icons.error_outline,
+              iconColor: failColor,
+              title: '정지 장면을 불러오지 못했습니다.',
+              actions: [
                 FilledButton(
+                  style: largeButtonStyle,
                   onPressed: () => _loadStill().catchError(_onError),
                   child: const Text('다시 불러오기'),
                 ),
@@ -337,44 +339,41 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
     );
   }
 
+  /// 상단 바로 떠날 때 저장하지 않은 입력이 있으면 묻는다.
+  Future<bool> _confirmLeave() async {
+    if (!_entered) return true;
+    return confirm(context, '저장하지 않은 입력은 사라집니다. 이 화면을 떠날까요?', okLabel: '떠나기', cancelLabel: '계속 입력');
+  }
+
   Widget _reuploadView(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Notice(
-          '이 장면에서 본인 차량을 찾지 못했습니다. 관리자에게 차가 이미 주차된 뒤의 장면부터 영상을 다시 잘라 달라고 '
-          '요청한 뒤, 새 업로드 링크를 발급해 전달해 주세요.',
-        ),
-        const SizedBox(height: 16),
-        Wrap(
-          spacing: 12,
-          children: [
-            FilledButton(
-              onPressed: () => context.go('/videos/upload-link'),
-              child: const Text('업로드 링크 받기'),
-            ),
-            if (_still!.detections.isNotEmpty)
-              TextButton(
-                onPressed: () => setState(() => _reupload = false),
-                child: const Text('차량 고르기로 돌아가기'),
-              ),
-          ],
+    return StateCard(
+      icon: Icons.directions_car_outlined,
+      messages: const [
+        '이 장면에서 본인 차량을 찾지 못했습니다. 관리자에게 차가 이미 주차된 뒤의 장면부터 영상을 다시 잘라 달라고 '
+            '요청한 뒤, 새 업로드 링크를 발급해 전달해 주세요.',
+      ],
+      actions: [
+        if (_still!.detections.isNotEmpty)
+          OutlinedButton(onPressed: () => setState(() => _reupload = false), child: const Text('차량 고르기로 돌아가기')),
+        FilledButton(
+          style: largeButtonStyle,
+          onPressed: () => context.go('/videos/upload-link'),
+          child: const Text('업로드 링크 받기'),
         ),
       ],
     );
   }
 
-  String get _instruction => switch (_step) {
-    InputStep.vehicle => '① 본인 차량을 눌러 선택해주세요',
-    InputStep.visibility => '② 파손 부위가 이 장면에 보이나요?',
-    InputStep.damage => _visible == true
-        ? '③ 파손 부위를 드래그해주세요'
-        : '③ 보이지 않는 파손이 있을 위치를 작은 사각형으로 드래그해주세요',
-    InputStep.corners => '④ 내 차 바퀴 아래, 차가 바닥에 닿는 네 모서리를 차 둘레를 따라 차례로 눌러주세요. '
-        '가려진 모서리는 짐작해서 찍어도 됩니다.',
-    InputStep.edges => '⑤ 파손이 있는 쪽 변을 눌러주세요. 모서리 파손이면 이웃한 두 변을 누르세요.',
-    InputStep.extras => '⑥ 파손 사진과 설명이 있으면 분석에 도움이 됩니다. 없어도 저장할 수 있습니다.',
-    InputStep.confirm => '⑦ 이대로 분석을 시작합니다. 저장한 뒤에는 고칠 수 없습니다.',
+  /// 단계 제목과 보조 안내 (07장 2.6 문구에서 번호를 뺐다. 번호는 단계 표시줄에 있다).
+  (String, String?) get _instruction => switch (_step) {
+    InputStep.vehicle => ('본인 차량을 눌러 선택해주세요', null),
+    InputStep.visibility => ('파손 부위가 이 장면에 보이나요?', null),
+    InputStep.damage =>
+      _visible == true ? ('고른 차량 안에서 파손 부위를 드래그해 주세요', null) : ('보이지 않는 파손이 있을 위치를 작은 사각형으로 드래그해주세요', null),
+    InputStep.corners => ('차가 바닥에 닿는 네 모서리를 차례로 눌러주세요', '가려진 모서리는 짐작해서 찍어도 됩니다.'),
+    InputStep.edges => ('파손이 있는 쪽 변을 눌러주세요', '모서리 파손이면 이웃한 두 변을 누르세요.'),
+    InputStep.extras => ('파손 사진과 설명을 남겨주세요', '선택 사항입니다. 비워 두고 다음으로 넘어가도 됩니다.'),
+    InputStep.confirm => ('입력한 내용을 확인해주세요', '저장한 뒤에는 고칠 수 없습니다.'),
   };
 
   StillOverlay get _overlay {
@@ -415,133 +414,361 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
     );
   }
 
+  /// 단계 표시줄 · 파일 이름 · 단계 제목, 그 아래 왼쪽 정지 장면과 오른쪽 단계 패널 (캔버스 2.6).
   Widget _stepView(BuildContext context) {
-    final text = Theme.of(context).textTheme;
+    final (title, hint) = _instruction;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(_instruction, style: text.titleMedium),
-        if (_stepError != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(_stepError!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        _StepBar(current: _step),
+        const SizedBox(height: 20),
+        if (_filename != null)
+          Text(
+            _filename!,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: subColor),
           ),
-        const SizedBox(height: 12),
-        if (_step != InputStep.extras) _canvas(),
-        if (_step == InputStep.extras) _extras(context),
-        if (_step == InputStep.confirm) _summary(context),
-        const SizedBox(height: 16),
-        _buttons(),
-        const SizedBox(height: 16),
-        SmallText(viewExpiresText(_viewExpiresAt)),
+        const SizedBox(height: 10),
+        Text(title, style: pageTitleStyle),
+        const SizedBox(height: 20),
+        LayoutBuilder(
+          builder: (context, c) => c.maxWidth >= 900
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 열람기한은 정지 장면 바로 아래. 오른쪽 칸이 길어져도(사진·설명 단계) 같은 자리다
+                    Expanded(
+                      flex: 760,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [_canvas(), const SizedBox(height: 16), SmallText(viewExpiresText(_viewExpiresAt))],
+                      ),
+                    ),
+                    const SizedBox(width: 28),
+                    Expanded(
+                      flex: 412,
+                      // 단계 보조 안내는 오른쪽 칸 맨 위(카드 바로 위) 빈 자리에 띄운다. 정지 장면과 카드 윗선이 맞는다 (D-190)
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          _panel(context, hintInside: false),
+                          if (hint != null)
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              top: 0,
+                              // 자기 높이만큼 위로 올려 카드 바로 위에 붙인다
+                              child: FractionalTranslation(
+                                translation: const Offset(0, -1),
+                                child: Padding(padding: const EdgeInsets.only(bottom: 4), child: _hintText(hint)),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _canvas(),
+                    const SizedBox(height: 20),
+                    _panel(context, hintInside: true),
+                    const SizedBox(height: 16),
+                    SmallText(viewExpiresText(_viewExpiresAt)),
+                  ],
+                ),
+        ),
       ],
     );
   }
 
-  Widget _extras(BuildContext context) {
-    final photo = _photo;
+  /// 오른쪽 패널: 오류 · 단계별 카드 · 이전/다음 버튼.
+  /// 단계 보조 안내 글자. 확인 단계("저장한 뒤에는 고칠 수 없습니다.")만 빨갛고 굵게.
+  Widget _hintText(String hint) => _step == InputStep.confirm
+      ? Text(
+          hint,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: failColor),
+        )
+      : Text(hint, style: const TextStyle(fontSize: 14, color: noteColor));
+
+  /// [hintInside]: 좁은 화면이라 보조 안내를 패널 안 카드 위에 둔다.
+  Widget _panel(BuildContext context, {required bool hintInside}) {
+    final section = _section(context);
+    final (_, hint) = _instruction;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            OutlinedButton.icon(
-              onPressed: _pickPhoto,
-              icon: const Icon(Icons.photo_outlined),
-              label: Text(photo == null ? '사진 선택 (선택)' : '사진 바꾸기'),
-            ),
-            if (photo != null) ...[
-              const SizedBox(width: 12),
-              Expanded(child: Text(photo.name)),
-              TextButton(onPressed: () => setState(() => _photo = null), child: const Text('사진 빼기')),
+        if (hintInside && hint != null) ...[_hintText(hint), const SizedBox(height: 8)],
+        if (_stepError != null) ...[
+          Text(_stepError!, style: const TextStyle(fontSize: 14, color: failColor)),
+          const SizedBox(height: 18),
+        ],
+        for (final card in section) ...[card, const SizedBox(height: 18)],
+        _buttons(),
+      ],
+    );
+  }
+
+  /// 단계별 카드. 없으면 빈 목록.
+  List<Widget> _section(BuildContext context) {
+    Widget card(List<Widget> children) => PageCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 14, children: children),
+    );
+    Text status(String text) => Text(text, style: const TextStyle(fontSize: 15, color: subColor));
+    return switch (_step) {
+      InputStep.vehicle => const [],
+      InputStep.visibility => [
+        card([
+          const SectionTitle('파손 부위가 이 장면에 보이나요?'),
+          Row(
+            spacing: 10,
+            children: [
+              // 고르기만 하고 [다음]으로 넘어간다. 고른 쪽은 진한 버튼 (D-190)
+              for (final (value, label) in const [(true, '보임'), (false, '안 보임')])
+                Expanded(
+                  child: Semantics(
+                    selected: _visible == value,
+                    child: _visible == value
+                        ? FilledButton(onPressed: () {}, child: Text(label))
+                        : OutlinedButton(onPressed: () => setState(() => _visible = value), child: Text(label)),
+                  ),
+                ),
             ],
+          ),
+        ]),
+      ],
+      InputStep.damage => [
+        card([
+          const SectionTitle('파손 부위'),
+          status(_damage == null ? '고른 차량 안을 드래그해 사각형을 그려 주세요.' : '빨간 사각형 1개를 그렸습니다.'),
+          OutlinedButton(
+            onPressed: _damage == null ? null : () => setState(() => _damage = null),
+            child: const Text('다시 그리기'),
+          ),
+        ]),
+      ],
+      InputStep.corners => [
+        card([
+          const SectionTitle('바닥 모서리'),
+          status('4개 중 ${_corners.length}개를 찍었습니다.'),
+          OutlinedButton(
+            onPressed: () => setState(() {
+              _corners = [];
+              _edges = [];
+              _stepError = null;
+            }),
+            child: const Text('다시 찍기'),
+          ),
+        ]),
+      ],
+      InputStep.edges => [
+        card([
+          const SectionTitle('고른 파손 변'),
+          status('${_edges.length}개를 골랐습니다.'),
+          OutlinedButton(
+            onPressed: _edges.isEmpty ? null : () => setState(() => _edges = []),
+            child: const Text('다시 고르기'),
+          ),
+        ]),
+      ],
+      InputStep.extras => _extras(context),
+      InputStep.confirm => [
+        card([const SectionTitle('입력 내용'), _summary()]),
+      ],
+    };
+  }
+
+  List<Widget> _extras(BuildContext context) {
+    final photo = _photo;
+    return [
+      PageCard(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: 10,
+          children: [
+            // 제목 오른쪽에 고른 사진 이름, 그 아래 [사진 바꾸기]·[사진 빼기]를 나란히 (D-190)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              spacing: 12,
+              children: [
+                const SectionTitle('파손 사진'),
+                if (photo != null)
+                  Expanded(
+                    child: Text(
+                      photo.name,
+                      style: const TextStyle(fontSize: 14, color: subColor),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+            ),
+            Wrap(
+              spacing: 10,
+              runSpacing: 8,
+              children: [
+                OutlinedButton(onPressed: _pickPhoto, child: Text(photo == null ? '사진 선택' : '사진 바꾸기')),
+                if (photo != null)
+                  OutlinedButton(onPressed: () => setState(() => _photo = null), child: const Text('사진 빼기')),
+              ],
+            ),
+            const SmallText('jpg·png·heic · 최대 20MB'),
+            if (_photoError != null) Text(_photoError!, style: const TextStyle(fontSize: 14, color: failColor)),
           ],
         ),
-        if (_photoError != null)
-          Text(_photoError!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-        if (photo != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Image.network(photo.objectUrl, height: 200, fit: BoxFit.contain),
-          ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _description,
-          maxLength: maxDescriptionLength,
-          maxLines: 4,
-          decoration: const InputDecoration(labelText: '파손 설명 (선택)', border: OutlineInputBorder()),
+      ),
+      PageCard(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 10,
+          children: [
+            const SectionTitle('파손 설명'),
+            TextField(
+              controller: _description,
+              maxLength: maxDescriptionLength,
+              maxLines: 3,
+              decoration: const InputDecoration(hintText: '예: 조수석 뒷문 아래가 긁혔어요'),
+            ),
+          ],
         ),
-      ],
-    );
+      ),
+    ];
   }
 
-  Widget _summary(BuildContext context) {
+  /// 저장 전 확인표 (이름 · 값 두 칸).
+  Widget _summary() {
     final photo = _photo;
     final text = _description.text.trim();
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('탐지 상황: ${_visible == true ? '파손 부위가 보임' : '파손 부위가 보이지 않음'}'),
-          Text('고른 파손 변: ${_edges.map((e) => '${e + 1}번 변').join(', ')}'),
-          Text('설명: ${text.isEmpty ? '없음' : text}'),
-          Text('사진: ${photo == null ? '없음' : photo.name}'),
-          if (photo != null) Image.network(photo.objectUrl, height: 120, fit: BoxFit.contain),
-        ],
-      ),
+    final rows = [
+      ('선택한 차량', '노란 사각형'),
+      ('파손 보임', _visible == true ? '보임' : '안 보임'),
+      ('파손 부위', '빨간 사각형'),
+      ('바닥 모서리', '${_corners.length}개'),
+      ('파손 변', '${_edges.length}개'),
+      ('사진', photo == null ? '없음' : photo.name),
+      ('설명', text.isEmpty ? '없음' : text),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final (i, (name, value)) in rows.indexed)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            decoration: BoxDecoration(
+              border: i == 0 ? null : const Border(top: BorderSide(color: lineColor)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 96,
+                  child: Text(name, style: const TextStyle(fontSize: 14, color: subColor)),
+                ),
+                Expanded(child: Text(value, style: const TextStyle(fontSize: 14))),
+              ],
+            ),
+          ),
+      ],
     );
   }
 
   Widget _buttons() {
-    Widget prev(InputStep to) => OutlinedButton(onPressed: () => _go(to), child: const Text('이전 단계'));
-    Widget next(InputStep to, {bool enabled = true}) =>
-        FilledButton(onPressed: enabled ? () => _go(to) : null, child: const Text('다음'));
-    final children = switch (_step) {
-      InputStep.vehicle => [
-        OutlinedButton(
-          onPressed: () => setState(() => _reupload = true),
-          child: const Text('내 차가 목록에 없습니다'),
-        ),
-        next(InputStep.visibility, enabled: _detId != null),
-      ],
-      InputStep.visibility => [
-        prev(InputStep.vehicle),
-        FilledButton(
-          onPressed: () {
-            setState(() => _visible = true);
-            _go(InputStep.damage);
-          },
-          child: const Text('보임'),
-        ),
-        FilledButton(
-          onPressed: () {
-            setState(() => _visible = false);
-            _go(InputStep.damage);
-          },
-          child: const Text('안 보임'),
-        ),
-      ],
-      InputStep.damage => [prev(InputStep.visibility), next(InputStep.corners, enabled: _damage != null)],
-      InputStep.corners => [
-        prev(InputStep.damage),
-        OutlinedButton(
-          onPressed: () => setState(() {
-            _corners = [];
-            _edges = [];
-            _stepError = null;
-          }),
-          child: const Text('다시 찍기'),
-        ),
-        next(InputStep.edges, enabled: _corners.length == 4),
-      ],
-      InputStep.edges => [prev(InputStep.corners), next(InputStep.extras, enabled: _edges.isNotEmpty)],
-      InputStep.extras => [prev(InputStep.edges), next(InputStep.confirm)],
-      InputStep.confirm => [
-        OutlinedButton(onPressed: _saving ? null : () => _go(InputStep.vehicle), child: const Text('취소')),
-        FilledButton(onPressed: _saving ? null : _save, child: const Text('저장')),
-      ],
+    Widget prev(InputStep to) => Expanded(
+      child: OutlinedButton(onPressed: () => _go(to), child: const Text('이전 단계')),
+    );
+    Widget next(InputStep to, {bool enabled = true}) => Expanded(
+      child: FilledButton(onPressed: enabled ? () => _go(to) : null, child: const Text('다음')),
+    );
+    return switch (_step) {
+      InputStep.vehicle => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 18,
+        children: [
+          Row(children: [next(InputStep.visibility, enabled: _detId != null)]),
+          OutlinedButton(onPressed: () => setState(() => _reupload = true), child: const Text('내 차가 목록에 없습니다')),
+        ],
+      ),
+      InputStep.confirm => Row(
+        spacing: 12,
+        children: [
+          Expanded(
+            child: OutlinedButton(onPressed: _saving ? null : () => _go(InputStep.extras), child: const Text('이전 단계')),
+          ),
+          Expanded(
+            child: FilledButton(onPressed: _saving ? null : _save, child: const Text('저장')),
+          ),
+        ],
+      ),
+      _ => Row(
+        spacing: 12,
+        children: switch (_step) {
+          InputStep.visibility => [prev(InputStep.vehicle), next(InputStep.damage, enabled: _visible != null)],
+          InputStep.damage => [prev(InputStep.visibility), next(InputStep.corners, enabled: _damage != null)],
+          InputStep.corners => [prev(InputStep.damage), next(InputStep.edges, enabled: _corners.length == 4)],
+          InputStep.edges => [prev(InputStep.corners), next(InputStep.extras, enabled: _edges.isNotEmpty)],
+          _ => [prev(InputStep.edges), next(InputStep.confirm)],
+        },
+      ),
     };
-    return Wrap(spacing: 12, runSpacing: 8, children: children);
+  }
+}
+
+/// 입력 일곱 단계 표시줄. 지금 단계만 남색 동그라미 (캔버스 2.6).
+class _StepBar extends StatelessWidget {
+  const _StepBar({required this.current});
+
+  final InputStep current;
+
+  static const _labels = ['차량 고르기', '파손이 보이나요?', '파손 부위 드래그', '바닥 네 모서리', '파손 변 고르기', '사진·설명 (선택)', '확인 후 저장'];
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: '입력 단계 ${current.index + 1} / ${_labels.length}',
+      child: PageCard(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        child: Wrap(
+          spacing: 32,
+          runSpacing: 12,
+          children: [
+            for (final (i, label) in _labels.indexed)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 24,
+                    height: 24,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: i == current.index ? pointColor : null,
+                      border: Border.all(color: i == current.index ? pointColor : const Color(0xFF8F8F8B), width: 1.5),
+                    ),
+                    child: Text(
+                      '${i + 1}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: i == current.index ? offWhiteColor : noteColor,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: i == current.index ? FontWeight.w600 : FontWeight.w400,
+                      color: i == current.index ? inkColor : noteColor,
+                    ),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
