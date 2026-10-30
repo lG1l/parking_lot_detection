@@ -69,15 +69,5 @@ resource "aws_vpc_security_group_ingress_rule" "gpu_ssh" {
   cidr_ipv4         = "0.0.0.0/0"
 }
 
-# 아웃바운드: 두 인스턴스 모두 전체 허용
-resource "aws_vpc_security_group_egress_rule" "backend_all" {
-  security_group_id = aws_security_group.backend.id
-  ip_protocol       = "-1"
-  cidr_ipv4         = "0.0.0.0/0"
-}
-
-resource "aws_vpc_security_group_egress_rule" "gpu_all" {
-  security_group_id = aws_security_group.gpu.id
-  ip_protocol       = "-1"
-  cidr_ipv4         = "0.0.0.0/0"
-}
+# 아웃바운드: 두 인스턴스 모두 전체 허용. AWS가 만든 기본 규칙을 그대로 쓴다.
+# 계정 정책(ControlOnlyOwnResources)이 기본 규칙 삭제를 막아 코드로 관리하지 않는다.
