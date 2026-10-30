@@ -151,7 +151,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
   }
 
   Future<void> _pin(CandidateClip c) async {
-    if (!await confirm(context, '이 장면을 사건 지점으로 고정합니다. 고정은 취소할 수 없습니다.', okLabel: '고정')) {
+    if (!await confirm(context, '이 장면을 사건 지점으로 고정합니다. [확인 끝내기] 전까지는 해제할 수 있습니다.', okLabel: '고정')) {
       return;
     }
     if (!mounted) return;
@@ -160,6 +160,27 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
     setState(() => _pinning.add(c.candidateClipId));
     try {
       _setPins(await _api.pin(_id, c.candidateClipId)); // 14, 응답이 곧 고정 목록
+    } catch (e) {
+      _onError(e);
+    } finally {
+      if (mounted) setState(() => _pinning.remove(c.candidateClipId));
+    }
+  }
+
+  Future<void> _unpin(CandidateClip c) async {
+    if (!await confirm(
+      context,
+      '이 장면의 사건 지점 고정을 해제합니다. [확인 끝내기] 전에는 다시 고정할 수 있습니다.',
+      okLabel: '해제',
+    )) {
+      return;
+    }
+    if (!mounted) return;
+    // 백엔드 연결 필요: 20번 사건 지점 고정 해제
+    await backendNotice(context, ref, '고정 해제');
+    setState(() => _pinning.add(c.candidateClipId));
+    try {
+      _setPins(await _api.unpin(_id, c.candidateClipId)); // 20, 응답이 곧 남은 고정 목록
     } catch (e) {
       _onError(e);
     } finally {
@@ -309,10 +330,16 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
                 const Spacer(),
                 if (pinned) const Chip(label: Text('확정됨'), avatar: Icon(Icons.push_pin, size: 16)),
                 const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: pinned || _pinning.contains(c.candidateClipId) ? null : () => _pin(c),
-                  child: const Text('찾음'),
-                ),
+                if (pinned)
+                  OutlinedButton(
+                    onPressed: _pinning.contains(c.candidateClipId) ? null : () => _unpin(c),
+                    child: const Text('고정 해제'),
+                  )
+                else
+                  FilledButton(
+                    onPressed: _pinning.contains(c.candidateClipId) ? null : () => _pin(c),
+                    child: const Text('찾음'),
+                  ),
               ],
             ),
             const SizedBox(height: 8),

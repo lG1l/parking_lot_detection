@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 
 import 'package:parking_lot_frontend/core/constants.dart';
 
@@ -313,6 +314,76 @@ void main() {
     expect(find.text('확정됨'), findsOneWidget);
     expect(find.text('확인 끝내기'), findsOneWidget);
     expect(backend.calls, contains('POST /api/videos/7/pin'));
+  });
+
+  Map<String, dynamic> pinned1187() => {
+    'candidate_clip_id': 1187,
+    'start_sec': 13235.0,
+    'end_sec': 13265.0,
+    'est_start_at': null,
+    'est_end_at': null,
+    'clip_url': 'http://x/1187.mp4',
+    'pinned_at': '2026-10-20T15:20:11+09:00',
+  };
+
+  http.Response candidateBatch1187() => json({
+    'list': 'main',
+    'batch_no': 1,
+    'unavailable': 0,
+    'candidates': [
+      {
+        'candidate_clip_id': 1187,
+        'rank': 1,
+        'vlm_score': 87,
+        'start_sec': 13235.0,
+        'end_sec': 13265.0,
+        'clip_url': 'http://x/1187.mp4',
+      },
+    ],
+    'lists': lists(),
+  });
+
+  testWidgets('[고정 해제]로 풀면 확정됨과 [확인 끝내기]가 사라지고 [찾음]이 돌아온다 (2.7, D-188)', (tester) async {
+    final backend = FakeBackend({
+      'GET /api/videos/7': (_) => json(video('ready')),
+      'GET /api/videos/7/batch': (_) => candidateBatch1187(),
+      'GET /api/videos/7/pin': (_) => json([pinned1187()]),
+      'DELETE /api/videos/7/pin/1187': (_) => json([]),
+    });
+    await pumpApp(tester, backend, '/videos/7/candidates');
+    expect(find.text('확정됨'), findsOneWidget);
+    expect(find.text('확인 끝내기'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '찾음'), findsNothing);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '고정 해제'));
+    await settle(tester);
+    await tester.tap(find.widgetWithText(FilledButton, '해제'));
+    await settle(tester);
+    expect(backend.calls, contains('DELETE /api/videos/7/pin/1187'));
+    expect(find.text('확정됨'), findsNothing);
+    expect(find.text('확인 끝내기'), findsNothing);
+    expect(find.widgetWithText(FilledButton, '찾음'), findsOneWidget);
+  });
+
+  testWidgets('다른 탭에서 이미 끝냈으면 해제가 INVALID_STATE로 거절되고 상태를 다시 읽는다 (2.7, D-188)', (tester) async {
+    var finished = false; // 화면을 연 뒤 다른 탭에서 [확인 끝내기]를 눌렀다고 본다
+    final backend = FakeBackend({
+      'GET /api/videos/7': (_) => json(video(finished ? 'finished' : 'ready')),
+      'GET /api/videos/7/batch': (_) => candidateBatch1187(),
+      'GET /api/videos/7/pin': (_) => json([pinned1187()]),
+      'DELETE /api/videos/7/pin/1187': (_) {
+        finished = true;
+        return apiError(409, 'INVALID_STATE');
+      },
+    });
+    await pumpApp(tester, backend, '/videos/7/candidates');
+    final before = backend.calls.where((c) => c == 'GET /api/videos/7').length;
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '고정 해제'));
+    await settle(tester);
+    await tester.tap(find.widgetWithText(FilledButton, '해제'));
+    await settle(tester);
+    expect(backend.calls.where((c) => c == 'GET /api/videos/7').length, greaterThan(before));
   });
 
   testWidgets('결과 화면은 원본 기준 시간과 추정 실제 시각을 보인다 (2.9)', (tester) async {
