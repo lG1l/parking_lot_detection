@@ -11,6 +11,15 @@ terraform {
 
 provider "aws" {
   region = "ap-northeast-2"
+
+  default_tags {
+    tags = var.tags
+  }
+}
+
+variable "tags" {
+  description = "모든 리소스에 붙일 태그. 계정 정책의 소유자 판정에 쓰이므로 값은 terraform.tfvars에만 둔다"
+  type        = map(string)
 }
 
 variable "name_prefix" {
