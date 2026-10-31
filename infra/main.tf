@@ -77,3 +77,32 @@ resource "aws_vpc_security_group_ingress_rule" "gpu_ssh" {
 
 # 아웃바운드: 두 인스턴스 모두 전체 허용. AWS가 만든 기본 규칙을 그대로 쓴다.
 # 계정 정책(ControlOnlyOwnResources)이 기본 규칙 삭제를 막아 코드로 관리하지 않는다.
+
+variable "bucket_prefix" {
+  description = "S3 버킷 이름 접두어. 버킷 이름은 전 세계에서 유일해야 하므로 값은 terraform.tfvars에만 둔다 (04장 4.9)"
+  type        = string
+}
+
+# 작업 전달 대기열: 표준 대기열 1개, DLQ 없음, 보관 14일, 가시성 제한 시간 2분 (D-16, D-56, D-141)
+resource "aws_sqs_queue" "jobs" {
+  name                       = "${var.name_prefix}-jobs"
+  message_retention_seconds  = 1209600
+  visibility_timeout_seconds = 120
+}
+
+# 비공개 버킷 3개: 원본, 마스킹본, 분석 결과 (D-23). 버전 관리는 켜지 않는다 (D-57)
+resource "aws_s3_bucket" "data" {
+  for_each = toset(["raw", "masked", "analysis"])
+
+  bucket = "${var.bucket_prefix}-${each.key}"
+}
+
+resource "aws_s3_bucket_public_access_block" "data" {
+  for_each = aws_s3_bucket.data
+
+  bucket                  = each.value.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
