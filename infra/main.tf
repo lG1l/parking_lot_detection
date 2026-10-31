@@ -106,3 +106,32 @@ resource "aws_s3_bucket_public_access_block" "data" {
   ignore_public_acls      = true
   restrict_public_buckets = true
 }
+
+# 세 버킷 모두 30일 뒤 삭제 (D-136). 권한이 거부되면 백엔드 주기 작업으로 대체한다
+resource "aws_s3_bucket_lifecycle_configuration" "data" {
+  for_each = aws_s3_bucket.data
+
+  bucket = each.value.id
+
+  rule {
+    id     = "expire-30d"
+    status = "Enabled"
+
+    filter {}
+
+    expiration {
+      days = 30
+    }
+  }
+}
+
+# 원본 버킷 CORS: 브라우저가 presigned URL로 S3에 직접 PUT한다. 허용 출처 *는 데모 한정 (D-22, D-100)
+resource "aws_s3_bucket_cors_configuration" "raw" {
+  bucket = aws_s3_bucket.data["raw"].id
+
+  cors_rule {
+    allowed_origins = ["*"]
+    allowed_methods = ["PUT"]
+    allowed_headers = ["Content-Type", "If-None-Match"]
+  }
+}
