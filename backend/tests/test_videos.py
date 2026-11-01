@@ -50,7 +50,8 @@ def victim(case):
 def add_video(
     case_id, name="a.mp4", status=None, completed_days_ago=0, created_minutes_ago=0, **job
 ):
-    """영상 행을 직접 만든다. status가 있으면 업로드를 마친 영상이고 작업 행도 만든다."""
+    """영상 행을 직접 만든다. status가 있으면 업로드를 마친 영상이고 작업 행도 만든다.
+    열람 API(12·13·14·15·17번)를 바로 부를 수 있게 관리·감독 안내 동의도 1행 남긴다 (D-205)."""
     video_id = sql(
         "INSERT INTO videos (case_id, s3_key, original_filename, created_at, "
         "upload_completed_at) VALUES (:c, 'k', :n, now() - make_interval(mins => :m), "
@@ -62,6 +63,12 @@ def add_video(
         s=status,
         d=completed_days_ago,
     ).scalar_one()
+    sql(
+        "INSERT INTO viewing_agreements (video_id, user_id, requested_ip) "
+        "SELECT :v, admin_user_id, '127.0.0.1' FROM cases WHERE id = :c",
+        v=video_id,
+        c=case_id,
+    )
     if status is None:
         return video_id, None
     job_id = sql(

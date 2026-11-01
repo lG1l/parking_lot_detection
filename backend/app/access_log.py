@@ -14,6 +14,8 @@ CREATE_CASE = "create_case"
 VIEW_STILL = "view_still"
 VIEW_CLIP = "view_clip"
 PIN_INCIDENT = "pin_incident"
+AGREE_VIEWING = "agree_viewing"
+VIEW_INCIDENT_TIMES = "view_incident_times"
 
 
 def client_ip(request: Request) -> str | None:

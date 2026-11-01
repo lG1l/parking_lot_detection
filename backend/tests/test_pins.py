@@ -315,3 +315,103 @@ def test_unpin_expired_and_requires_login(client, me):
     sql("UPDATE videos SET upload_completed_at = now() - interval '31 days' WHERE id = :v", v=old)
     assert unpin(client, old, 1).json()["error"]["code"] == "MASKED_EXPIRED"
     assert make_client().delete(f"/api/videos/{old}/pin/1").status_code == 401
+
+
+# ---- API 23·안내 동의 검사 (D-205) ----
+
+
+def agree(client, vid, body=None):
+    return client.post(
+        f"/api/videos/{vid}/viewing-agreement",
+        json={"confirm_supervision": True} if body is None else body,
+    )
+
+
+def test_viewing_agreement_adds_row_and_log_each_time(client, me):
+    vid, _ = add_video(me, "a.mp4", "ready")
+    sql("DELETE FROM viewing_agreements")
+    assert agree(client, vid).status_code == 204
+    assert agree(client, vid).status_code == 204
+    assert count("viewing_agreements") == 2
+    assert count(f"access_logs WHERE action = 'agree_viewing' AND video_id = {vid}") == 2
+
+
+@pytest.mark.parametrize(
+    "body", [{}, {"confirm_supervision": False}, {"confirm_supervision": "true"}]
+)
+def test_viewing_agreement_requires_true(client, me, body):
+    vid, _ = add_video(me, "a.mp4", "ready")
+    sql("DELETE FROM viewing_agreements")
+    r = agree(client, vid, body)
+    assert (r.status_code, r.json()["error"]["code"]) == (422, "VALIDATION_FAILED")
+    assert count("viewing_agreements") == 0
+
+
+def test_viewing_agreement_is_admin_only_and_case_scoped(client, me):
+    vid, _ = add_video(me, "a.mp4", "ready")
+    r = agree(sign_in(make_client(), "victim1"), vid)
+    assert (r.status_code, r.json()["error"]["code"]) == (403, "ROLE_NOT_ALLOWED")
+    foreign, _ = add_video(setup_case("admin2", "victim2"), "b.mp4", "ready")
+    assert agree(client, foreign).status_code == 404
+
+
+def test_viewing_apis_need_agreement_within_30_minutes(client, me):
+    vid, _ = make_ready(me)
+    clip = clip_ids(client, vid)[0]
+    sql("UPDATE viewing_agreements SET agreed_at = now() - interval '31 minutes'")
+    for r in (
+        batch(client, vid),
+        nxt(client, vid),
+        pin(client, vid, clip),
+        pinned(client, vid),
+        finish(client, vid),
+    ):
+        assert (r.status_code, r.json()["error"]["code"]) == (403, "SUPERVISION_AGREEMENT_REQUIRED")
+    assert agree(client, vid).status_code == 204
+    assert pinned(client, vid).status_code == 200
+
+
+# ---- API 25 (D-210) ----
+
+
+def times(client, vid):
+    return client.get(f"/api/videos/{vid}/incident-times")
+
+
+def test_incident_times_only_in_end_states(client, me):
+    vid, _ = make_ready(me)
+    first, second = clip_ids(client, vid)[:2]
+    pin(client, vid, second)
+    pin(client, vid, first)
+    assert times(client, vid).json() == []  # 아직 고정을 풀 수 있다
+    finish(client, vid)
+    sql("DELETE FROM viewing_agreements")  # 동의를 검사하지 않는다
+    expected = [
+        {k: p[k] for k in ("start_sec", "end_sec", "est_start_at", "est_end_at", "pinned_at")}
+        for p in pinned_after_agree(client, vid)
+    ]
+    for c in (client, sign_in(make_client(), "victim1")):
+        r = times(c, vid)
+        assert r.status_code == 200
+        assert r.json() == expected
+        assert len(expected) == 2
+    assert count(f"access_logs WHERE action = 'view_incident_times' AND video_id = {vid}") == 3
+
+
+def pinned_after_agree(client, vid):
+    """15번 응답(동의를 새로 남기고 부른다)에서 clip_url·candidate_clip_id를 뺀 값과 비교한다"""
+    agree(client, vid)
+    return pinned(client, vid).json()
+
+
+def test_incident_times_exhausted_without_pins_is_empty(me):
+    vid, _ = add_video(me, "a.mp4", "exhausted")
+    assert times(sign_in(make_client(), "victim1"), vid).json() == []
+
+
+def test_incident_times_expired_and_foreign(client, me):
+    old, _ = add_video(me, "a.mp4", "finished", completed_days_ago=31)
+    r = times(client, old)
+    assert (r.status_code, r.json()["error"]["code"]) == (409, "MASKED_EXPIRED")
+    foreign, _ = add_video(setup_case("admin2", "victim2"), "b.mp4", "finished")
+    assert times(sign_in(make_client(), "victim1"), foreign).status_code == 404

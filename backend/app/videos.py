@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
+from pydantic import BaseModel, StrictBool
 from sqlalchemy import text
 
 from app import access_log, storage
@@ -69,6 +70,21 @@ def _case_video(conn, video_id: int, user: dict, role: str | None = None):
         raise ApiError(404, "VIDEO_NOT_FOUND", "video not found")
     if role is not None and user["role"] != role:
         raise ApiError(403, "ROLE_NOT_ALLOWED", f"{role} account required")
+    return row
+
+
+def _viewing_video(conn, video_id: int, user: dict):
+    """12·13·14·15·17번: 관리자 계정이고, 이 영상에 30분 안의 안내 동의가 있어야 한다 (D-205)"""
+    row = _case_video(conn, video_id, user, "admin")
+    agreed = conn.execute(
+        text(
+            "SELECT 1 FROM viewing_agreements "
+            "WHERE video_id = :v AND agreed_at > now() - interval '30 minutes'"
+        ),
+        {"v": video_id},
+    ).first()
+    if not agreed:
+        raise ApiError(403, "SUPERVISION_AGREEMENT_REQUIRED", "supervision agreement required")
     return row
 
 
@@ -178,3 +194,31 @@ def get_still(video_id: int, request: Request, user: Annotated[dict, Depends(cur
             still.masked_s3_key, expires_at or row.now + timedelta(days=VIEW_DAYS)
         ),
     }
+
+
+class ViewingAgreementBody(BaseModel):
+    confirm_supervision: StrictBool | None = None
+
+
+@router.post("/{video_id}/viewing-agreement", status_code=204)
+def agree_viewing(
+    video_id: int,
+    body: ViewingAgreementBody,
+    request: Request,
+    user: Annotated[dict, Depends(current_user)],
+):
+    with get_engine().begin() as conn:
+        _case_video(conn, video_id, user, "admin")
+        if body.confirm_supervision is not True:
+            raise ApiError(422, "VALIDATION_FAILED", "confirm_supervision must be true")
+        conn.execute(
+            text(
+                "INSERT INTO viewing_agreements (video_id, user_id, requested_ip) "
+                "VALUES (:v, :u, :ip)"
+            ),
+            {"v": video_id, "u": user["id"], "ip": access_log.client_ip(request)},
+        )
+    access_log.write_access_log(
+        access_log.AGREE_VIEWING, request, user_id=user["id"], video_id=video_id
+    )
+    return Response(status_code=204)

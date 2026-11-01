@@ -11,7 +11,7 @@ from app.batches import _check_masked_alive
 from app.db import get_engine
 from app.errors import ApiError
 from app.uploads import _iso
-from app.videos import VIEW_DAYS, _case_video, _view_expires_at
+from app.videos import VIEW_DAYS, _case_video, _view_expires_at, _viewing_video
 
 router = APIRouter(prefix="/api/videos")
 
@@ -69,7 +69,7 @@ def pin(
     user: Annotated[dict, Depends(current_user)],
 ):
     with get_engine().begin() as conn:
-        row = _case_video(conn, video_id, user, "admin")
+        row = _viewing_video(conn, video_id, user)
         _check_masked_alive(row, _view_expires_at(row.upload_completed_at))
         found = conn.execute(
             text(
@@ -131,15 +131,51 @@ def unpin(
 @router.get("/{video_id}/pin")
 def get_pinned(video_id: int, request: Request, user: Annotated[dict, Depends(current_user)]):
     with get_engine().connect() as conn:
-        row = _case_video(conn, video_id, user, "admin")
+        row = _viewing_video(conn, video_id, user)
     _check_masked_alive(row, _view_expires_at(row.upload_completed_at))
     return _list_pinned(video_id, row.job_id, request, user["id"], row)
+
+
+@router.get("/{video_id}/incident-times")
+def get_incident_times(
+    video_id: int, request: Request, user: Annotated[dict, Depends(current_user)]
+):
+    """25번: 시간 값만 준다. 재생 URL·클립 번호는 읽지도 않는다 (D-210)"""
+    with get_engine().connect() as conn:
+        row = _case_video(conn, video_id, user)
+        _check_masked_alive(row, _view_expires_at(row.upload_completed_at))
+        rows = []
+        if row.status in ("finished", "exhausted"):  # 그 전에는 고정을 풀 수 있다
+            rows = conn.execute(
+                text(
+                    "SELECT c.start_sec, c.end_sec, p.pinned_at, "
+                    "v.recording_started_at + c.start_sec * interval '1 second' AS est_start, "
+                    "v.recording_started_at + c.end_sec * interval '1 second' AS est_end "
+                    "FROM pinned_incidents p JOIN candidate_clips c ON c.id = p.candidate_clip_id "
+                    "JOIN videos v ON v.id = :v WHERE p.analysis_job_id = :j "
+                    "ORDER BY p.pinned_at, p.id"
+                ),
+                {"v": video_id, "j": row.job_id},
+            ).all()
+    access_log.write_access_log(
+        access_log.VIEW_INCIDENT_TIMES, request, user_id=user["id"], video_id=video_id
+    )
+    return [
+        {
+            "start_sec": r.start_sec,
+            "end_sec": r.end_sec,
+            "est_start_at": _iso(r.est_start) if r.est_start else None,
+            "est_end_at": _iso(r.est_end) if r.est_end else None,
+            "pinned_at": _iso(r.pinned_at),
+        }
+        for r in rows
+    ]
 
 
 @router.post("/{video_id}/finish")
 def finish(video_id: int, user: Annotated[dict, Depends(current_user)]):
     with get_engine().begin() as conn:
-        _case_video(conn, video_id, user, "admin")
+        _viewing_video(conn, video_id, user)
         # 14번의 고정(FOR SHARE)과 줄을 세운다 (D-101)
         job = conn.execute(
             text("SELECT id, status FROM analysis_jobs WHERE video_id = :v FOR UPDATE"),
