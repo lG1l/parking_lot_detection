@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 LOGIN = "login"
 LOOKUP_INVITEE = "lookup_invitee"
 CREATE_CASE = "create_case"
-ISSUE_UPLOAD_LINK = "issue_upload_link"
 VIEW_STILL = "view_still"
 VIEW_CLIP = "view_clip"
 PIN_INCIDENT = "pin_incident"

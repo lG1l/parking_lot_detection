@@ -17,16 +17,6 @@ def _access_line(path: str) -> str:
     return record.getMessage()
 
 
-def test_upload_token_is_masked():
-    line = _access_line("/api/uploads/s3cr3t-token/complete")
-    assert "s3cr3t-token" not in line
-    assert "/api/uploads/***/complete" in line
-
-
-def test_token_only_path_is_masked():
-    assert "/api/uploads/***" in _access_line("/api/uploads/s3cr3t-token")
-
-
 def test_query_string_is_dropped():
     line = _access_line("/_local/masked/videos/17/clips/1.mp4?exp=1760331600&sig=abc123")
     assert "sig" not in line and "exp" not in line

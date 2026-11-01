@@ -4,14 +4,15 @@ import pytest
 
 from app import storage
 from tests.conftest import STORAGE
-from tests.test_uploads import login, new_link, presign
+from tests.test_auth import make_user
+from tests.test_uploads import login, new_case, presign
 
 
 @pytest.fixture
-def upload_url(client):
-    login(client)
-    token = new_link(client)
-    url = presign(client, token).json()["upload_url"]
+def upload_url():
+    admin = login("admin1", "admin")
+    make_user(login_id="victim1", role="victim")
+    url = presign(admin, new_case(admin)).json()["upload_url"]
     return url.removeprefix("http://localhost:8000")
 
 
