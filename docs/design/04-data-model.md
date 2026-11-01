@@ -1,10 +1,14 @@
 # 04. 데이터 모델
 
+> **D-204(2026-11-01, 팀장): 관리자 주도 흐름으로 바꾼다. `upload_tokens`를 없애고 `cases`·`viewing_agreements`(모두 가칭)와 `users` 역할 칼럼을 더하며, `videos`는 사건에 속한다. 테이블·칼럼 이름은 👤 팀원 2가 정한다.**
+>
+> ⚠️ **확인 필요 — 백엔드(팀원 2)**: 코드는 아직 이전 스키마다. `backend/alembic/versions/`에 새 마이그레이션을 더해 `upload_tokens` 삭제, `cases`·`viewing_agreements` 추가, `users` 역할 칼럼 추가, `videos`·`upload_agreements` 칼럼 변경을 반영하고, 이 스키마를 쓰는 `backend/app/uploads.py`, `videos.py`, `periodic.py`, 테스트를 함께 바꿔야 한다.
+
 > **D-113·D-136·D-142: 업로드 완료 + 30일에 열람·추가 분석·재시도를 차단한다. 실제 파일 삭제는 S3 수명 주기 규칙(객체 생성 + 30일)을 기본으로 하며 비동기 삭제 지연을 데모에서 허용한다. 백엔드 주기 작업은 시작 시 1회·이후 1시간마다 DB 파기 표시와 기록을 남긴다. 수명 주기 권한을 받지 못한 경우에만 같은 작업이 파일도 삭제한다. 제출 자료의 세부 운영 절충 생략 규칙은 SRS 부록 A를 따른다.**
 
 > **2026-10-08 팀장 결정 — D-110: 전이 9·15의 확인 종료는 해당 작업에 고정 1개 이상이 있어야 한다. 기존 작업 미종료는 새 영상·작업 생성의 차단 조건이 아니다. 영상별 진행·결과를 유지하며, 보류는 사용자 확인만 미루므로 별도 paused 상태를 추가하지 않는다(D-111).**
 
-> 마지막 수정: 2026-10-12
+> 마지막 수정: 2026-11-01
 > 표시: 🚧 미정 · ⚠️ 확인 필요 · 🔐 멘토 승인 필요
 >
 > U-21·U-22·U-23을 팀원 2가 정리해(D-24, D-25, D-26) 본문을 작성했고, 4.10의 DDL 규칙을 D-27로, 관리자 업로드 방식(U-14)을 D-28로, 차량·파손 부위 입력 방식(U-13 일부)을 D-29로, 세션 저장 방식을 D-30으로, 사건 지점 고정 방식을 D-32로, 중복 저장 정리를 D-33~D-35로, 누끼를 우선 빼는 안을 D-36으로(→ D-65로 대체), 묶음 단위 [다음]을 D-37로, 고정 해제 없음을 D-40으로(→ D-181로 대체), 여러 장면 고정과 [확인 끝내기]를 D-80으로, 원본 허용 형식과 코덱 불량 시 바로 `failed`를 D-43으로, 링크로만 업로드(`upload_token_id` NOT NULL)를 D-45로, SQS에 넣고 나서 커밋하는 순서(4.4)를 D-46으로 더했다. 마스킹본·분석 결과 파기(U-24)는 D-57로, 청크를 디코딩에만 쓰고 트랙을 중간 저장하는 방식(`chunks` 테이블 없음, `processed_sec`)은 D-76으로 더했다. 이 결정들은 **모두 확정**이다(2026-10-09, D-135). **입력 방식은 2026-09-26 D-65(탐지된 차량 고르기), 입력 수정은 D-66(한 번만 받음)으로 바뀌었고**, `still_frames.detections`와 `vehicle_selections`의 차량 선택 형식(`schema_version` 2부터, 지금 5)이 여기에 딸려 있다. D-29는 입력 방식만 정하고, U-13의 나머지(룰 상황 목록·근접 판정·인접 영역)는 팀장 담당으로 남는다.
@@ -20,11 +24,15 @@ DB는 백엔드 EC2의 PostgreSQL이다. 백엔드와 GPU 워커가 같은 DB에
 ```
 users ──┬──< sessions        (로그인 세션)
         │
-        ├──< upload_tokens ──1:1── upload_agreements  (업로드 링크, 위탁계약 동의 D-147)
+        ├──< cases(가칭)     (관리자 1 + 피해자 1, D-204)
+        │       │
+        │       └──< videos  (사건 하나에 영상 여러 개, D-110)
         │
-        ├──< access_logs     (열람·발급·파기 기록, D-53)
+        ├──< access_logs     (열람·초대·파기 기록, D-53)
         │
-        └──< videos ──1:1── analysis_jobs
+videos ──┬── upload_agreements  (위탁계약 동의 D-147)
+        ├──< viewing_agreements(가칭)  (관리·감독 안내 동의, D-204)
+        └──1:1── analysis_jobs
                                   │
                                   ├──  still_frames        (정지 장면 1장, 마스킹본)
                                   ├──1:1── vehicle_selections  (본인 차량 선택)
@@ -44,7 +52,8 @@ users ──┬──< sessions        (로그인 세션)
 |---|---|
 | `sessions` | 로그인 세션을 서버 메모리가 아니라 DB에 둔다. 무상태 규칙(D-19)이자, 유출된 세션을 즉시 끊기 위해서다 (D-30) |
 | `still_frames` | 정지 장면(마스킹본 이미지)이 어느 원본 시간의 것이고 비식별화가 끝났는지 알아야 화면에 보여줄 수 있다. 불변 조건 2 |
-| `upload_tokens` | 관리자는 로그인하지 않고 **업로드 전용 일회용 링크**로만 올린다. 그 링크의 주인·만료·사용 여부를 기록한다 (D-28) |
+| `cases` (가칭) | 관리자 계정과 피해자 계정을 사건 하나로 묶는다. 영상의 접근 권한이 여기서 정해진다 (D-204) |
+| `viewing_agreements` (가칭) | 관리자가 열람 화면에 들어갈 때 체크한 관리·감독 안내 동의 기록. 서버가 열람을 허용하는 근거다 (D-204) |
 | `access_logs` | 개인영상정보에 닿는 요청을 한 행씩 남긴다. 표준 개인정보 보호지침 제44조⑤(열람 기록)·제42조(이용·파기 기록)와 고시 제8조①(접속기록 1년)이 요구하는 법정 기록이다 (D-53) |
 | `upload_agreements` | 관리자의 위탁계약 동의 기록. 개인정보 보호법 제26조① 위탁 문서의 증빙이다. 동의한 때부터 90일 보관한다 (D-147) |
 
@@ -54,13 +63,14 @@ users ──┬──< sessions        (로그인 세션)
 
 ### users
 
-계정은 **피해자 것 한 종류뿐**이다. 주차장 관리자는 계정을 만들지 않고 업로드 전용 링크로만 올리므로 역할(role) 칼럼이 없다. (D-28) 비밀번호 해시 방식(bcrypt, D-58)과 쿠키 속성(`SameSite=Lax`, D-60)은 [08장](08-auth.md)에서 정했다.
+계정은 **관리자와 피해자 두 종류**다. 역할 칼럼으로 나누고, 계정을 만들 때 정한다. (D-204, D-28 대체) 비밀번호 해시 방식(bcrypt, D-58)과 쿠키 속성(`SameSite=Lax`, D-60)은 [08장](08-auth.md)에서 정했다.
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | `id` | bigserial PK | |
 | `login_id` | text UNIQUE | 로그인 아이디 |
 | `password_hash` | text | bcrypt 해시 문자열 60자. 평문 비밀번호를 저장하지 않는다 (D-58, [08장 8.3](08-auth.md#83-비밀번호-저장-d-58)) |
+| `role` (가칭) | text | `admin` 또는 `victim`. 바뀌지 않는다 (D-204) 👤 팀원 2 결정 필요: 칼럼 이름 |
 | `name` | text | 화면 표시용 이름 |
 | `created_at` | timestamptz | |
 
@@ -78,37 +88,48 @@ users ──┬──< sessions        (로그인 세션)
 
 - 로그인에 성공하면 행을 만들고 평문 토큰을 **HttpOnly 쿠키**로 내려준다. 표에는 해시만 남는다. 요청마다 쿠키 값을 해시해 이 표를 찾고, `expires_at > now()`이면 통과시킨다.
 - **로그아웃은 행을 지우는 것**이다. 유출된 세션도 같은 방법으로 즉시 끊을 수 있다. HTTPS가 없는 상태(02장 2.11)에서 이것이 JWT 대신 DB 세션을 고른 이유다. (D-30)
-- `upload_tokens`와 모양이 같지만 **용도가 다르다.** 이 표는 열람 권한을 가진 로그인이고, `upload_tokens`는 업로드만 되는 1회용 링크다. 업로드 API는 쿠키를 보지 않는다.
 - 만료된 행을 지우는 정리 작업은 두지 않는다. 데모 규모에서는 쌓여도 문제가 없다.
 
-### upload_tokens
+### cases (가칭)
 
-피해자가 발급한 **업로드 전용 일회용 링크** 하나. 관리자는 이 링크로만 올린다. 링크에는 영상을 올리는 것 말고 아무 권한도 없다. (D-28)
+관리자 계정 1개와 피해자 계정 1개를 묶은 사건 하나. 관리자가 피해자 아이디로 초대하면 행이 생기고, 수락 단계 없이 바로 묶인다. (D-204)
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | `id` | bigserial PK | |
-| `token_hash` | text UNIQUE | 링크 주소에 들어가는 랜덤 문자열(43자)의 SHA-256 해시 64자. `sessions.token_hash`와 같은 방법으로 만든다 (D-59) |
-| `owner_user_id` | bigint FK → users | 이 링크로 올린 영상의 주인 |
-| `expires_at` | timestamptz | 이 시각이 지나면 쓸 수 없다. 유효 시간은 01장 1.6 |
-| `used_at` | timestamptz | 업로드를 시작한 시각. 비어 있지 않으면 다시 쓸 수 없다 |
-| `created_at` | timestamptz | 발급 시각 |
+| `admin_user_id` | bigint FK → users | 초대한 관리자 계정. 업로드·열람을 맡는다 |
+| `victim_user_id` | bigint FK → users | 초대된 피해자 계정. 입력을 맡는다 |
+| `created_at` | timestamptz | 초대 시각 |
 
-- 링크를 쓸 수 있는 조건은 **`used_at`이 비어 있고 `expires_at`이 지나지 않았을 때**다. 둘 중 하나라도 어긋나면 업로드 화면이 "만료된 링크"를 보여준다.
-- 만료되거나 이미 쓴 링크는 피해자가 로그인해서 다시 발급한다. 발급 이력은 행으로 쌓인다.
-- **다시 발급하면 아직 쓰지 않은 이전 링크의 `expires_at`을 `now()`로 바꿔 무효로 만든다.** 한 사용자에게 살아 있는 링크는 하나뿐이다 (D-28, 05장 5.4).
-- `used_at`은 **업로드용 presigned URL을 발급할 때** 찍는다. 그래서 업로드가 중간에 실패하면 링크는 이미 쓴 것이 되고, 다시 발급받아야 한다. 발급이 한 번 더 필요할 뿐이라 이대로 둔다.
-- 토큰은 **해시해서 저장한다.** 평문은 발급 응답에 한 번 넣고 버린다. DB 덤프·스냅샷·로그로 행이 새도 주운 값으로는 링크를 쓸 수 없다 (D-59). 유효 시간·발급 방식은 [08장 8.6](08-auth.md#86-업로드-전용-일회용-링크)에 있다.
+- 두 칼럼의 역할이 맞는지는 21번 API가 확인한다. 피해자 역할이 아닌 계정은 초대할 수 없다 ([05장 5.4](05-api.md#54-사건업로드-api)).
+- 같은 두 계정이 다른 사건으로 또 묶일 수 있다. 사고가 또 나면 새 사건이기 때문이다.
+- 초대를 취소하거나 사건을 지우는 기능은 없다.
+
+### viewing_agreements (가칭)
+
+관리자가 열람 화면에 들어갈 때 체크한 **관리·감독 안내 동의 기록**이다. 동의할 때마다 1행 더한다. (D-204)
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `id` | bigserial PK | |
+| `video_id` | bigint FK → videos | 어느 영상의 열람인가 |
+| `user_id` | bigint FK → users | 동의한 관리자 계정 |
+| `requested_ip` | inet | 접속 IP. `access_logs.requested_ip`와 같은 방법으로 얻는다 |
+| `agreed_at` | timestamptz | 동의 시각 |
+
+- 12·13·14·15·17번은 해당 영상의 행이 1건 이상 있어야 처리한다 ([08장 8.6](08-auth.md#86-사건-묶기-위탁계약-열람-안내창)).
+- 어떤 API도 이 기록을 돌려주지 않는다.
+- 👤 팀원 2 결정 필요: 보관 기간(참고 추천: `access_logs`처럼 지우지 않기).
 
 ### upload_agreements
 
-관리자가 업로드 링크로 맺은 **위탁계약 동의 기록**이다. 링크 하나에 동의 하나다. 6번(업로드 URL 발급)이 링크를 쓴 것으로 표시하는 트랜잭션 안에서 함께 넣는다 (D-147).
+관리자가 업로드마다 맺는 **위탁계약 동의 기록**이다. 영상 하나에 동의 하나다. 6번(업로드 URL 발급)이 영상 행을 만드는 트랜잭션 안에서 함께 넣는다 (D-147, D-204).
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | `id` | bigserial PK | |
-| `upload_token_id` | bigint FK UNIQUE → upload_tokens | 어느 링크로 동의했나 |
-| `agreement_version` | text | 동의한 계약 문구 버전. 백엔드 상수와 같아야 받는다 (법적문제검토 4부) |
+| `video_id` | bigint FK UNIQUE → videos | 어느 업로드에 대한 동의인가. 동의한 계정은 영상의 사건에서 찾는다 |
+| `agreement_version` | text | 동의한 계약 문구 버전. 백엔드 상수와 같아야 받는다 (위탁계약 문구 2부) |
 | `confirm_signage` · `confirm_disclosure_judged` · `confirm_reconsignment` | boolean | 확인 체크 3개. 셋 다 `true`일 때만 저장되지만, 무엇에 동의했는지 남기려고 칸을 둔다 |
 | `requested_ip` | inet | 접속 IP. `access_logs.requested_ip`와 같은 방법으로 얻는다 |
 | `agreed_at` | timestamptz | 동의 시각(= 6번을 받은 시각) |
@@ -123,8 +144,7 @@ users ──┬──< sessions        (로그인 세션)
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | `id` | bigserial PK | S3 키에도 쓴다 (4.9) |
-| `owner_user_id` | bigint FK → users | 영상의 주인. 결과를 보는 사용자 |
-| `upload_token_id` | bigint FK → upload_tokens, NOT NULL, UNIQUE | 어느 링크로 올라왔는지. 영상은 업로드 링크로만 올라온다 (D-28, D-45). 링크 하나에 영상 하나다 (D-108) |
+| `case_id` (가칭) | bigint FK → cases | 영상이 속한 사건. 관리자·피해자 권한이 여기서 정해진다 (D-204). 사건 하나에 영상은 여러 개일 수 있다 (D-110) |
 | `s3_key` | text | 원본 버킷 안의 키 (4.9) |
 | `original_filename` | text | 관리자가 올린 파일 이름 |
 | `recording_started_at` | timestamptz | 영상 첫 프레임의 실제 녹화 시각. 관리자가 업로드할 때 **선택으로** 입력한다. 비어 있으면 모른다 (D-85) |
@@ -398,7 +418,7 @@ users ──┬──< sessions        (로그인 세션)
 |---|---|---|
 | `id` | bigserial PK | |
 | `user_id` | bigint FK → users, NULL 허용 | 누가. 시스템이 남기는 `delete_raw`·`delete_masked`는 비어 있다 |
-| `video_id` | bigint FK → videos, NULL 허용 | 어느 영상. `login`·`issue_upload_link`는 비어 있다 |
+| `video_id` | bigint FK → videos, NULL 허용 | 어느 영상. `login`·`create_case`는 비어 있다 |
 | `action` | text | 무엇을 했나. 값 목록은 아래 |
 | `requested_ip` | inet | 어디서. 고시 제8조의 접속지 정보 |
 | `created_at` | timestamptz | 언제 |
@@ -408,7 +428,8 @@ users ──┬──< sessions        (로그인 세션)
 | 값 | 남기는 지점 (05장) | 법적 성격 |
 |---|---|---|
 | `login` | 로그인 성공 (5.3) | 열람 요구자 특정 (표준지침 제44조⑤) |
-| `issue_upload_link` | 업로드 링크 발급 (5.4) | 수집 경로 기록 |
+| `create_case` (가칭) | 사건 생성·피해자 초대 (5.4) | 수집 경로 기록 |
+| `agree_viewing` (가칭) | 관리·감독 안내 동의 (5.4) | 이용 기록 (표준지침 제42조) |
 | `view_still` | 정지 장면 조회 (5.6) | **열람** |
 | `view_clip` | 후보 클립 재생 URL 발급 (5.8, 5.9의 14·15번) | **열람** |
 | `pin_incident` | 사건 지점 고정 (5.9). 고정 한 건마다 한 행 | 이용 기록 (표준지침 제42조) |
@@ -505,7 +526,7 @@ UPDATE analysis_jobs
 
 같은 방법을 1단계 시작(전이 2, `WHERE status = 'queued'`)과 다음 묶음(전이 11)에도 쓴다. 전이 11은 묶음 번호 대신 두 목록의 지금 묶음에 `pending`·`running` 클립이 없는지를 조건에 넣는다. 목록마다 번호 칼럼이 달라 한쪽 번호로는 다른 목록의 [다음]을 판단할 수 없기 때문이다. 사용자가 그사이 [다음]을 또 눌러 새 지금 묶음이 만드는 중이면 조건이 맞지 않아 0행이 되고, 상태는 `batch_running`에 남는다 (D-82, D-168). **상태를 바꾸는 모든 UPDATE에는 `WHERE status = ...`를 반드시 붙인다.** 이것이 D-16 "반드시 지킬 것" 2번(멱등성)을 구현하는 방법이다.
 
-- **상태 칼럼이 아닌 곳에도 같은 방법을 쓴다.** 업로드 링크의 `used_at`(05장 6번), 업로드 완료의 `upload_completed_at`(05장 7번)이 모두 "비어 있을 때만 채운다"는 조건부 UPDATE다. 1행이면 이 요청이 맡고, 0행이면 이미 처리된 것이라 아무것도 하지 않는다.
+- **상태 칼럼이 아닌 곳에도 같은 방법을 쓴다.** 업로드 완료의 `upload_completed_at`(05장 7번)이 "비어 있을 때만 채운다"는 조건부 UPDATE다. 1행이면 이 요청이 맡고, 0행이면 이미 처리된 것이라 아무것도 하지 않는다.
 - **`next_batch`는 상태를 바꾸며 시작하지 않으므로 잠금으로 중복을 막는다.** 워커는 다음 순서로 처리한다. 절차는 05장 13번. (D-82, D-99)
   1. **이 작업에 `pending` 클립이 있으면 그것부터 마저 만든다.** 상태가 `ready`든 `batch_running`이든 같다. 미리 준비하던 워커가 죽으면 `ready`인 채로 `pending` 클립이 남고, 재전달된 메시지가 아래 2에서 "이미 앞서 있음"으로 지워져 아무도 만들지 않게 되기 때문이다. 두 워커가 같은 클립을 잡는 것은 클립 행의 조건부 UPDATE(`pending` → `running`)로 막는다. (D-94, D-99)
   2. 한 트랜잭션에서 `SELECT status, current_batch_no, current_failed_batch_no ... FOR UPDATE`로 행을 잠그고, **목록마다** `max(batch_no)`가 이미 그 목록의 묶음 번호 + 1 이상이면(한 묶음 앞서 있으면) 건너뛴다. 두 목록 모두 건너뛰면 메시지를 지운다.
@@ -679,6 +700,7 @@ CREATE TABLE users (
   id            bigserial PRIMARY KEY,
   login_id      text        NOT NULL UNIQUE,
   password_hash text        NOT NULL,
+  role          text        NOT NULL,          -- admin | victim. 이름은 가칭 (D-204)
   name          text        NOT NULL,
   created_at    timestamptz NOT NULL DEFAULT now()
 );
@@ -691,30 +713,16 @@ CREATE TABLE sessions (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE upload_tokens (
-  id            bigserial PRIMARY KEY,
-  token_hash    text        NOT NULL UNIQUE,   -- 링크 주소에 들어가는 랜덤 문자열의 SHA-256 (64자)
-  owner_user_id bigint      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  expires_at    timestamptz NOT NULL,
-  used_at       timestamptz,                   -- 비어 있지 않으면 이미 쓴 링크
-  created_at    timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE TABLE upload_agreements (
-  id                        bigserial PRIMARY KEY,
-  upload_token_id           bigint      NOT NULL UNIQUE REFERENCES upload_tokens(id) ON DELETE CASCADE,
-  agreement_version         text        NOT NULL,   -- 동의한 계약 문구 버전 (법적문제검토 4부)
-  confirm_signage           boolean     NOT NULL,
-  confirm_disclosure_judged boolean     NOT NULL,
-  confirm_reconsignment     boolean     NOT NULL,
-  requested_ip              inet        NOT NULL,   -- 접속 IP
-  agreed_at                 timestamptz NOT NULL DEFAULT now()   -- 90일 뒤 주기 작업이 지운다 (D-147)
+CREATE TABLE cases (                         -- 이름은 가칭 (D-204)
+  id             bigserial PRIMARY KEY,
+  admin_user_id  bigint      NOT NULL REFERENCES users(id),
+  victim_user_id bigint      NOT NULL REFERENCES users(id),
+  created_at     timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE TABLE videos (
   id                  bigserial PRIMARY KEY,
-  owner_user_id       bigint      NOT NULL REFERENCES users(id),
-  upload_token_id     bigint      NOT NULL UNIQUE REFERENCES upload_tokens(id),  -- 영상은 링크로만 올라온다 (D-45). 링크 하나에 영상 하나 (D-108)
+  case_id             bigint      NOT NULL REFERENCES cases(id),  -- 사건 하나에 영상 여러 개 (D-110, D-204)
   s3_key              text        NOT NULL,
   original_filename   text        NOT NULL,
   recording_started_at timestamptz,            -- 관리자가 입력한 녹화 시작 시각. 선택 (D-85)
@@ -727,6 +735,25 @@ CREATE TABLE videos (
   upload_completed_at timestamptz,             -- 비어 있으면 업로드 미완료
   raw_deleted_at      timestamptz,             -- 원본과 트랙을 파기 처리한 시각. 비어 있으면 파기 전 (D-52, D-64, D-142)
   masked_deleted_at   timestamptz              -- 마스킹본을 파기 처리한 시각. raw_deleted_at과 같은 때 찍는다 (D-57, D-64, D-142)
+);
+
+CREATE TABLE upload_agreements (
+  id                        bigserial PRIMARY KEY,
+  video_id                  bigint      NOT NULL UNIQUE REFERENCES videos(id) ON DELETE CASCADE,
+  agreement_version         text        NOT NULL,   -- 동의한 계약 문구 버전 (위탁계약 문구 2부)
+  confirm_signage           boolean     NOT NULL,
+  confirm_disclosure_judged boolean     NOT NULL,
+  confirm_reconsignment     boolean     NOT NULL,
+  requested_ip              inet        NOT NULL,   -- 접속 IP
+  agreed_at                 timestamptz NOT NULL DEFAULT now()   -- 90일 뒤 주기 작업이 지운다 (D-147)
+);
+
+CREATE TABLE viewing_agreements (            -- 이름은 가칭 (D-204)
+  id           bigserial PRIMARY KEY,
+  video_id     bigint      NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  user_id      bigint      NOT NULL REFERENCES users(id),
+  requested_ip inet        NOT NULL,
+  agreed_at    timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE TABLE analysis_jobs (
@@ -828,7 +855,10 @@ CREATE TABLE access_logs (
 UNIQUE 제약은 인덱스를 자동으로 만든다. 아래는 그것만으로 부족한 조회에 더하는 것이다.
 
 ```sql
-CREATE INDEX idx_videos_owner        ON videos (owner_user_id, created_at DESC);
+CREATE INDEX idx_videos_case         ON videos (case_id, created_at DESC);
+CREATE INDEX idx_cases_admin         ON cases (admin_user_id, created_at DESC);
+CREATE INDEX idx_cases_victim        ON cases (victim_user_id, created_at DESC);
+CREATE INDEX idx_viewing_video       ON viewing_agreements (video_id);
 CREATE INDEX idx_jobs_status_created ON analysis_jobs (status, created_at);
 CREATE INDEX idx_cand_job_batch_rank ON candidates (analysis_job_id, list_kind, batch_no, rank);
 CREATE INDEX idx_cand_job_verdict    ON candidates (analysis_job_id, verdict);
@@ -840,19 +870,20 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 
 | 인덱스 | 어떤 조회에 쓰나 |
 |---|---|
-| `videos (owner_user_id, created_at DESC)` | 사용자의 영상 목록을 최근순으로 보여줄 때 |
+| `videos (case_id, created_at DESC)` | 사건의 영상 목록을 최근순으로 보여줄 때 |
+| `cases (admin_user_id, created_at DESC)`, `cases (victim_user_id, created_at DESC)` | 계정이 묶인 사건 목록(22번)과 영상 목록(8번) |
+| `viewing_agreements (video_id)` | 열람 API가 동의 기록을 확인할 때 (D-204) |
 | `analysis_jobs (status, created_at)` | 4.5의 "앞에 N건" 계산 |
 | `candidates (analysis_job_id, list_kind, batch_no, rank)` | 목록 하나의 묶음 하나를 점수순으로 꺼낼 때 (D-99) |
 | `candidates (analysis_job_id, verdict)` | 전이 10·12의 "남은 후보가 있는가" |
 | `candidate_clips (candidate_id)` | 후보의 클립을 찾을 때 |
-| `videos (upload_token_id)` UNIQUE | 업로드 완료 알림(05장 7번)이 링크로 영상을 찾을 때. 같은 링크로 영상 행이 두 개 생기는 것도 막는다 (D-108) |
 | `access_logs (video_id, created_at DESC)` | "이 영상에 누가 언제 닿았나" (D-53) |
 | `videos (upload_completed_at) WHERE raw_deleted_at IS NULL` | 파기 주기 작업이 보관 상한(30일)이 지난 "파기 표시할 것"을 찾을 때. 부분 인덱스라 이미 표시한 영상은 아예 들어오지 않는다 (D-52, D-64) |
 | `videos (upload_completed_at) WHERE masked_deleted_at IS NULL` | 같은 주기 작업이 마스킹본 파기 대상을 찾을 때 (D-57) |
 
 - 데모 규모(영상 수십 건)에서는 인덱스가 없어도 느리지 않다. 행이 많아져도 조회가 느려지지 않게 미리 둔다.
 - `still_frames`·`vehicle_selections`·`damage_inputs`·`pinned_incidents`는 UNIQUE 제약이 만드는 인덱스로 충분하다. 모두 `analysis_job_id`로만 찾기 때문이다. `pinned_incidents`의 UNIQUE는 `(analysis_job_id, candidate_clip_id)`라 앞 칼럼만으로도 이 인덱스를 쓴다.
-- `sessions`와 `upload_tokens`도 마찬가지다. 찾는 방법이 `token_hash` 하나뿐이고 여기에 UNIQUE가 걸려 있다. 요청마다 도는 조회라 인덱스가 꼭 필요한데, UNIQUE가 이미 만들어 준다.
+- `sessions`도 마찬가지다. 찾는 방법이 `token_hash` 하나뿐이고 여기에 UNIQUE가 걸려 있다. 요청마다 도는 조회라 인덱스가 꼭 필요한데, UNIQUE가 이미 만들어 준다.
 
 ### DDL에서 정한 것 (D-27)
 
@@ -860,11 +891,10 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 |---|---|---|
 | `status`에 CHECK 제약 | **걸지 않는다.** 값 목록은 백엔드·워커 코드의 enum으로만 관리한다 | 상태 목록(4.3)은 결정이 바뀌며 여러 번 달라졌다(D-81 등). CHECK를 걸면 값 하나를 더할 때마다 DB를 고쳐야 한다. 상태를 쓰는 곳이 백엔드와 워커 둘뿐이라 코드에서 막아도 충분하다 |
 | `analysis_jobs` 아래 테이블의 FK | 모두 `ON DELETE CASCADE` | 영상 1건을 지울 때 관련 행이 함께 지워진다. S3에서 `videos/{video_id}/` 접두사 하나만 지우면 되는 것(4.9)과 짝이 맞는다 |
-| `videos → users` FK | CASCADE를 걸지 **않는다**(기본 동작) | 사용자를 지웠다고 영상과 분석 결과가 사라지면 안 된다. 참조가 남아 있으면 삭제가 거부된다 |
-| `upload_tokens → users`, `sessions → users` FK | CASCADE를 건다 | 링크와 세션은 짧게 살고 만료되는 임시 값이라 계정과 함께 사라져도 된다 (D-30) |
+| `videos → cases`, `cases → users` FK | CASCADE를 걸지 **않는다**(기본 동작) | 사용자를 지웠다고 영상과 분석 결과가 사라지면 안 된다. 참조가 남아 있으면 삭제가 거부된다 |
+| `sessions → users` FK | CASCADE를 건다 | 세션은 짧게 살고 만료되는 임시 값이라 계정과 함께 사라져도 된다 (D-30) |
 | `pinned_incidents → candidate_clips` FK | CASCADE를 걸지 **않는다** | 고정한 클립 행만 따로 지워지면 사건 지점이 사라진다. 분석 작업째 지울 때는 위의 CASCADE로 함께 지워진다 (D-32) |
 | `access_logs`의 FK 2개 | `ON DELETE SET NULL` | 법정 기록이라 사용자나 영상이 지워져도 행이 남아야 한다. CASCADE면 함께 지워지고, 기본 동작(RESTRICT)이면 영상을 못 지운다. 둘 다 곤란해서 SET NULL을 쓴다 (D-53) |
-| `videos → upload_tokens` FK | CASCADE를 걸지 **않는다**(기본 동작) | 영상은 링크로만 올라오므로(D-45) 영상이 가리키는 링크 행은 지울 수 없어야 한다. 만료 링크 정리 작업을 만들면 쓰지 않은 링크(`used_at IS NULL`)만 지운다 |
 | `updated_at` 갱신 | 트리거를 쓰지 않고 **UPDATE 문에 직접 쓴다** | 상태를 바꾸는 UPDATE는 4.4처럼 `WHERE status = ...`가 붙은 조건부 문장이다. 같은 문장에서 함께 쓰는 편이 읽기 쉽고, 트리거가 숨어서 도는 것보다 추적하기 낫다 |
 | `NOT NULL` 기준 | 행을 만드는 시점에 값을 알 수 있으면 `NOT NULL`, 나중에 채우면 NULL 허용 | `videos.duration_sec`처럼 워커가 나중에 채우는 칼럼은 NULL이어야 한다. 주석으로 "완료 후 채운다"를 적어 둔다 |
 | 금액·좌표 타입 | 좌표·시간은 `double precision`, 픽셀 bbox는 JSONB 안의 정수 배열. JSONB가 아닌 칼럼(`candidate_clips.crop_bbox`)은 `integer[]` | 4.2·4.8의 표와 같다. 소수 오차가 문제 되는 계산(금액 등)은 이 프로젝트에 없다 |
@@ -873,7 +903,7 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 
 | 항목 | 어디서 정하나 |
 |---|---|
-| 업로드 링크 발급 화면, 만료 안내 문구 | 07장 (D-28). 유효 시간·발급 규칙은 08장 8.6에서 정했다 |
+| 피해자 초대 화면 문구 | 07장 2.3. 👤 팀원 1 |
 | 드래그와 탐지를 맞추는 기준(겹침 비율 등) | **없어졌다** → D-65에서 사용자가 직접 고르므로 맞출 것이 없다 |
 | 누끼를 다각형으로 딸지 (겹친 차량을 픽셀 단위로 가르기) | 06장 (U-09). D-65는 탐지 bbox만 쓴다 🚧 |
 | 탐지 0건·본인 차 없음일 때의 폴백 | **두지 않는다** → 재업로드 안내로 간다 (D-65, 2026-09-26 팀장 결정) |
@@ -901,7 +931,7 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 - 입력값은 JSONB + `schema_version`: D-25
 - 트랙 파일은 JSONL: D-26. 중간 저장 구간당 1개, `track_id`는 영상 안에서 유일: D-76
 - DDL 규칙(status에 CHECK를 걸지 않음, FK CASCADE 범위): D-27
-- 관리자는 계정 없이 업로드 전용 일회용 링크로 올린다: D-28 (U-14 해결)
+- 관리자는 계정 없이 업로드 전용 일회용 링크로 올린다: D-28 (U-14 해결) → **관리자·피해자 계정과 사건 초대로 대체: D-204**
 - 차량·파손 부위 입력, 본인 차량은 추적하지 않는다: D-29 (U-13 일부 해결) → **탐지된 차량을 고른다: D-65**
 - 로그인 세션은 DB 테이블 + HttpOnly 쿠키: D-30
 - 사건 지점 고정은 파일 복사 없이 클립 행 참조: D-32
@@ -912,7 +942,7 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 - 후보마다 [찾음]만, 묶음 단위 [다음]이 "못 찾음": D-37
 - 고정 해제는 [확인 끝내기] 전까지: D-181
 - 원본 키 확장자, 코덱 불량 시 재시도 없이 `failed`: D-43 (코덱 검사는 팀장 확인)
-- 영상은 업로드 링크로만 올라온다, `upload_token_id` NOT NULL: D-45
+- 영상은 업로드 링크로만 올라온다: D-45 → **영상은 사건의 관리자 계정으로만 올라온다, `case_id` NOT NULL: D-204**
 - SQS에 넣고 나서 커밋, 작업 행이 없는 메시지도 삭제하며 대기 작업은 임계 시간 뒤 재전송(4.4): D-46, D-56, D-153
 - 입력 수정은 1단계가 끝나기 전까지, 상태 조회에 `input_done`: D-49 → 입력은 한 번만, 저장 전 확인창: D-66
 - 본인 차량은 탐지된 차량 중에서 고른다(`still_frames.detections`, `vehicle_selections` `schema_version` 2부터, 지금 5): D-65
