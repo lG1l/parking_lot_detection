@@ -15,6 +15,7 @@ class StillOverlay {
     this.selectedBox,
     this.damageBox,
     this.corners = const [],
+    this.frontEdge,
     this.edges = const [],
     this.edgesClickable = false,
   });
@@ -24,6 +25,7 @@ class StillOverlay {
   final Box? selectedBox;
   final Box? damageBox;
   final List<Pt> corners;
+  final int? frontEdge;
   final List<int> edges;
   final bool edgesClickable;
 }
@@ -197,6 +199,20 @@ class _OverlayPainter extends CustomPainter {
             ..color = chosen ? chosenEdgeColor : floorEdgeColor,
         );
       }
+      // 앞쪽 변은 파랑. 파손 변과 같은 변이면 빨강 위에 점선으로 겹쳐 둘 다 보이게 한다 (D-212)
+      final front = o.frontEdge;
+      if (front != null) {
+        final a = _off(o.corners[front]);
+        final b = _off(o.corners[(front + 1) % 4]);
+        final paint = Paint()
+          ..strokeWidth = 7
+          ..color = frontEdgeColor;
+        if (o.edges.contains(front)) {
+          _dashedLine(canvas, a, b, paint);
+        } else {
+          canvas.drawLine(a, b, paint);
+        }
+      }
     }
     for (var i = 0; i < o.corners.length; i++) {
       final c = _off(o.corners[i]);
@@ -209,6 +225,16 @@ class _OverlayPainter extends CustomPainter {
         textDirection: TextDirection.ltr,
       )..layout();
       tp.paint(canvas, c - Offset(tp.width / 2, tp.height / 2));
+    }
+  }
+
+  void _dashedLine(Canvas canvas, Offset a, Offset b, Paint paint) {
+    const dash = 10.0;
+    final length = (b - a).distance;
+    if (length == 0) return;
+    final step = (b - a) / length;
+    for (var t = 0.0; t < length; t += dash * 2) {
+      canvas.drawLine(a + step * t, a + step * math.min(t + dash, length), paint);
     }
   }
 

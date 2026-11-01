@@ -21,6 +21,7 @@ const vehicleColor = Color(0xFFFACC15);
 const damageColor = Color(0xFFC2410C);
 const floorEdgeColor = Color(0xFFFFFFFF);
 const chosenEdgeColor = Color(0xFFDC2626);
+const frontEdgeColor = Color(0xFF2563EB); // 차 앞쪽 변 (D-212)
 const _fieldBorderColor = Color(0xFF8F8F8B);
 const _disabledBorderColor = Color(0xFFB5B5B5);
 const _disabledTextColor = Color(0xFF767676);
