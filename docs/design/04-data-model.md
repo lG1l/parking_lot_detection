@@ -11,7 +11,7 @@
 > 마지막 수정: 2026-11-01
 > 표시: 🚧 미정 · ⚠️ 확인 필요 · 🔐 멘토 승인 필요
 >
-> U-21·U-22·U-23을 팀원 2가 정리해(D-24, D-25, D-26) 본문을 작성했고, 4.10의 DDL 규칙을 D-27로, 관리자 업로드 방식(U-14)을 D-28로, 차량·파손 부위 입력 방식(U-13 일부)을 D-29로, 세션 저장 방식을 D-30으로, 사건 지점 고정 방식을 D-32로, 중복 저장 정리를 D-33~D-35로, 누끼를 우선 빼는 안을 D-36으로(→ D-65로 대체), 묶음 단위 [다음]을 D-37로, 고정 해제 없음을 D-40으로(→ D-181로 대체), 여러 장면 고정과 [확인 끝내기]를 D-80으로, 원본 허용 형식과 코덱 불량 시 바로 `failed`를 D-43으로, 링크로만 업로드(`upload_token_id` NOT NULL)를 D-45로, SQS에 넣고 나서 커밋하는 순서(4.4)를 D-46으로 더했다. 마스킹본·분석 결과 파기(U-24)는 D-57로, 청크를 디코딩에만 쓰고 트랙을 중간 저장하는 방식(`chunks` 테이블 없음, `processed_sec`)은 D-76으로 더했다. 이 결정들은 **모두 확정**이다(2026-10-09, D-135). **입력 방식은 2026-09-26 D-65(탐지된 차량 고르기), 입력 수정은 D-66(한 번만 받음)으로 바뀌었고**, `still_frames.detections`와 `vehicle_selections`의 차량 선택 형식(`schema_version` 2부터, 지금 5)이 여기에 딸려 있다. D-29는 입력 방식만 정하고, U-13의 나머지(룰 상황 목록·근접 판정·인접 영역)는 팀장 담당으로 남는다.
+> U-21·U-22·U-23을 팀원 2가 정리해(D-24, D-25, D-26) 본문을 작성했고, 4.10의 DDL 규칙을 D-27로, 관리자 업로드 방식(U-14)을 D-28로, 차량·파손 부위 입력 방식(U-13 일부)을 D-29로, 세션 저장 방식을 D-30으로, 사건 지점 고정 방식을 D-32로, 중복 저장 정리를 D-33~D-35로, 누끼를 우선 빼는 안을 D-36으로(→ D-65로 대체), 묶음 단위 [다음]을 D-37로, 고정 해제 없음을 D-40으로(→ D-181로 대체), 여러 장면 고정과 [확인 끝내기]를 D-80으로, 원본 허용 형식과 코덱 불량 시 바로 `failed`를 D-43으로, 링크로만 업로드(`upload_token_id` NOT NULL)를 D-45로, SQS에 넣고 나서 커밋하는 순서(4.4)를 D-46으로 더했다. 마스킹본·분석 결과 파기(U-24)는 D-57로, 청크를 디코딩에만 쓰고 트랙을 중간 저장하는 방식(`chunks` 테이블 없음, `processed_sec`)은 D-76으로 더했다. 이 결정들은 **모두 확정**이다(2026-10-09, D-135). **입력 방식은 2026-09-26 D-65(탐지된 차량 고르기), 입력 수정은 D-66(한 번만 받음)으로 바뀌었고**, `still_frames.detections`와 `vehicle_selections`의 차량 선택 형식(`schema_version` 2부터, 지금 6)이 여기에 딸려 있다. D-29는 입력 방식만 정하고, U-13의 나머지(룰 상황 목록·근접 판정·인접 영역)는 팀장 담당으로 남는다.
 >
 > **D-67~D-75(2026-09-27, 팀장)를 반영했다.** 1단계가 정지 장면만 만들어 `stage1_running`·`stage1_input_done`이 없어졌고(D-81), 한 묶음 앞서 준비하려고 `current_batch_no`를 더했다(D-82). 파손 사진·텍스트 설명·탐지 상황은 `damage_inputs` `schema_version` 4로(D-83, D-92), 채널·1차 VLM 결과·크롭 영역은 `candidates`·`candidate_clips` 칼럼으로 더했다(D-84). D-81·D-82·D-84는 확정이다(2026-10-09). 입력 버전 4와 사진 저장 방식은 D-92를 따른다.
 
@@ -70,7 +70,7 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 | `id` | bigserial PK | |
 | `login_id` | text UNIQUE | 로그인 아이디 |
 | `password_hash` | text | bcrypt 해시 문자열 60자. 평문 비밀번호를 저장하지 않는다 (D-58, [08장 8.3](08-auth.md#83-비밀번호-저장-d-58)) |
-| `role` (가칭) | text | `admin` 또는 `victim`. 바뀌지 않는다 (D-204) 👤 팀원 2 결정 필요: 칼럼 이름 |
+| `role` | text | `admin` 또는 `victim`. 바뀌지 않는다 (D-204) |
 | `name` | text | 화면 표시용 이름 |
 | `created_at` | timestamptz | |
 
@@ -117,9 +117,9 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 | `requested_ip` | inet | 접속 IP. `access_logs.requested_ip`와 같은 방법으로 얻는다 |
 | `agreed_at` | timestamptz | 동의 시각 |
 
-- 12·13·14·15·17번은 해당 영상의 행이 1건 이상 있어야 처리한다 ([08장 8.6](08-auth.md#86-사건-묶기-위탁계약-열람-안내창)).
+- 12·13·14·15·17번은 해당 영상에 `agreed_at`이 30분 안인 행이 있어야 처리한다 (D-205, [08장 8.6](08-auth.md#86-사건-묶기-위탁계약-열람-안내창)).
 - 어떤 API도 이 기록을 돌려주지 않는다.
-- 👤 팀원 2 결정 필요: 보관 기간(참고 추천: `access_logs`처럼 지우지 않기).
+- **지우지 않는다.** `access_logs`와 같은 기준이다. 열람 기록과 짝을 이뤄야 "안내에 동의하고 열람했다"는 증거가 된다 (D-207).
 
 ### upload_agreements
 
@@ -248,7 +248,7 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 
 사용자는 정지 장면에서 **탐지된 차량 중 하나를 골라** 본인 차량으로 지목한다. 고른 차량의 탐지 `bbox`가 그대로 본인 차량 영역이다. (D-65)
 
-`schema_version` 2·3·4·5 (차량 선택 형식은 같다):
+`schema_version` 2·3·4·5·6 (차량 선택 형식은 같다):
 
 ```json
 {
@@ -283,15 +283,16 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 | `payload` | jsonb | 입력 내용 |
 | `created_at`, `updated_at` | timestamptz | |
 
-사용자가 입력 화면에서 **탐지 상황**(파손이 CCTV에 보이는지)을 고르고, 보이면 고른 본인 차량 영역 **안에서 파손 부위를 드래그해** 지정한다. 이어서 **내 차가 바닥에 닿는 네 모서리**를 찍고 **파손이 있는 변**을 고른다 (D-98). **파손 사진**과 **텍스트 설명**은 선택으로 더한다 (D-65, D-72). 차량 선택과 파손 부위는 **한 요청으로 함께 저장한다** (D-29, D-36). 두 행을 한 트랜잭션에서 쓴다.
+사용자가 입력 화면에서 **탐지 상황**(파손이 CCTV에 보이는지)을 고르고, 보이면 고른 본인 차량 영역 **안에서 파손 부위를 드래그해** 지정한다. 이어서 **내 차가 바닥에 닿는 네 모서리**를 찍고, 그 사각형의 **차 앞쪽 변**과 **파손이 있는 변**을 고른다 (D-98, D-194). **파손 사진**과 **텍스트 설명**은 선택으로 더한다 (D-65, D-72). 차량 선택과 파손 부위는 **한 요청으로 함께 저장한다** (D-29, D-36). 두 행을 한 트랜잭션에서 쓴다.
 
-`schema_version` 5 (D-99):
+`schema_version` 6 (D-99, D-208):
 
 ```json
 {
   "visible": true,
   "damage_bbox": [940, 470, 1000, 610],
   "floor_corners": [[700, 640], [1010, 650], [960, 520], [760, 515]],
+  "front_edge": 2,
   "damage_edges": [0],
   "description": "조수석 뒷문 아래가 긁혔어요",
   "photo_key": "videos/17/inputs/photo.jpg"
@@ -303,14 +304,14 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 | `visible` | 필수 | 파손이 CCTV에 보이는지. `true` 보임, `false` 안 보임 (D-72) |
 | `damage_bbox` | 항상 필수 | 정수 4개 `[x1,y1,x2,y2]`, 원본 화면 절대 픽셀 좌표. 보임은 차량 내부의 실제 파손 부위, 안 보임은 사용자가 지정한 파손 위치의 작은 사각형이며 보임과 같이 차량 내부로 제한한다 |
 | `floor_corners` | 항상 필수 | 내 차가 바닥에 닿는 네 모서리. 정수 점 `[x,y]` 4개, 원본 화면 절대 픽셀 좌표. 사용자가 찍은 순서대로 저장한다. 화면에 안 보이는 모서리는 사용자가 짐작한 점이다 (D-98) |
+| `front_edge` | 항상 필수 | 차의 앞쪽 변 번호. 0~3의 정수 하나. 변 번호는 `damage_edges`와 같은 규칙이다. 뒤쪽 변을 골라도 바닥 지도 결과는 같다. `damage_edges`와 같은 변이어도 된다 (D-194, D-208) |
 | `damage_edges` | 항상 필수 | 파손이 있는 변의 번호. 변 i는 `floor_corners[i]`에서 `floor_corners[(i+1) % 4]`까지다. 1개, 또는 모서리 파손이면 이웃한 2개(예: `[0, 1]`, `[3, 0]`) (D-98) |
 | `description` | 선택 | 텍스트 설명. 최대 500자. VLM에 참고 자료로만 넣는다 (06장 6.6) |
 | `photo_key` | 선택 | 파손 사진의 원본 버킷 키. 05장 18번이 준 값을 그대로 저장한다 (4.9) |
 
 - 선택 키는 값이 없으면 **키를 뺀다.** 빈 문자열이나 `null`로 두지 않는다. 워커가 키가 있는지만 보고 VLM 입력에 넣을지 정한다 (06장 6.6).
 - `damage_bbox`는 `visible` 값과 함께 해석한다. 두 경우 모두 `0 <= x1 < x2 <= width`, `0 <= y1 < y2 <= height`를 만족해야 한다. `damage_bbox`는 두 경우 모두 본인 차량 영역 안(경계 포함)에 있어야 한다. 안 보임 좌표는 2D 화면상의 사용자 지정 위치이며 실제 가려진 표면이나 3D 위치의 측정값이 아니다 (D-92).
-- `schema_version` 2(`{"damage_bbox": [...]}` 하나)는 D-72 이전 형식이며, 버전 3은 안 보임 위치 입력이 확정되기 전 형식, 버전 4는 바닥 네 모서리·파손 변이 없는 형식이다. 저장된 옛 데이터는 버린다 (D-25).
-- **차의 앞쪽 변 입력이 더해진다 (D-194).** 앞쪽 변 번호를 `damage_inputs`에 저장한다. 👤 팀원 2 결정 필요: 필드 이름과 `schema_version`. ⚠️ **확인 필요**: 위 예시 JSON과 필드 표에는 아직 이 필드가 없다. 백엔드(`backend/app/inputs.py`, 테스트)와 프론트엔드(damage_input 화면)가 이 필드를 받도록 바뀌어야 한다.
+- `schema_version` 2(`{"damage_bbox": [...]}` 하나)는 D-72 이전 형식이며, 버전 3은 안 보임 위치 입력이 확정되기 전 형식, 버전 4는 바닥 네 모서리·파손 변이 없는 형식, 버전 5는 앞쪽 변이 없는 형식이다. 저장된 옛 데이터는 버린다 (D-25).
 - **파손이 차의 어느 쪽인지는 사용자가 고른 `damage_edges`를 쓴다.** 워커가 bbox로 계산하지 않는다 (D-98, D-34 대체). 네 모서리와 파손 변은 2단계에서 바닥점 필터의 기준과 ROI·크롭 크기를 정하는 데 쓴다 (06장 6.5).
   - 차량 선택(`vehicle_selections`)과 다른 테이블에 있지만, 입력은 한 요청으로 한 번만 받으므로(D-36, D-66) 한쪽만 바뀔 일이 없다.
   - 변을 꼭짓점 순서로 정하므로 변 이름(`left` 등)을 따로 두지 않는다. 어느 변이 통로 쪽인지는 화면 구도마다 달라 이름을 붙일 수 없다.
@@ -418,7 +419,7 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 |---|---|---|
 | `id` | bigserial PK | |
 | `user_id` | bigint FK → users, NULL 허용 | 누가. 시스템이 남기는 `delete_raw`·`delete_masked`는 비어 있다 |
-| `video_id` | bigint FK → videos, NULL 허용 | 어느 영상. `login`·`create_case`는 비어 있다 |
+| `video_id` | bigint FK → videos, NULL 허용 | 어느 영상. `login`·`lookup_invitee`·`create_case`는 비어 있다 |
 | `action` | text | 무엇을 했나. 값 목록은 아래 |
 | `requested_ip` | inet | 어디서. 고시 제8조의 접속지 정보 |
 | `created_at` | timestamptz | 언제 |
@@ -428,6 +429,7 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 | 값 | 남기는 지점 (05장) | 법적 성격 |
 |---|---|---|
 | `login` | 로그인 성공 (5.3) | 열람 요구자 특정 (표준지침 제44조⑤) |
+| `lookup_invitee` | 초대 전 피해자 확인. 가린 이름을 돌려줌 (5.4, D-206) | 이용 기록 (표준지침 제42조) |
 | `create_case` (가칭) | 사건 생성·피해자 초대 (5.4) | 수집 경로 기록 |
 | `agree_viewing` (가칭) | 관리·감독 안내 동의 (5.4) | 이용 기록 (표준지침 제42조) |
 | `view_still` | 정지 장면 조회 (5.6) | **열람** |
@@ -700,7 +702,7 @@ CREATE TABLE users (
   id            bigserial PRIMARY KEY,
   login_id      text        NOT NULL UNIQUE,
   password_hash text        NOT NULL,
-  role          text        NOT NULL,          -- admin | victim. 이름은 가칭 (D-204)
+  role          text        NOT NULL,          -- admin | victim (D-204)
   name          text        NOT NULL,
   created_at    timestamptz NOT NULL DEFAULT now()
 );
@@ -908,7 +910,7 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 | 누끼를 다각형으로 딸지 (겹친 차량을 픽셀 단위로 가르기) | 06장 (U-09). D-65는 탐지 bbox만 쓴다 🚧 |
 | 탐지 0건·본인 차 없음일 때의 폴백 | **두지 않는다** → 재업로드 안내로 간다 (D-65, 2026-09-26 팀장 결정) |
 | 룰이 실제로 받는 파손 부위 값(근접 판정 폭, 인접 영역) | 06장 (U-13) → 정해지면 `schema_version`만 올린다 |
-| `payload` 검증 규칙 | **해결** → [05장 5.7](05-api.md#57-차량파손-부위-입력-저장-api) (`schema_version` 5, D-99) |
+| `payload` 검증 규칙 | **해결** → [05장 5.7](05-api.md#57-차량파손-부위-입력-저장-api) (`schema_version` 6, D-99, D-208) |
 | 디코딩 청크 길이, 중간 저장 간격, 샘플링 fps | **시작값 확정** → D-198 (U-06 실측으로 조정) |
 | 상태별 화면 문구 | 07장 (U-15) |
 | 청크 경계를 넘는 트랙 이어 붙이기 | **해결** → D-76 (탐지·추적을 영상 전체에 한 줄로 해 끊기지 않는다) |
@@ -945,7 +947,7 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 - 영상은 업로드 링크로만 올라온다: D-45 → **영상은 사건의 관리자 계정으로만 올라온다, `case_id` NOT NULL: D-204**
 - SQS에 넣고 나서 커밋, 작업 행이 없는 메시지도 삭제하며 대기 작업은 임계 시간 뒤 재전송(4.4): D-46, D-56, D-153
 - 입력 수정은 1단계가 끝나기 전까지, 상태 조회에 `input_done`: D-49 → 입력은 한 번만, 저장 전 확인창: D-66
-- 본인 차량은 탐지된 차량 중에서 고른다(`still_frames.detections`, `vehicle_selections` `schema_version` 2부터, 지금 5): D-65
+- 본인 차량은 탐지된 차량 중에서 고른다(`still_frames.detections`, `vehicle_selections` `schema_version` 2부터, 지금 6): D-65
 - 후보 0건이면 `exhausted`로 보내고 `candidate_total`로 구분: D-50
 - 클립은 총 3번까지 시도하고, 끝내 실패한 후보는 `verdict = 'unavailable'`(열람 불가): D-109 (D-51 대체)
 - 원본과 트랙은 업로드 완료 30일 뒤에 파기, `raw_deleted_at`: D-52, D-64, D-80
