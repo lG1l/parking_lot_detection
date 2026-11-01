@@ -760,6 +760,9 @@ END
 
 > **D-194(2026-10-30, 팀장)**: 11번 요청에 네 변 중 차의 앞쪽 변 하나가 더해진다. 👤 팀원 2 결정 필요: 필드 이름, `schema_version`, 검증 규칙. 아래 표는 바뀌기 전의 5번 규칙이다.
 
+> ⚠️ **확인 필요 — 백엔드(팀원 2)**: 11번 요청 예시에 앞쪽 변 필드가 없다. `backend/app/inputs.py`의 검증(`extra="forbid"`, `schema_version`)과 `backend/tests/test_input.py`를 D-194에 맞춰 바꿔야 한다. 앞쪽 변 필드 이름·`schema_version`·검증 규칙(0~3 정수 등)은 정해지지 않았다.
+> ⚠️ **확인 필요 — 프론트엔드(팀원 1)**: `frontend/lib/features/damage_input/damage_input_page.dart`·`still_canvas.dart`에 앞쪽 변 누르기 단계와 요청 필드 추가가 필요하다(07장 2.3).
+
 **`schema_version` 5의 검증 규칙** (D-25, D-65, D-92, D-99)
 
 DB는 `payload`의 내용을 검사하지 않는다. 아래를 백엔드(Pydantic)가 검사하고, 하나라도 어긋나면 **아무것도 저장하지 않고** 422 `VALIDATION_FAILED`를 돌려준다. `message`에 어느 값이 왜 틀렸는지 적는다.
