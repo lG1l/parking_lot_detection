@@ -30,9 +30,9 @@
 |---|---|---|
 | 로그인을 뺀 모든 API | 세션 쿠키 (D-30) | 401 `UNAUTHENTICATED` |
 
-- **역할**: 계정은 관리자·피해자 두 종류이고, API마다 부를 수 있는 역할이 정해져 있다 (5.2, [08장 8.7](08-auth.md#87-다른-사건-접근과-역할-차단)). 맞지 않으면 403 `ROLE_NOT_ALLOWED`(가칭)다 (D-204).
+- **역할**: 계정은 관리자·피해자 두 종류이고, API마다 부를 수 있는 역할이 정해져 있다 (5.2, [08장 8.7](08-auth.md#87-다른-사건-접근과-역할-차단)). 맞지 않으면 403 `ROLE_NOT_ALLOWED`다 (D-204).
 - `/api/videos/{video_id}/...`는 요청마다 영상의 사건(`videos.case_id` → `cases`)에 로그인한 계정이 묶여 있는지 확인한다. 아니면 없는 영상과 똑같이 404 `VIDEO_NOT_FOUND`를 돌려준다. `video_id`는 순서대로 매기는 번호라 추측할 수 있기 때문이다 (D-39, D-204).
-- **안내 동의**: 12·13·14·15·17번은 해당 영상에 `agreed_at`이 30분 안인 `viewing_agreements` 행이 있어야 처리한다. 없으면 403 `SUPERVISION_AGREEMENT_REQUIRED`(가칭)다. 받은 화면은 안내창을 다시 띄우고, 동의 뒤 같은 요청을 다시 보낸다 (D-204, D-205).
+- **안내 동의**: 12·13·14·15·17번은 해당 영상에 `agreed_at`이 30분 안인 `viewing_agreements` 행이 있어야 처리한다. 없으면 403 `SUPERVISION_AGREEMENT_REQUIRED`다. 받은 화면은 안내창을 다시 띄우고, 동의 뒤 같은 요청을 다시 보낸다 (D-204, D-205).
 
 **요청·응답 값**
 
@@ -62,8 +62,8 @@
 | HTTP | `code` | 언제 | 프론트 처리 |
 |---|---|---|---|
 | 401 | `UNAUTHENTICATED` | 세션 쿠키가 없거나 만료됨 | 로그인 화면으로 |
-| 403 | `ROLE_NOT_ALLOWED` (가칭) | 계정 역할로는 부를 수 없는 API | 역할에 맞는 첫 화면으로 |
-| 403 | `SUPERVISION_AGREEMENT_REQUIRED` (가칭) | 관리·감독 안내 동의 없이 열람 API를 부름 | 안내창을 띄운다 |
+| 403 | `ROLE_NOT_ALLOWED` | 계정 역할로는 부를 수 없는 API | 역할에 맞는 첫 화면으로 |
+| 403 | `SUPERVISION_AGREEMENT_REQUIRED` | 관리·감독 안내 동의 없이 열람 API를 부름 | 안내창을 띄운다 |
 | 404 | `VIDEO_NOT_FOUND` | 영상이 없거나 다른 사건의 영상 | 목록으로 |
 | 409 | `INVALID_STATE` | 지금 분석 상태(04장 4.3)에서는 할 수 없는 요청. `message`에 현재 상태를 적는다 | 상태를 다시 조회해 화면을 새로 그린다 |
 | 422 | `VALIDATION_FAILED` | 요청 값이 규칙에 어긋남. `message`에 어느 값인지 적는다 | 입력을 다시 받는다 |
@@ -92,8 +92,8 @@
 |---|---|---|
 | 1. 로그인 | `login` | `user_id`, `requested_ip` |
 | 24. 초대 전 피해자 확인 | `lookup_invitee` | `user_id`, `requested_ip` |
-| 21. 사건 생성·피해자 초대 | `create_case` (가칭) | `user_id`, `requested_ip` |
-| 23. 관리·감독 안내 동의 | `agree_viewing` (가칭) | `user_id`, `video_id`, `requested_ip` |
+| 21. 사건 생성·피해자 초대 | `create_case` | `user_id`, `requested_ip` |
+| 23. 관리·감독 안내 동의 | `agree_viewing` | `user_id`, `video_id`, `requested_ip` |
 | 10. 정지 장면 조회 | `view_still` | `user_id`, `video_id`, `requested_ip` |
 | 12·14·15. 재생 URL이 들어가는 조회·고정 | `view_clip` | `user_id`, `video_id`, `requested_ip` |
 | 14. 사건 지점 고정 | `pin_incident` | `user_id`, `video_id`, `requested_ip` |
@@ -404,7 +404,7 @@ PUT upload_url (파일 본문) ────────────────�
 
 | HTTP | `code` | 언제 |
 |---|---|---|
-| 404 | `CASE_NOT_FOUND` (가칭) | 사건이 없거나 다른 관리자의 사건 |
+| 404 | `CASE_NOT_FOUND` | 사건이 없거나 다른 관리자의 사건 |
 | 422 | `UNSUPPORTED_FILE_TYPE` | `filename`의 확장자가 `.mp4` `.avi` `.mkv` `.mov`가 아님. 확장자가 없는 경우도 포함 (D-43) |
 | 422 | `FILE_TOO_LARGE` | `size_bytes`가 5GB(01장 1.6)보다 큼 (D-22) |
 | 422 | `VALIDATION_FAILED` | `filename`이 비었거나 `size_bytes`가 0 이하. `recording_started_at`이 시간대 없는 문자열이거나 지금보다 뒤 |

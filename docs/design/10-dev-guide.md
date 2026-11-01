@@ -45,7 +45,8 @@
 DB만 Docker Compose로 실행한다. 프론트·백엔드·비전 코드는 각 PC에서 직접 실행한다. 팀원 2가 버전을 고정한 Compose 설정, 로컬 연결 환경변수, 데이터 볼륨, 실행·중지·명시적 테스트 초기화 명령을 작성한다. 컨테이너를 껐다 켜는 동작과 DB 데이터 삭제를 구분한다. Compose 파일은 `backend/compose.yaml`이다.
 
 - DB 데이터는 named volume에 둔다. bind mount로 저장소 안에 두지 않는다. 평소 끌 때는 `docker compose down`, 볼륨을 지우는 `down -v`는 테스트 초기화 명령으로만 쓴다. (D-121)
-- 👤 팀원 2 결정 필요: 볼륨 이름 고정(`name:`) 여부, 위 명령을 안내하는 실제 명령어. (D-121)
+- 볼륨 이름은 따로 정하지 않는다. `compose.yaml`의 `pgdata`는 실제로 `backend_pgdata`가 되고, 한 PC에서 저장소를 몇 벌 받아도 이 볼륨 하나를 함께 쓴다. 한쪽의 `down -v`는 모든 사본의 DB를 지운다 (D-121).
+- 명령은 `backend/` 폴더에서 실행한다. 켜기 `docker compose up -d`, 끄기 `docker compose down`(데이터 유지), 테스트 초기화 `docker compose down -v`(DB 데이터 삭제).
 
 EC2에 백엔드·비전을 컨테이너로 배포할지는 별도 CD 결정이다. 로컬 DB 컨테이너 선택만으로 배포 구성을 바꾸지 않는다.
 

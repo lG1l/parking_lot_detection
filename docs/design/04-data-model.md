@@ -1,6 +1,6 @@
 # 04. 데이터 모델
 
-> **D-204(2026-11-01, 팀장): 관리자 주도 흐름으로 바꾼다. `upload_tokens`를 없애고 `cases`·`viewing_agreements`(모두 가칭)와 `users` 역할 칼럼을 더하며, `videos`는 사건에 속한다. 테이블·칼럼 이름은 👤 팀원 2가 정한다.**
+> **D-204(2026-11-01, 팀장): 관리자 주도 흐름으로 바꾼다. `upload_tokens`를 없애고 `cases`·`viewing_agreements`와 `users.role`을 더하며, `videos`는 사건에 속한다.**
 >
 > ⚠️ **확인 필요 — 백엔드(팀원 2)**: 코드는 아직 이전 스키마다. `backend/alembic/versions/`에 새 마이그레이션을 더해 `upload_tokens` 삭제, `cases`·`viewing_agreements` 추가, `users` 역할 칼럼 추가, `videos`·`upload_agreements` 칼럼 변경을 반영하고, 이 스키마를 쓰는 `backend/app/uploads.py`, `videos.py`, `periodic.py`, 테스트를 함께 바꿔야 한다.
 
@@ -24,14 +24,14 @@ DB는 백엔드 EC2의 PostgreSQL이다. 백엔드와 GPU 워커가 같은 DB에
 ```
 users ──┬──< sessions        (로그인 세션)
         │
-        ├──< cases(가칭)     (관리자 1 + 피해자 1, D-204)
+        ├──< cases     (관리자 1 + 피해자 1, D-204)
         │       │
         │       └──< videos  (사건 하나에 영상 여러 개, D-110)
         │
         ├──< access_logs     (열람·초대·파기 기록, D-53)
         │
 videos ──┬── upload_agreements  (위탁계약 동의 D-147)
-        ├──< viewing_agreements(가칭)  (관리·감독 안내 동의, D-204)
+        ├──< viewing_agreements  (관리·감독 안내 동의, D-204)
         └──1:1── analysis_jobs
                                   │
                                   ├──  still_frames        (정지 장면 1장, 마스킹본)
@@ -52,8 +52,8 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 |---|---|
 | `sessions` | 로그인 세션을 서버 메모리가 아니라 DB에 둔다. 무상태 규칙(D-19)이자, 유출된 세션을 즉시 끊기 위해서다 (D-30) |
 | `still_frames` | 정지 장면(마스킹본 이미지)이 어느 원본 시간의 것이고 비식별화가 끝났는지 알아야 화면에 보여줄 수 있다. 불변 조건 2 |
-| `cases` (가칭) | 관리자 계정과 피해자 계정을 사건 하나로 묶는다. 영상의 접근 권한이 여기서 정해진다 (D-204) |
-| `viewing_agreements` (가칭) | 관리자가 열람 화면에 들어갈 때 체크한 관리·감독 안내 동의 기록. 서버가 열람을 허용하는 근거다 (D-204) |
+| `cases` | 관리자 계정과 피해자 계정을 사건 하나로 묶는다. 영상의 접근 권한이 여기서 정해진다 (D-204) |
+| `viewing_agreements` | 관리자가 열람 화면에 들어갈 때 체크한 관리·감독 안내 동의 기록. 서버가 열람을 허용하는 근거다 (D-204) |
 | `access_logs` | 개인영상정보에 닿는 요청을 한 행씩 남긴다. 표준 개인정보 보호지침 제44조⑤(열람 기록)·제42조(이용·파기 기록)와 고시 제8조①(접속기록 1년)이 요구하는 법정 기록이다 (D-53) |
 | `upload_agreements` | 관리자의 위탁계약 동의 기록. 개인정보 보호법 제26조① 위탁 문서의 증빙이다. 동의한 때부터 90일 보관한다 (D-147) |
 
@@ -90,7 +90,7 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 - **로그아웃은 행을 지우는 것**이다. 유출된 세션도 같은 방법으로 즉시 끊을 수 있다. HTTPS가 없는 상태(02장 2.11)에서 이것이 JWT 대신 DB 세션을 고른 이유다. (D-30)
 - 만료된 행을 지우는 정리 작업은 두지 않는다. 데모 규모에서는 쌓여도 문제가 없다.
 
-### cases (가칭)
+### cases
 
 관리자 계정 1개와 피해자 계정 1개를 묶은 사건 하나. 관리자가 피해자 아이디로 초대하면 행이 생기고, 수락 단계 없이 바로 묶인다. (D-204)
 
@@ -105,7 +105,7 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 - 같은 두 계정이 다른 사건으로 또 묶일 수 있다. 사고가 또 나면 새 사건이기 때문이다.
 - 초대를 취소하거나 사건을 지우는 기능은 없다.
 
-### viewing_agreements (가칭)
+### viewing_agreements
 
 관리자가 열람 화면에 들어갈 때 체크한 **관리·감독 안내 동의 기록**이다. 동의할 때마다 1행 더한다. (D-204)
 
@@ -144,7 +144,7 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | `id` | bigserial PK | S3 키에도 쓴다 (4.9) |
-| `case_id` (가칭) | bigint FK → cases | 영상이 속한 사건. 관리자·피해자 권한이 여기서 정해진다 (D-204). 사건 하나에 영상은 여러 개일 수 있다 (D-110) |
+| `case_id` | bigint FK → cases | 영상이 속한 사건. 관리자·피해자 권한이 여기서 정해진다 (D-204). 사건 하나에 영상은 여러 개일 수 있다 (D-110) |
 | `s3_key` | text | 원본 버킷 안의 키 (4.9) |
 | `original_filename` | text | 관리자가 올린 파일 이름 |
 | `recording_started_at` | timestamptz | 영상 첫 프레임의 실제 녹화 시각. 관리자가 업로드할 때 **선택으로** 입력한다. 비어 있으면 모른다 (D-85) |
@@ -358,12 +358,13 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 | `candidate_id` | bigint FK → candidates | 어느 목록 몇 번째 묶음인지는 이 후보의 `list_kind`·`batch_no`로 본다 (D-33) |
 | `start_sec`, `end_sec` | double precision | 원본 시간 기준 구간. 판정 시점 −10초 ~ +20초를 영상 경계에서 잘라낸 값 (4.7). 불변 조건 7 |
 | `masked_s3_key` | text | 마스킹본 버킷 키 (4.9) |
-| `crop_bbox` | integer[] | 클립을 잘라 낸 영역 `[x1, y1, x2, y2]`. 원본 해상도 기준 픽셀. 본인 차량 주변이다 (D-70, D-84). 크기는 🚧 (U-30) |
+| `crop_bbox` | integer[] | 클립을 잘라 낸 영역 `[x1, y1, x2, y2]`. 원본 해상도 기준 픽셀. 본인 차량 주변이다 (D-70, D-84). 16:9로 맞추려고 패딩을 붙이면 패딩까지 포함한 화면 전체를 적으므로 원본 밖 값(음수, width·height 초과)이 들어갈 수 있다 (D-209). 크기는 🚧 (U-30) |
 | `status` | text | `pending` · `running` · `done` · `failed` |
 | `created_at` | timestamptz | 묶음별 소요 시간은 이 값으로 본다 |
 
 - **클립 생성은 최초 포함 총 3번까지 시도한다 (D-109).** 다시 시도할 때는 새 `pending` 행을 만든다. 3번 모두 실패하거나 다시 해도 안 되는 오류이면, 워커는 마지막 행을 `failed`로 바꾸는 트랜잭션에서 그 후보의 `verdict`를 `unavailable`로 바꾼다. `unavailable` 후보는 [다음]으로 `not_found`가 되지 않고, 남은 후보 수에도 들지 않는다. 오류 분류와 대기 간격은 06장(팀장)에서 정한다.
 - `crop_bbox`는 클립을 잘라 낸 영역의 기록용이다. **05장 12번은 돌려주지 않는다** (D-176).
+- **패딩을 쓴 클립의 `crop_bbox` (D-209)**: 원본에서 실제로 가져온 부분은 `crop_bbox`와 `[0, 0, width, height]`가 겹치는 사각형이고, 나머지가 패딩이다. 예: 960×720 원본에서 `[-160, 0, 1120, 720]`이면 원본 `[0, 0, 960, 720]`을 가져와 좌우에 160픽셀씩 패딩을 붙인 1280×720 클립이다. 패딩을 쓸지는 🚧 팀장 결정이다(`docs/영역설계.md` 7.4).
 - 사용자에게 주는 재생 URL은 이 행의 `masked_s3_key`로만 발급한다. 고정한 사건 지점도 이 행을 가리키므로 같은 키로 재생한다. (불변 조건 1, D-32)
 
 ### pinned_incidents
@@ -430,8 +431,8 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 |---|---|---|
 | `login` | 로그인 성공 (5.3) | 열람 요구자 특정 (표준지침 제44조⑤) |
 | `lookup_invitee` | 초대 전 피해자 확인. 가린 이름을 돌려줌 (5.4, D-206) | 이용 기록 (표준지침 제42조) |
-| `create_case` (가칭) | 사건 생성·피해자 초대 (5.4) | 수집 경로 기록 |
-| `agree_viewing` (가칭) | 관리·감독 안내 동의 (5.4) | 이용 기록 (표준지침 제42조) |
+| `create_case` | 사건 생성·피해자 초대 (5.4) | 수집 경로 기록 |
+| `agree_viewing` | 관리·감독 안내 동의 (5.4) | 이용 기록 (표준지침 제42조) |
 | `view_still` | 정지 장면 조회 (5.6) | **열람** |
 | `view_clip` | 후보 클립 재생 URL 발급 (5.8, 5.9의 14·15번) | **열람** |
 | `pin_incident` | 사건 지점 고정 (5.9). 고정 한 건마다 한 행 | 이용 기록 (표준지침 제42조) |
@@ -715,7 +716,7 @@ CREATE TABLE sessions (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE cases (                         -- 이름은 가칭 (D-204)
+CREATE TABLE cases (                         -- D-204
   id             bigserial PRIMARY KEY,
   admin_user_id  bigint      NOT NULL REFERENCES users(id),
   victim_user_id bigint      NOT NULL REFERENCES users(id),
@@ -750,7 +751,7 @@ CREATE TABLE upload_agreements (
   agreed_at                 timestamptz NOT NULL DEFAULT now()   -- 90일 뒤 주기 작업이 지운다 (D-147)
 );
 
-CREATE TABLE viewing_agreements (            -- 이름은 가칭 (D-204)
+CREATE TABLE viewing_agreements (            -- D-204
   id           bigserial PRIMARY KEY,
   video_id     bigint      NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
   user_id      bigint      NOT NULL REFERENCES users(id),

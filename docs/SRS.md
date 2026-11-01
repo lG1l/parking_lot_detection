@@ -96,7 +96,7 @@ S3는 비공개 버킷 3개(원본·마스킹·분석 결과)로 나눈다. 원�
 | 요구사항분류(대상) | 서비스 |
 | 우선순위 | 필수 |
 | 관련화면 | 피해자 초대, 영상 목록 |
-| 관련API·DB | 사건 생성·초대 API, 사건 목록 API(05장 21·22번) DB: users, cases(가칭) |
+| 관련API·DB | 사건 생성·초대 API, 사건 목록 API(05장 21·22번) DB: users, cases |
 | 기능설명 | 관리자는 관리자 계정으로 피해자 계정을 초대해 사건 하나로 묶을 수 있어야 한다(D-204). |
 | 입력항목 | 초대할 피해자 계정의 아이디(필수). |
 | 처리조건 | 관리자 계정만 초대할 수 있다. 수락 단계 없이 초대하면 바로 묶인다. 사건 하나에는 관리자 계정 1개와 피해자 계정 1개가 묶인다. 초대를 기록한다. |
@@ -208,7 +208,7 @@ S3는 비공개 버킷 3개(원본·마스킹·분석 결과)로 나눈다. 원�
 | 요구사항분류(대상) | 영상분석 |
 | 우선순위 | 필수 |
 | 관련화면 | 관리·감독 안내창, 후보 확인 |
-| 관련API·DB | 열람 동의 API(05장 23번), GET /api/videos/{video_id}/batch DB: viewing_agreements(가칭), candidate_clips; 실행: GPU 워커 |
+| 관련API·DB | 열람 동의 API(05장 23번), GET /api/videos/{video_id}/batch DB: viewing_agreements, candidate_clips; 실행: GPU 워커 |
 | 기능설명 | 피해자는 관리자 관리·감독 아래 관리자 계정 화면에서 정렬된 후보를 최대 10개씩, 본인 차량 주변의 비식별화된 영상으로 재생할 수 있어야 한다. |
 | 입력항목 | 정렬된 후보 목록, 원본 영상, 차량 영역(필수). |
 | 처리조건 | 관리자 계정으로 열람을 시도할 때마다 관리·감독 주의 안내창을 띄우고, 체크로 동의하면 기록을 1행 남긴다. 서버는 해당 영상에 30분 안에 남긴 동의 기록이 있어야 열람을 허용한다(D-205). 판정 시점 5초 후를 중심으로 전후 15초를 잘라 최대 30초 클립을 만든다. 처음에는 상위 20개를 준비하고 이후 한 묶음 앞서 준비한다. 파싱 실패 목록도 같은 방식으로 따로 준비하고, 화면에서는 별도 탭으로 제공한다. |
@@ -292,7 +292,7 @@ S3는 비공개 버킷 3개(원본·마스킹·분석 결과)로 나눈다. 원�
 | 요구사항분류(대상) | 서비스 |
 | 우선순위 | 필수 |
 | 관련화면 | 전체 보호 화면 |
-| 관련API·DB | 영상 관련 API 공통 인증·역할·사건 소속 검사 DB: users, sessions, cases(가칭), viewing_agreements(가칭), access_logs; IAM |
+| 관련API·DB | 영상 관련 API 공통 인증·역할·사건 소속 검사 DB: users, sessions, cases, viewing_agreements, access_logs; IAM |
 | 기능설명 | 시스템은 관리자 계정과 피해자 계정의 권한을 분리하고 영상 접근을 사건 단위로 통제하여야 한다. |
 | 입력항목 | 세션, 요청 대상 영상과 행위(필수). |
 | 처리조건 | 매 요청에 역할과 사건 소속을 확인한다. 후보·고정·결과 API는 관리자 계정만, 입력 API는 피해자 계정만 쓴다. 열람 API는 30분 안에 남긴 관리·감독 안내 동의 기록이 있어야 한다. S3를 비공개로 두고 마스킹본에만 기본 15분과 남은 열람 기간 중 짧은 시간 동안 유효한 재생 URL을 발급한다. 로그인·초대·열람·고정 등 주요 행위를 기록한다. 열람 기록의 행위자는 관리자 계정이다. |
@@ -341,7 +341,7 @@ S3는 비공개 버킷 3개(원본·마스킹·분석 결과)로 나눈다. 원�
 
 ### 5.4 데이터 관리
 
-엔티티는 users, sessions, cases(가칭), videos, analysis_jobs, still_frames, vehicle_selections, damage_inputs, candidates, candidate_clips, pinned_incidents, access_logs, 위탁계약 동의 기록용 `upload_agreements`(D-147), 관리·감독 안내 동의 기록용 viewing_agreements(가칭)다. `upload_tokens`는 없앤다(D-204). 새 파손 사진 버킷·테이블이나 열람기한 저장 칼럼을 추가하지 않는다. 입력은 JSONB에 버전 5로 저장한다 (D-99). 상세 필드·상태 전이·S3 경로는 [데이터 설계](design/04-data-model.md)를 따른다.
+엔티티는 users, sessions, cases, videos, analysis_jobs, still_frames, vehicle_selections, damage_inputs, candidates, candidate_clips, pinned_incidents, access_logs, 위탁계약 동의 기록용 `upload_agreements`(D-147), 관리·감독 안내 동의 기록용 viewing_agreements다. `upload_tokens`는 없앤다(D-204). 새 파손 사진 버킷·테이블이나 열람기한 저장 칼럼을 추가하지 않는다. 입력은 JSONB에 버전 5로 저장한다 (D-99). 상세 필드·상태 전이·S3 경로는 [데이터 설계](design/04-data-model.md)를 따른다.
 
 ## 6. 테스트 및 AI 성능 평가
 
