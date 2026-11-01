@@ -25,19 +25,20 @@ String? checkPhoto(String name, int size) {
   return null;
 }
 
-/// 11번 요청 본문 (05장 5.7, schema_version 5).
+/// 11번 요청 본문 (05장 5.7, schema_version 6, D-208).
 Map<String, Object> inputBody({
   required int stillFrameId,
   required int detId,
   required bool visible,
   required Box damageBox,
   required List<Pt> corners,
+  required int frontEdge,
   required List<int> edges,
   String? description,
   String? photoKey,
 }) => {
   'still_frame_id': stillFrameId,
-  'schema_version': 5,
+  'schema_version': 6,
   'vehicle': {'det_id': detId},
   'damage': {
     'visible': visible,
@@ -45,6 +46,7 @@ Map<String, Object> inputBody({
     'floor_corners': [
       for (final c in corners) [c.x, c.y],
     ],
+    'front_edge': frontEdge,
     'damage_edges': edges,
     if (description != null && description.isNotEmpty) 'description': description,
     'photo_key': ?photoKey,
@@ -83,6 +85,7 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
   Pt? _dragStart;
   Box? _dragBox;
   List<Pt> _corners = [];
+  int? _frontEdge;
   List<int> _edges = [];
   String? _stepError;
   PickedFile? _photo;
@@ -274,6 +277,7 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
           visible: _visible!,
           damageBox: _damage!,
           corners: _corners,
+          frontEdge: _frontEdge!,
           edges: _edges,
           description: text.isEmpty ? null : text,
           photoKey: photoKey,
