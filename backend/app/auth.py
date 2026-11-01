@@ -39,6 +39,14 @@ def current_user(request: Request) -> dict:
     raise ApiError(401, "UNAUTHENTICATED", "login required")
 
 
+def current_admin(request: Request) -> dict:
+    """관리자 계정만 통과시킨다. 피해자 계정이면 403 (D-204)."""
+    user = current_user(request)
+    if user["role"] != "admin":
+        raise ApiError(403, "ROLE_NOT_ALLOWED", "admin account required")
+    return user
+
+
 @router.post("/login")
 def login(body: LoginBody, request: Request, response: Response):
     with get_engine().connect() as conn:

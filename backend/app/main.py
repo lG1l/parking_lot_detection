@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app import auth, batches, inputs, local_routes, pins, retry, uploads, videos
+from app import auth, batches, cases, inputs, local_routes, pins, retry, uploads, videos
 from app.config import get_settings
 from app.errors import install_error_handlers
 from app.log_filter import install_log_filter
@@ -12,6 +12,7 @@ def create_app() -> FastAPI:
     install_error_handlers(app)
     install_log_filter()
     app.include_router(auth.router)
+    app.include_router(cases.router)
     app.include_router(uploads.router)
     app.include_router(videos.router)
     app.include_router(inputs.router)

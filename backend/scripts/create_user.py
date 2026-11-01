@@ -28,8 +28,10 @@ def main() -> None:
     try:
         with get_engine().begin() as conn:
             conn.execute(
-                text("INSERT INTO users (login_id, password_hash, name, role) "
-                    "VALUES (:l, :p, :n, :r)"),
+                text(
+                    "INSERT INTO users (login_id, password_hash, name, role) "
+                    "VALUES (:l, :p, :n, :r)"
+                ),
                 {"l": args.login_id, "p": hash_password(password), "n": args.name, "r": args.role},
             )
     except IntegrityError:

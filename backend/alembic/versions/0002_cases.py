@@ -25,8 +25,10 @@ CREATE TABLE cases (
     "ALTER TABLE videos DROP COLUMN upload_token_id",
     "ALTER TABLE videos ADD COLUMN case_id bigint NOT NULL REFERENCES cases(id)",
     "ALTER TABLE upload_agreements DROP COLUMN upload_token_id",
-    "ALTER TABLE upload_agreements "
-    "ADD COLUMN video_id bigint NOT NULL UNIQUE REFERENCES videos(id) ON DELETE CASCADE",
+    (
+        "ALTER TABLE upload_agreements "
+        "ADD COLUMN video_id bigint NOT NULL UNIQUE REFERENCES videos(id) ON DELETE CASCADE"
+    ),
     "DROP TABLE upload_tokens",
     """
 CREATE TABLE viewing_agreements (
@@ -58,12 +60,16 @@ CREATE TABLE upload_tokens (
 )
     """,
     "ALTER TABLE upload_agreements DROP COLUMN video_id",
-    "ALTER TABLE upload_agreements ADD COLUMN upload_token_id bigint NOT NULL UNIQUE "
-    "REFERENCES upload_tokens(id) ON DELETE CASCADE",
+    (
+        "ALTER TABLE upload_agreements ADD COLUMN upload_token_id bigint NOT NULL UNIQUE "
+        "REFERENCES upload_tokens(id) ON DELETE CASCADE"
+    ),
     "ALTER TABLE videos DROP COLUMN case_id",
     "ALTER TABLE videos ADD COLUMN owner_user_id bigint NOT NULL REFERENCES users(id)",
-    "ALTER TABLE videos "
-    "ADD COLUMN upload_token_id bigint NOT NULL UNIQUE REFERENCES upload_tokens(id)",
+    (
+        "ALTER TABLE videos "
+        "ADD COLUMN upload_token_id bigint NOT NULL UNIQUE REFERENCES upload_tokens(id)"
+    ),
     "CREATE INDEX idx_videos_owner ON videos (owner_user_id, created_at DESC)",
     "DROP TABLE cases",
     "ALTER TABLE users DROP COLUMN role",
