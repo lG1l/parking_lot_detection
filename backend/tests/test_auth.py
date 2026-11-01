@@ -4,13 +4,14 @@ from app.db import get_engine
 from app.security import hash_password, token_hash
 
 
-def make_user(login_id="demo", password="demo-password", name="시연용"):
+def make_user(login_id="demo", password="demo-password", name="시연용", role="admin"):
     with get_engine().begin() as conn:
         return conn.execute(
             text(
-                "INSERT INTO users (login_id, password_hash, name) VALUES (:l, :p, :n) RETURNING id"
+                "INSERT INTO users (login_id, password_hash, name, role) "
+                "VALUES (:l, :p, :n, :r) RETURNING id"
             ),
-            {"l": login_id, "p": hash_password(password), "n": name},
+            {"l": login_id, "p": hash_password(password), "n": name, "r": role},
         ).scalar_one()
 
 
@@ -23,12 +24,12 @@ def test_login_me_logout(client):
     uid = make_user()
     r = client.post("/api/auth/login", json={"login_id": "demo", "password": "demo-password"})
     assert r.status_code == 200
-    assert r.json() == {"id": uid, "login_id": "demo", "name": "시연용"}
+    assert r.json() == {"id": uid, "login_id": "demo", "name": "시연용", "role": "admin"}
     cookie = r.headers["set-cookie"].lower()
     assert "httponly" in cookie and "samesite=lax" in cookie and "max-age=604800" in cookie
     assert "secure" not in cookie
 
-    assert client.get("/api/auth/me").json()["login_id"] == "demo"
+    assert client.get("/api/auth/me").json() == r.json()
 
     r = client.post("/api/auth/logout")
     assert r.status_code == 204

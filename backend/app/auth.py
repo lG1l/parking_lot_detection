@@ -28,14 +28,14 @@ def current_user(request: Request) -> dict:
         with get_engine().connect() as conn:
             row = conn.execute(
                 text(
-                    "SELECT u.id, u.login_id, u.name FROM sessions s "
+                    "SELECT u.id, u.login_id, u.name, u.role FROM sessions s "
                     "JOIN users u ON u.id = s.user_id "
                     "WHERE s.token_hash = :h AND s.expires_at > now()"
                 ),
                 {"h": token_hash(sid)},
             ).one_or_none()
         if row:
-            return {"id": row.id, "login_id": row.login_id, "name": row.name}
+            return {"id": row.id, "login_id": row.login_id, "name": row.name, "role": row.role}
     raise ApiError(401, "UNAUTHENTICATED", "login required")
 
 
@@ -43,7 +43,7 @@ def current_user(request: Request) -> dict:
 def login(body: LoginBody, request: Request, response: Response):
     with get_engine().connect() as conn:
         user = conn.execute(
-            text("SELECT id, login_id, name, password_hash FROM users WHERE login_id = :l"),
+            text("SELECT id, login_id, name, role, password_hash FROM users WHERE login_id = :l"),
             {"l": body.login_id},
         ).one_or_none()
     ok = verify_password(body.password, user.password_hash if user else dummy_hash())
@@ -65,7 +65,7 @@ def login(body: LoginBody, request: Request, response: Response):
     response.set_cookie(
         COOKIE_NAME, token, max_age=COOKIE_MAX_AGE, path="/", httponly=True, samesite="lax"
     )
-    return {"id": user.id, "login_id": user.login_id, "name": user.name}
+    return {"id": user.id, "login_id": user.login_id, "name": user.name, "role": user.role}
 
 
 @router.post("/logout", status_code=204)

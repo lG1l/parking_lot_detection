@@ -1,4 +1,4 @@
-"""계정 만들기 (08장 8.2). 실행: uv run python -m scripts.create_user --login-id victim1 --name 홍길동"""
+"""계정 만들기 (08장 8.2). 실행: uv run python -m scripts.create_user --login-id victim1 --name 홍길동 --role victim"""
 
 import argparse
 import getpass
@@ -15,6 +15,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--login-id", required=True)
     parser.add_argument("--name", required=True)
+    parser.add_argument("--role", required=True, choices=["admin", "victim"])  # D-204
     args = parser.parse_args()
 
     # 비밀번호는 명령행 인자로 받지 않는다 (셸 기록과 ps에 남는다)
@@ -27,8 +28,9 @@ def main() -> None:
     try:
         with get_engine().begin() as conn:
             conn.execute(
-                text("INSERT INTO users (login_id, password_hash, name) VALUES (:l, :p, :n)"),
-                {"l": args.login_id, "p": hash_password(password), "n": args.name},
+                text("INSERT INTO users (login_id, password_hash, name, role) "
+                    "VALUES (:l, :p, :n, :r)"),
+                {"l": args.login_id, "p": hash_password(password), "n": args.name, "r": args.role},
             )
     except IntegrityError:
         sys.exit(f"login id already exists: {args.login_id}")
