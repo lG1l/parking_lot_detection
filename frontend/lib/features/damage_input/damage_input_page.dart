@@ -15,8 +15,8 @@ import '../video_status/video_status_page.dart';
 import 'geometry.dart';
 import 'still_canvas.dart';
 
-/// 입력 단계 (07장 2.6, 순서는 D-98).
-enum InputStep { vehicle, visibility, damage, corners, edges, extras, confirm }
+/// 입력 단계 (07장 2.6, 순서는 D-98·D-212). 순서가 단계 번호이고 _overlay의 "이 단계 이후" 판정에 쓰인다.
+enum InputStep { vehicle, visibility, damage, corners, front, edges, extras, confirm }
 
 /// 사진 고르기 검사 (D-83). 통과하면 null.
 String? checkPhoto(String name, int size) {
@@ -213,25 +213,36 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
     if (_corners.contains(p)) return; // 같은 점을 두 번 찍지 못한다
     final next = [..._corners, p];
     if (next.length == 4 && isTwisted(next)) {
-      setState(() => _corners = []);
+      setState(() {
+        _corners = [];
+        _frontEdge = null;
+      });
       _setError('모서리를 차 둘레를 따라 차례로 찍어주세요.');
       return;
     }
+    // 변 번호가 점 순서에 묶여 있어 앞쪽 변·파손 변도 지운다 (D-212)
     setState(() {
       _corners = next;
+      _frontEdge = null;
       _edges = [];
     });
     _setError(null);
   }
 
-  // ⑤ 파손 변
+  // ⑤ 앞쪽 변. 하나만 고르고, 다른 변을 누르면 그 변으로 바뀐다 (D-212)
+  void _tapFront(int edge) {
+    setState(() => _frontEdge = edge);
+    _setError(null);
+  }
+
+  // ⑥ 파손 변
   void _tapEdge(int edge) {
     final r = toggleEdge(_edges, edge);
     setState(() => _edges = r.edges);
     _setError(r.blocked ? '이웃한 두 변만 고를 수 있습니다.' : null);
   }
 
-  // ⑥ 사진
+  // ⑦ 사진
   Future<void> _pickPhoto() async {
     final file = await ref.read(browserProvider).pickFile(photoExtensions);
     if (file == null || !mounted) return;
@@ -372,6 +383,7 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
     InputStep.damage =>
       _visible == true ? ('고른 차량 안에서 파손 부위를 드래그해 주세요', null) : ('보이지 않는 파손이 있을 위치를 작은 사각형으로 드래그해주세요', null),
     InputStep.corners => ('차가 바닥에 닿는 네 모서리를 차례로 눌러주세요', '가려진 모서리는 짐작해서 찍어도 됩니다.'),
+    InputStep.front => ('차의 앞쪽 변을 눌러주세요', '앞쪽이 잘 안 보이면 뒤쪽 변을 눌러도 됩니다.'),
     InputStep.edges => ('파손이 있는 쪽 변을 눌러주세요', '모서리 파손이면 이웃한 두 변을 누르세요.'),
     InputStep.extras => ('파손 사진과 설명을 남겨주세요', '선택 사항입니다. 비워 두고 다음으로 넘어가도 됩니다.'),
     InputStep.confirm => ('입력한 내용을 확인해주세요', '저장한 뒤에는 고칠 수 없습니다.'),
@@ -385,8 +397,9 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
       selectedBox: _vehicleBox,
       damageBox: s >= InputStep.damage.index ? (_dragBox ?? _damage) : null,
       corners: s >= InputStep.corners.index ? _corners : const [],
+      frontEdge: s >= InputStep.front.index ? _frontEdge : null,
       edges: s >= InputStep.edges.index ? _edges : const [],
-      edgesClickable: _step == InputStep.edges,
+      edgesClickable: _step == InputStep.front || _step == InputStep.edges,
     );
   }
 
@@ -411,7 +424,11 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
             }
           : null,
       onDragEnd: drag ? _dragEnd : null,
-      onEdgeTap: _step == InputStep.edges ? _tapEdge : null,
+      onEdgeTap: switch (_step) {
+        InputStep.front => _tapFront,
+        InputStep.edges => _tapEdge,
+        _ => null,
+      },
     );
   }
 
@@ -555,10 +572,21 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
           OutlinedButton(
             onPressed: () => setState(() {
               _corners = [];
+              _frontEdge = null;
               _edges = [];
               _stepError = null;
             }),
             child: const Text('다시 찍기'),
+          ),
+        ]),
+      ],
+      InputStep.front => [
+        card([
+          const SectionTitle('앞쪽 변'),
+          status(_frontEdge == null ? '네 변 중 하나를 눌러 주세요.' : '앞쪽 변을 골랐습니다.'),
+          OutlinedButton(
+            onPressed: _frontEdge == null ? null : () => setState(() => _frontEdge = null),
+            child: const Text('다시 고르기'),
           ),
         ]),
       ],
@@ -646,6 +674,7 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
       ('파손 보임', _visible == true ? '보임' : '안 보임'),
       ('파손 부위', '빨간 사각형'),
       ('바닥 모서리', '${_corners.length}개'),
+      ('앞쪽 변', '파란 선'),
       ('파손 변', '${_edges.length}개'),
       ('사진', photo == null ? '없음' : photo.name),
       ('설명', text.isEmpty ? '없음' : text),
@@ -706,8 +735,9 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
         children: switch (_step) {
           InputStep.visibility => [prev(InputStep.vehicle), next(InputStep.damage, enabled: _visible != null)],
           InputStep.damage => [prev(InputStep.visibility), next(InputStep.corners, enabled: _damage != null)],
-          InputStep.corners => [prev(InputStep.damage), next(InputStep.edges, enabled: _corners.length == 4)],
-          InputStep.edges => [prev(InputStep.corners), next(InputStep.extras, enabled: _edges.isNotEmpty)],
+          InputStep.corners => [prev(InputStep.damage), next(InputStep.front, enabled: _corners.length == 4)],
+          InputStep.front => [prev(InputStep.corners), next(InputStep.edges, enabled: _frontEdge != null)],
+          InputStep.edges => [prev(InputStep.front), next(InputStep.extras, enabled: _edges.isNotEmpty)],
           _ => [prev(InputStep.edges), next(InputStep.confirm)],
         },
       ),
@@ -715,13 +745,13 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
   }
 }
 
-/// 입력 일곱 단계 표시줄. 지금 단계만 남색 동그라미 (캔버스 2.6).
+/// 입력 여덟 단계 표시줄. 지금 단계만 남색 동그라미 (캔버스 2.6).
 class _StepBar extends StatelessWidget {
   const _StepBar({required this.current});
 
   final InputStep current;
 
-  static const _labels = ['차량 고르기', '파손이 보이나요?', '파손 부위 드래그', '바닥 네 모서리', '파손 변 고르기', '사진·설명 (선택)', '확인 후 저장'];
+  static const _labels = ['차량 고르기', '파손이 보이나요?', '파손 부위 드래그', '바닥 네 모서리', '앞쪽 변 고르기', '파손 변 고르기', '사진·설명 (선택)', '확인 후 저장'];
 
   @override
   Widget build(BuildContext context) {
