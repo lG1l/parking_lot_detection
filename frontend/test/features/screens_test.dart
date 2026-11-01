@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
+import 'package:parking_lot_frontend/features/damage_input/still_canvas.dart';
+
 import '../fake_backend.dart';
 
 Map<String, Object?> video(String status, {Map<String, Object?> extra = const {}}) => {
@@ -683,6 +685,81 @@ void main() {
     await pumpApp(tester, backend, '/videos/7/input');
     expect(find.textContaining('입력을 저장했습니다.'), findsOneWidget);
     expect(backend.calls, isNot(contains('GET /api/videos/7/still')));
+    await unmount(tester);
+  });
+
+  testWidgets('앞쪽 변을 눌러야 [다음]이 켜지고, 저장 본문은 형식 6에 front_edge를 싣는다 (2.6, D-208, D-212)', (tester) async {
+    Map<String, dynamic>? saved;
+    final backend = FakeBackend({
+      'GET /api/videos/7': (_) => json(video('stage1_done')),
+      'GET /api/videos/7/still': (_) => json({
+        'still_frame_id': 305,
+        't_sec': 0.0,
+        'image_url': 'http://x/0.jpg',
+        'detections': [
+          {
+            'det_id': 1,
+            'bbox': [400, 300, 1200, 800],
+          },
+        ],
+      }),
+      'PUT /api/videos/7/input': (req) {
+        saved = jsonDecode(req.body) as Map<String, dynamic>;
+        return json({'video_id': 7, 'status': 'queued', 'input_done': true});
+      },
+    }, role: 'victim');
+    await pumpApp(tester, backend, '/videos/7/input');
+
+    // 정지 장면(원본 1920×1080) 위 원본 좌표를 화면 좌표로 바꾼다
+    final still = tester.getRect(
+      find.descendant(of: find.byType(StillCanvas), matching: find.byType(GestureDetector)).first,
+    );
+    final scale = still.width / 1920;
+    Offset at(double x, double y) => still.topLeft + Offset(x * scale, y * scale);
+    final next = find.widgetWithText(FilledButton, '다음');
+    Future<void> tapNext() async {
+      await tester.tap(next);
+      await tester.pump();
+    }
+
+    await tester.tapAt(at(800, 500)); // ① 차량
+    await tester.pump();
+    await tapNext();
+    await tester.tap(find.widgetWithText(OutlinedButton, '보임')); // ②
+    await tester.pump();
+    await tapNext();
+    await tester.dragFrom(at(500, 400), Offset(200 * scale, 200 * scale)); // ③ 차량 안에서 드래그
+    await tester.pump();
+    await tapNext();
+    for (final (x, y) in const [(450.0, 600.0), (1150.0, 600.0), (1150.0, 790.0), (450.0, 790.0)]) {
+      await tester.tapAt(at(x, y)); // ④ 네 모서리
+      await tester.pump();
+    }
+    await tapNext();
+
+    // ⑤ 고르기 전에는 [다음]이 막힌다
+    expect(find.text('차의 앞쪽 변을 눌러주세요'), findsOneWidget);
+    expect(tester.widget<FilledButton>(next).onPressed, isNull);
+    await tester.tapAt(at(800, 790)); // 변 2 (점 3 → 점 4)
+    await tester.pump();
+    expect(find.text('앞쪽 변을 골랐습니다.'), findsOneWidget);
+    expect(tester.widget<FilledButton>(next).onPressed, isNotNull);
+    await tapNext();
+
+    await tester.tapAt(at(800, 600)); // ⑥ 파손 변 0
+    await tester.pump();
+    await tapNext();
+    await tapNext(); // ⑦ 사진·설명 없이
+    expect(find.text('파란 선'), findsOneWidget); // ⑧ 확인표
+
+    await tester.tap(find.widgetWithText(FilledButton, '저장'));
+    await tester.pump();
+    await tester.tap(find.descendant(of: find.byType(AlertDialog), matching: find.widgetWithText(FilledButton, '저장')));
+    await settle(tester);
+
+    expect(saved?['schema_version'], 6);
+    expect(saved?['damage']['front_edge'], 2);
+    expect(saved?['damage']['damage_edges'], [0]);
     await unmount(tester);
   });
 
