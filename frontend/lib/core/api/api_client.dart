@@ -35,6 +35,8 @@ class ApiClient {
     ),
   );
 
+  Future<dynamic> delete(String path) => _send(() => _http.delete(_uri(path)));
+
   Future<dynamic> _send(Future<http.Response> Function() request) async {
     final http.Response res;
     try {

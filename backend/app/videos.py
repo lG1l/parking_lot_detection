@@ -50,6 +50,11 @@ def _view_expires_at(completed_at: datetime | None) -> datetime | None:
     return completed_at + timedelta(days=VIEW_DAYS) if completed_at else None
 
 
+def _masked_gone(row, expires_at: datetime | None) -> bool:
+    """마스킹본을 더 볼 수 없는가. 파기 표시가 있거나 열람기한이 지났다 (D-187)"""
+    return row.masked_deleted_at is not None or (expires_at is not None and row.now > expires_at)
+
+
 def _owned_video(conn, video_id: int, user_id: int):
     row = conn.execute(
         text(_VIDEO + " WHERE v.id = :v AND v.owner_user_id = :u"),
@@ -88,6 +93,7 @@ def list_videos(user: Annotated[dict, Depends(current_user)]):
                 "original_filename": row.original_filename,
                 "status": row.status,
                 "created_at": _iso(row.created_at),
+                "masked_deleted": _masked_gone(row, expires_at),
                 "view_expires_at": _iso(expires_at) if expires_at else None,
             }
         )
@@ -106,7 +112,7 @@ def get_video(video_id: int, user: Annotated[dict, Depends(current_user)]):
             "status": row.status,
             "input_done": input_done,
             "raw_deleted": row.raw_deleted_at is not None,
-            "masked_deleted": row.masked_deleted_at is not None,
+            "masked_deleted": _masked_gone(row, expires_at),
             "created_at": _iso(row.created_at),
             "duration_sec": row.duration_sec,
             "view_expires_at": _iso(expires_at) if expires_at else None,

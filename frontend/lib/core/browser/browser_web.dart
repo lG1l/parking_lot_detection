@@ -95,4 +95,15 @@ class _WebBrowser implements Browser {
 
   @override
   void log(String message) => web.console.log(message.toJS);
+
+  /// Flutter 웹은 앱이 쌓은 기록마다 state에 serialCount(첫 기록 0)를 붙인다.
+  /// 0보다 크면 앱 안에 이전 화면이 있다. 주소를 바로 열었으면 0이다.
+  @override
+  bool historyBack() {
+    final state = web.window.history.state.dartify();
+    final serial = state is Map ? state['serialCount'] : null;
+    if (serial is! num || serial <= 0) return false;
+    web.window.history.back();
+    return true;
+  }
 }

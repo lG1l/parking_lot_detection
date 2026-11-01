@@ -30,6 +30,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  # 달력·시계 선택창 등 Material 기본 글자를 한국어로 (D-190)
+  flutter_localizations:
+    sdk: flutter
   go_router: ^18.1.1
   flutter_riverpod: ^3.4.3
   http: ^1.6.0
@@ -57,6 +60,21 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  # 상단 바 로고 (D-184)
+  assets:
+    - assets/images/logo.png
+
+  # 앱 기본 글꼴. 굵기별 파일을 따로 등록한다(D-183).
+  fonts:
+    - family: Pretendard
+      fonts:
+      - asset: assets/fonts/pretendard/Pretendard-Regular.otf
+        weight: 400
+      - asset: assets/fonts/pretendard/Pretendard-Medium.otf
+        weight: 500
+      - asset: assets/fonts/pretendard/Pretendard-SemiBold.otf
+        weight: 600
 
   # To add assets to your application, add an assets section, like this:
   # assets:

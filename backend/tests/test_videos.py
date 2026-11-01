@@ -101,6 +101,25 @@ def test_list_computed_statuses_and_expiry(admin):
     assert by_name["done.mp4"]["view_expires_at"].endswith("+09:00")
 
 
+def test_masked_deleted_counts_expired_before_purge(admin):
+    """열람기한이 지났으면 파기 작업 전이어도 8·9번 모두 true (D-187)"""
+    me = user_id()
+    fresh, _ = add_video(me, "fresh.mp4", "finished", completed_days_ago=2)
+    late, _ = add_video(me, "late.mp4", "finished", completed_days_ago=31)
+    purged, _ = add_video(me, "purged.mp4", "finished", completed_days_ago=2)
+    sql("UPDATE videos SET masked_deleted_at = now() WHERE id = :v", v=purged)
+    up = add_video(me, "up.mp4", created_minutes_ago=5)[0]  # 업로드 완료 전
+    by_name = {v["original_filename"]: v for v in admin.get("/api/videos").json()}
+    assert {n: v["masked_deleted"] for n, v in by_name.items()} == {
+        "fresh.mp4": False,
+        "late.mp4": True,
+        "purged.mp4": True,
+        "up.mp4": False,
+    }
+    for vid, expected in ((fresh, False), (late, True), (purged, True), (up, False)):
+        assert admin.get(f"/api/videos/{vid}").json()["masked_deleted"] is expected
+
+
 # ---- 9번 상태 ----
 
 

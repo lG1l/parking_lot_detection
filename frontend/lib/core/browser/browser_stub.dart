@@ -22,4 +22,7 @@ class _UnsupportedBrowser implements Browser {
 
   @override
   void log(String message) {}
+
+  @override
+  bool historyBack() => false;
 }

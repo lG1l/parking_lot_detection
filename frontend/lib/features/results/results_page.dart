@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme.dart';
 import '../../core/api/api.dart';
 import '../../core/api/api_error.dart';
 import '../../core/format.dart';
@@ -82,9 +83,12 @@ class _ResultsPageState extends ConsumerState<ResultsPage> {
     final last = _lastUrlReload;
     if (last != null && DateTime.now().difference(last) < const Duration(seconds: 10)) return;
     _lastUrlReload = DateTime.now();
-    _api.pins(_id).then((pins) {
-      if (mounted) setState(() => _pins = pins);
-    }).catchError(_onError);
+    _api
+        .pins(_id)
+        .then((pins) {
+          if (mounted) setState(() => _pins = pins);
+        })
+        .catchError(_onError);
   }
 
   @override
@@ -92,47 +96,57 @@ class _ResultsPageState extends ConsumerState<ResultsPage> {
     final d = _detail;
     final pins = _pins;
     return PageFrame(
-      title: '결과',
-      maxWidth: 1100,
-      actions: const [BackToListButton()],
+      eyebrow: '고정 목록',
+      eyebrowNote: d == null ? null : resultExpiresText(d.viewExpiresAt),
+      title: d?.originalFilename ?? '결과',
       child: d == null || pins == null
           ? const Center(child: CircularProgressIndicator())
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(resultExpiresText(d.viewExpiresAt)),
-                const SizedBox(height: 12),
-                if (d.status == VideoStatus.exhausted && (d.candidateUnavailable ?? 0) > 0)
+                if (d.status == VideoStatus.exhausted && (d.candidateUnavailable ?? 0) > 0) ...[
                   Notice(partialUnavailableMessage(d.candidateUnavailable!)),
-                for (final (i, p) in pins.indexed) _item(context, i + 1, p),
+                  const SizedBox(height: 16),
+                ],
+                for (final p in pins) ...[_item(p), const SizedBox(height: 16)],
               ],
             ),
     );
   }
 
-  Widget _item(BuildContext context, int no, PinnedIncident p) {
-    final text = Theme.of(context).textTheme;
+  /// 왼쪽 클립, 오른쪽 원본 기준 시간 (캔버스 2.9).
+  Widget _item(PinnedIncident p) {
     final est = estimatedTimeText(p);
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('사건 지점 $no', style: text.titleMedium),
-            const SizedBox(height: 8),
-            const Text('영상 시작부터'),
-            // 경찰에게 바로 전달할 원본 영상 기준 시간 (07장 2.9)
-            SelectableText(
-              '${formatElapsed(p.startSec)} ~ ${formatElapsed(p.endSec)}',
-              style: text.headlineMedium,
-            ),
-            if (est != null) Text(est),
-            const SizedBox(height: 12),
-            ClipPlayer(url: p.clipUrl, onUrlExpired: _onUrlExpired),
-          ],
+    final info = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SmallText('영상 시작부터'),
+        const SizedBox(height: 10),
+        // 경찰에게 바로 전달할 원본 영상 기준 시간 (07장 2.9)
+        SelectableText(
+          '${formatElapsed(p.startSec)} ~ ${formatElapsed(p.endSec)}',
+          style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: inkColor),
         ),
+        if (est != null) ...[const SizedBox(height: 10), Text(est, style: const TextStyle(fontSize: 15))],
+      ],
+    );
+    final player = ClipPlayer(url: p.clipUrl, onUrlExpired: _onUrlExpired);
+    return PageCard(
+      padding: const EdgeInsets.all(20),
+      child: LayoutBuilder(
+        builder: (context, c) => c.maxWidth < 720
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [player, const SizedBox(height: 16), info],
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  SizedBox(width: 380, child: player),
+                  const SizedBox(width: 28),
+                  Expanded(child: info),
+                ],
+              ),
       ),
     );
   }

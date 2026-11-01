@@ -6,6 +6,11 @@ import '../../core/models/video.dart';
 bool canFetchNext(Batch batch, ListSummary tab, String status) =>
     status == VideoStatus.ready && batch.batchNo == tab.latestBatchNo && !tab.done;
 
+/// 이 탭의 마지막 페이지인지: 받을 후보가 더 없고(remaining 0) 마지막 묶음을 보고 있으며 아직 넘기지 않았다.
+/// 이때는 [다음 ▶]을 막고 [확인 완료]로 이 탭을 끝낸다(13번) (D-190).
+bool isLastPage(Batch batch, ListSummary tab, String status) =>
+    canFetchNext(batch, tab, status) && tab.remaining == 0;
+
 /// 마지막 [다음]의 확인창을 띄울지. 이 탭의 remaining이 0이고 다른 탭도 다 넘겼을 때만 (D-99).
 bool needsLastBatchConfirm(Map<String, ListSummary> lists, String tab) =>
     lists[tab]!.remaining == 0 && lists[CandidateList.other(tab)]!.done;
@@ -29,7 +34,9 @@ String? tabDoneMessage(Map<String, ListSummary> lists, String tab) {
   if (mine.unavailable > 0) {
     return '이 목록에서 볼 수 있는 후보를 모두 확인했습니다. 열람 불가 ${mine.unavailable}건이 있습니다.';
   }
-  return '이 목록의 후보를 모두 확인했습니다. 다른 탭에 확인할 후보가 남아 있습니다.';
+  return tab == CandidateList.main
+      ? '이 목록의 후보를 모두 확인했습니다. 점수 미산출에 확인할 후보가 남아 있습니다.'
+      : '이 목록의 후보를 모두 확인했습니다. 후보에 확인할 후보가 남아 있습니다.';
 }
 
 /// 묶음의 열람 불가 안내 (D-109). 없으면 null.

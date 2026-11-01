@@ -20,6 +20,7 @@ def create_app() -> FastAPI:
     app.include_router(retry.router)
     if settings.app_mode == "local":  # 배포 서버에는 로컬 파일 경로를 열지 않는다 (D-158)
         app.include_router(local_routes.router)
+        app.add_middleware(local_routes.LocalCors)
 
     @app.get("/api/health")
     def health():

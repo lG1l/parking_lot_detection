@@ -8,6 +8,12 @@ String _two(int n) => n.toString().padLeft(2, '0');
 /// 돌려주는 DateTime의 필드(year, hour 등)가 한국 시간 값이다.
 DateTime toKst(String iso) => DateTime.parse(iso).toUtc().add(_kstOffset);
 
+/// "YYYY-MM-DD" (한국 시간).
+String formatKstDate(String iso) {
+  final t = toKst(iso);
+  return '${t.year}-${_two(t.month)}-${_two(t.day)}';
+}
+
 /// "YYYY-MM-DD HH:mm" (한국 시간).
 String formatKstMinute(String iso) {
   final t = toKst(iso);

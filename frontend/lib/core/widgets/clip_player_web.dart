@@ -50,6 +50,15 @@ class _ClipVideoState extends State<_ClipVideo> {
         }
       }.toJS,
     );
+    // <video>가 휠 입력을 가져가 페이지가 스크롤되지 않으므로, 휠을 바깥 스크롤로 넘긴다
+    video.addEventListener(
+      'wheel',
+      (web.WheelEvent e) {
+        final position = mounted ? Scrollable.maybeOf(context)?.position : null;
+        if (position == null) return;
+        position.jumpTo((position.pixels + e.deltaY).clamp(position.minScrollExtent, position.maxScrollExtent));
+      }.toJS,
+    );
     // S3 403(만료)이면 media error가 난다. 상태 코드는 볼 수 없으므로 조회 API를 다시 부른다 (D-41)
     video.addEventListener(
       'error',

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/theme.dart';
 import '../../core/api/api.dart';
 import '../../core/config.dart';
 import '../../core/format.dart';
@@ -56,52 +57,83 @@ class _UploadLinkPageState extends ConsumerState<UploadLinkPage> {
   Widget build(BuildContext context) {
     final link = _link;
     return PageFrame(
-      title: '업로드 링크 발급',
-      actions: const [BackToListButton()],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Notice('이 링크는 주차장 관리자에게 보여주는 용도입니다.'),
-          const SizedBox(height: 16),
-          if (link == null)
-            FilledButton(
-              onPressed: _busy ? null : _issue,
-              child: const Text('링크 발급'),
-            )
-          else ...[
-            SelectableText(link, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text('링크는 ${formatKstMinute(_expiresAt!)}까지 한 번만 쓸 수 있습니다.'),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 12,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                FilledButton.icon(
-                  onPressed: _copy,
-                  icon: const Icon(Icons.copy),
-                  label: const Text('주소 복사'),
-                ),
-                OutlinedButton(
-                  onPressed: _busy ? null : _issue,
-                  child: const Text('링크 다시 발급'),
-                ),
-                const Text('다시 발급하면 이전 링크는 쓸 수 없게 됩니다.'),
+      current: NavItem.uploadLink,
+      title: '업로드 링크 받기',
+      child: link == null
+          ? StateCard(
+              icon: Icons.link,
+              title: '아직 발급한 링크가 없습니다',
+              messages: const ['링크 발급을 누르면 주차장 관리자에게 전달할 업로드 링크가 만들어집니다.\n링크는 한 번만 쓸 수 있습니다.'],
+              actions: [
+                FilledButton(style: largeButtonStyle, onPressed: _busy ? null : _issue, child: const Text('링크 발급')),
               ],
-            ),
-            // 데모 전용: 관리자가 링크를 연 화면을 바로 본다
-            if (!useBackend) ...[
-              const SizedBox(height: 16),
-              TextButton.icon(
-                onPressed: () => context.go('/upload/$_token'),
-                icon: const Icon(Icons.open_in_new),
-                label: const Text('(데모) 관리자 업로드 화면 열기'),
+            )
+          : PageCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text('발급된 링크', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          constraints: const BoxConstraints(minHeight: 44),
+                          alignment: Alignment.centerLeft,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF7F7F5),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFF8F8F8B), width: 1.5),
+                          ),
+                          child: SelectableText(link, style: const TextStyle(fontSize: 14)),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      OutlinedButton(onPressed: _copy, child: const Text('주소 복사')),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text.rich(
+                    TextSpan(
+                      text: '링크는 ',
+                      children: [
+                        TextSpan(
+                          text: formatKstMinute(_expiresAt!),
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const TextSpan(text: '까지 한 번만 쓸 수 있습니다.'),
+                      ],
+                    ),
+                    style: const TextStyle(fontSize: 15),
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(height: 1, color: lineColor),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      OutlinedButton(onPressed: _busy ? null : _issue, child: const Text('링크 다시 발급')),
+                      const SmallText('다시 발급하면 이전 링크는 쓸 수 없게 됩니다.'),
+                    ],
+                  ),
+                  // 데모 전용: 관리자가 링크를 연 화면을 바로 본다
+                  if (!useBackend) ...[
+                    const SizedBox(height: 16),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () => context.go('/upload/$_token'),
+                        icon: const Icon(Icons.open_in_new),
+                        label: const Text('(데모) 관리자 업로드 화면 열기'),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-            ],
-          ],
-        ],
-      ),
+            ),
     );
   }
 }

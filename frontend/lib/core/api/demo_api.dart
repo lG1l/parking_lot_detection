@@ -52,13 +52,17 @@ class DemoApi extends Api {
       'candidate_total': 12,
       'candidate_unavailable': 2,
     });
-    add(11, '11_보관기간종료.mp4', VideoStatus.finished, {'masked_deleted': true, 'raw_deleted': true});
+    add(11, '11_보관기간종료.mp4', VideoStatus.finished, {
+      'masked_deleted': true,
+      'raw_deleted': true,
+      'view_expires_at': _iso(DateTime.now().subtract(const Duration(days: 1))),
+    });
 
     _pins[3] = [_pinOf(_clip(3, 1)), _pinOf(_clip(3, 3))];
   }
 
   static const _mainBatches = 3;
-  static const _perBatch = 4;
+  static const _perBatch = 10; // 서버와 같은 묶음당 최대 개수 (01장)
 
   final _videos = <int, Map<String, Object?>>{};
   final _pins = <int, List<Map<String, Object?>>>{};
@@ -263,6 +267,13 @@ class DemoApi extends Api {
     if (!pins.any((p) => p['candidate_clip_id'] == candidateClipId)) {
       pins.add(_pinOf(_clip(id, rank, failed: failed)));
     }
+    return pinsFromJson(pins);
+  }
+
+  @override
+  Future<List<PinnedIncident>> unpin(int id, int candidateClipId) async {
+    final pins = _pins[id] ?? [];
+    pins.removeWhere((p) => p['candidate_clip_id'] == candidateClipId);
     return pinsFromJson(pins);
   }
 

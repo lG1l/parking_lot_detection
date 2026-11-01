@@ -98,6 +98,9 @@ class Api {
   Future<List<PinnedIncident>> pins(int id) async =>
       pinsFromJson(await _c.get('/api/videos/$id/pin')); // 15
 
+  Future<List<PinnedIncident>> unpin(int id, int candidateClipId) async =>
+      pinsFromJson(await _c.delete('/api/videos/$id/pin/$candidateClipId')); // 20
+
   Future<void> finish(int id) => _c.post('/api/videos/$id/finish'); // 17
 }
 

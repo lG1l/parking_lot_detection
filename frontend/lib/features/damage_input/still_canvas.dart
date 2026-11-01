@@ -1,7 +1,9 @@
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import '../../app/theme.dart';
 import '../../core/models/analysis.dart';
 import 'geometry.dart';
 
@@ -76,8 +78,7 @@ class _StillCanvasState extends State<StillCanvas> {
       for (var i = 0; i < 4; i++) {
         final a = o.corners[i];
         final b = o.corners[(i + 1) % 4];
-        final d = distanceToSegment(
-          local.dx, local.dy, a.x * scale, a.y * scale, b.x * scale, b.y * scale);
+        final d = distanceToSegment(local.dx, local.dy, a.x * scale, a.y * scale, b.x * scale, b.y * scale);
         if (d <= bestDist) {
           best = i;
           bestDist = d;
@@ -93,10 +94,7 @@ class _StillCanvasState extends State<StillCanvas> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final scale = math.min(
-          constraints.maxWidth / widget.natural.width,
-          widget.maxHeight / widget.natural.height,
-        );
+        final scale = math.min(constraints.maxWidth / widget.natural.width, widget.maxHeight / widget.natural.height);
         final size = Size(widget.natural.width * scale, widget.natural.height * scale);
         final dragging = widget.onDragStart != null;
         return Center(
@@ -107,6 +105,13 @@ class _StillCanvasState extends State<StillCanvas> {
               onHover: (e) => widget.onHover?.call(e.localPosition.dx / scale, e.localPosition.dy / scale),
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
+                // 트랙패드 두 손가락 스크롤은 받지 않고 페이지 스크롤로 넘긴다
+                supportedDevices: const {
+                  PointerDeviceKind.mouse,
+                  PointerDeviceKind.touch,
+                  PointerDeviceKind.stylus,
+                  PointerDeviceKind.invertedStylus,
+                },
                 onTapUp: (e) => _tap(e.localPosition, scale),
                 onPanStart: dragging ? (e) => widget.onDragStart!(_pt(e.localPosition, scale)) : null,
                 onPanUpdate: dragging ? (e) => widget.onDragUpdate?.call(_pt(e.localPosition, scale)) : null,
@@ -123,9 +128,7 @@ class _StillCanvasState extends State<StillCanvas> {
                         return const ColoredBox(color: Colors.black12);
                       },
                     ),
-                    IgnorePointer(
-                      child: CustomPaint(painter: _OverlayPainter(widget.overlay, scale)),
-                    ),
+                    IgnorePointer(child: CustomPaint(painter: _OverlayPainter(widget.overlay, scale))),
                   ],
                 ),
               ),
@@ -156,29 +159,31 @@ class _OverlayPainter extends CustomPainter {
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = hovered ? 4 : 2
-          ..color = hovered ? Colors.yellowAccent : Colors.white70,
+          ..color = hovered ? Colors.white : Colors.white70,
       );
     }
     final selected = o.selectedBox;
     if (selected != null) {
+      // 고른 차량은 노랑, 파손 부위는 주황, 바닥 변은 흰색, 고른 파손 변은 빨강 (D-190)
+      canvas.drawRect(_rect(selected), Paint()..color = vehicleColor.withValues(alpha: 0.12));
       canvas.drawRect(
         _rect(selected),
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 4
-          ..color = Colors.lightBlueAccent,
+          ..color = vehicleColor,
       );
     }
     final damage = o.damageBox;
     if (damage != null) {
       final r = _rect(damage);
-      canvas.drawRect(r, Paint()..color = Colors.redAccent.withValues(alpha: 0.25));
+      canvas.drawRect(r, Paint()..color = damageColor.withValues(alpha: 0.15));
       canvas.drawRect(
         r,
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 3
-          ..color = Colors.redAccent,
+          ..color = damageColor,
       );
     }
     if (o.corners.length == 4) {
@@ -189,17 +194,17 @@ class _OverlayPainter extends CustomPainter {
           _off(o.corners[(i + 1) % 4]),
           Paint()
             ..strokeWidth = chosen ? 7 : (o.edgesClickable ? 4 : 2)
-            ..color = chosen ? Colors.orangeAccent : Colors.greenAccent,
+            ..color = chosen ? chosenEdgeColor : floorEdgeColor,
         );
       }
     }
     for (var i = 0; i < o.corners.length; i++) {
       final c = _off(o.corners[i]);
-      canvas.drawCircle(c, 9, Paint()..color = Colors.green.shade700);
+      canvas.drawCircle(c, 11, Paint()..color = inkColor);
       final tp = TextPainter(
         text: TextSpan(
           text: '${i + 1}',
-          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+          style: const TextStyle(color: offWhiteColor, fontSize: 12, fontWeight: FontWeight.bold),
         ),
         textDirection: TextDirection.ltr,
       )..layout();

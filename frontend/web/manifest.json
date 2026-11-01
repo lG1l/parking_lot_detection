@@ -1,11 +1,11 @@
 {
-    "name": "parking_lot_frontend",
-    "short_name": "parking_lot_frontend",
+    "name": "마스킹 기반 주차장 CCTV 후보선별 서비스",
+    "short_name": "마스킹 기반 주차장 CCTV 후보선별 서비스",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "주차장 가해 차량 탐색 웹",
+    "background_color": "#6E767B",
+    "theme_color": "#6E767B",
+    "description": "마스킹 기반 주차장 CCTV 후보선별 서비스",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

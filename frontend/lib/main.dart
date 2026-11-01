@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/router.dart';
 import 'app/theme.dart';
+import 'core/constants.dart';
 
 void main() {
   runApp(const ProviderScope(child: App()));
@@ -30,8 +32,13 @@ class _AppState extends State<App> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: '주차장 가해 차량 탐색',
+      title: serviceName,
+      debugShowCheckedModeBanner: false,
       theme: appTheme,
+      // 달력·시계 선택창 등 기본 글자를 한국어로 (D-190)
+      locale: const Locale('ko'),
+      supportedLocales: const [Locale('ko')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       routerConfig: _router,
     );
   }
