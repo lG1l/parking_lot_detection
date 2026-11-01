@@ -7,6 +7,7 @@ import '../../core/api/api_error.dart';
 import '../../core/format.dart';
 import '../../core/models/analysis.dart';
 import '../../core/models/video.dart';
+import '../../core/session.dart';
 import '../../core/widgets/clip_player.dart';
 import '../../core/widgets/common.dart';
 import '../candidates/completion.dart';
@@ -25,6 +26,7 @@ String? estimatedTimeText(PinnedIncident p) {
 }
 
 /// 2.9 결과 (고정한 사건 지점 목록). 고정 해제·다운로드 버튼은 없다 (D-40, 불변 조건 8).
+/// 피해자 계정은 클립 없이 고정한 시각만 본다 (D-211).
 class ResultsPage extends ConsumerStatefulWidget {
   const ResultsPage({super.key, required this.videoId});
 
@@ -40,6 +42,7 @@ class _ResultsPageState extends ConsumerState<ResultsPage> {
 
   VideoDetail? _detail;
   List<PinnedIncident>? _pins;
+  bool _admin = false;
   DateTime? _lastUrlReload;
 
   @override
@@ -50,20 +53,23 @@ class _ResultsPageState extends ConsumerState<ResultsPage> {
 
   Future<void> _open() async {
     try {
+      final me = await ref.read(meProvider.future);
       final d = await _api.video(_id); // 9
       if (!mounted) return;
-      final screen = selectScreen(d);
+      final screen = selectScreen(d, admin: me.isAdmin);
       if (screen != StatusScreen.results && screen != StatusScreen.exhausted) {
         goStatus(context, _id);
         return;
       }
-      final pins = await _api.pins(_id); // 15
+      // 피해자 계정은 재생 URL 없는 사건 지점 시간만 받는다 (D-210)
+      final pins = me.isAdmin ? await _api.pins(_id) : await _api.incidentTimes(_id); // 15 / 25
       if (!mounted) return;
       if (pins.isEmpty) {
         goStatus(context, _id); // exhausted인데 고정이 없으면 완료 화면
         return;
       }
       setState(() {
+        _admin = me.isAdmin;
         _detail = d;
         _pins = pins;
       });
@@ -97,13 +103,17 @@ class _ResultsPageState extends ConsumerState<ResultsPage> {
     final pins = _pins;
     return PageFrame(
       eyebrow: '고정 목록',
-      eyebrowNote: d == null ? null : resultExpiresText(d.viewExpiresAt),
+      eyebrowNotes: d == null ? const [] : [...counterpartNote(ref, _id), viewExpiresText(d.viewExpiresAt)],
       title: d?.originalFilename ?? '결과',
       child: d == null || pins == null
           ? const Center(child: CircularProgressIndicator())
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (!_admin) ...[
+                  const SmallText('고정된 장면의 시각만 볼 수 있습니다. 장면 영상은 주차장 관리자 화면에서 관리자와 함께 확인합니다.'),
+                  const SizedBox(height: 16),
+                ],
                 if (d.status == VideoStatus.exhausted && (d.candidateUnavailable ?? 0) > 0) ...[
                   Notice(partialUnavailableMessage(d.candidateUnavailable!)),
                   const SizedBox(height: 16),
@@ -130,7 +140,12 @@ class _ResultsPageState extends ConsumerState<ResultsPage> {
         if (est != null) ...[const SizedBox(height: 10), Text(est, style: const TextStyle(fontSize: 15))],
       ],
     );
-    final player = ClipPlayer(url: p.clipUrl, onUrlExpired: _onUrlExpired);
+    final clipUrl = p.clipUrl;
+    // 피해자 계정은 클립 주소를 받지 않는다. 시각만 보인다 (D-211)
+    if (!_admin || clipUrl == null) {
+      return PageCard(padding: const EdgeInsets.all(20), child: info);
+    }
+    final player = ClipPlayer(url: clipUrl, onUrlExpired: _onUrlExpired);
     return PageCard(
       padding: const EdgeInsets.all(20),
       child: LayoutBuilder(

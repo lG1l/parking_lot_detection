@@ -13,7 +13,7 @@ class ApiException implements Exception {
 /// 네트워크가 끊겨 응답을 받지 못했을 때 쓰는 code.
 const networkErrorCode = 'NETWORK_ERROR';
 
-/// 07장 3.1 에러 문구. 화면별로 따로 정한 문구(업로드 링크, 파일)는 각 화면에 있다.
+/// 07장 3.1 에러 문구. 화면별로 따로 정한 문구(피해자 연결, 파일)는 각 화면에 있다.
 String errorMessage(String code) {
   switch (code) {
     case 'UNAUTHENTICATED':
@@ -31,9 +31,15 @@ String errorMessage(String code) {
       return '상태가 변경되었습니다. 최신 화면으로 새로고침합니다.';
     case 'RAW_EXPIRED':
     case 'MASKED_EXPIRED':
-      return '보관 기간(30일)이 지나 영상이 삭제되었습니다.';
+      return '보관 기간(30일)이 지나 더 이상 이용할 수 없습니다.';
     case 'VALIDATION_FAILED':
       return '입력값이 올바르지 않습니다. 다시 입력해 주세요.';
+    case 'ROLE_NOT_ALLOWED':
+      return '이 계정으로는 할 수 없는 작업입니다.';
+    case 'CASE_NOT_FOUND':
+      return '사건을 찾을 수 없습니다.';
+    case 'SUPERVISION_AGREEMENT_REQUIRED':
+      return '관리·감독 안내에 동의해야 열람할 수 있습니다.';
     case 'AGREEMENT_REQUIRED':
       return '위탁계약 동의가 확인되지 않습니다. 다시 동의해 주세요.';
     default:
@@ -48,4 +54,5 @@ bool needsStatusReload(String code) => const {
   'MASKED_EXPIRED',
   'RETRY_NOT_ALLOWED',
   'RETRY_LIMIT_REACHED',
+  'SUPERVISION_AGREEMENT_REQUIRED', // 상태 화면이 안내창을 다시 띄운다 (07장 2.7)
 }.contains(code);

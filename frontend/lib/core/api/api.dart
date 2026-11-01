@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import '../config.dart';
+import '../models/account.dart';
 import '../models/analysis.dart';
 import '../models/video.dart';
 import 'api_client.dart';
@@ -14,40 +15,46 @@ class Api {
   final ApiClient _c;
 
   // 계정 (5.3)
-  Future<void> login(String loginId, String password) =>
-      _c.post('/api/auth/login', {'login_id': loginId, 'password': password}); // 1
+  Future<Me> login(String loginId, String password) async =>
+      Me.fromJson(await _c.post('/api/auth/login', {'login_id': loginId, 'password': password})); // 1
   Future<void> logout() => _c.post('/api/auth/logout'); // 2
-  Future<void> me() => _c.get('/api/auth/me'); // 3
+  Future<Me> me() async => Me.fromJson(await _c.get('/api/auth/me')); // 3
 
-  // 업로드 링크·업로드 (5.4)
-  Future<({String token, String expiresAt})> issueUploadLink() async {
-    final j = await _c.post('/api/upload-links'); // 4
-    return (token: j['token'] as String, expiresAt: j['expires_at'] as String);
+  // 사건·업로드 (5.4). 관리자 계정만 부른다 (D-204)
+  Future<({String loginId, String maskedName})> lookupInvitee(String loginId) async {
+    final j = await _c.get('/api/users/lookup', query: {'login_id': loginId}); // 24
+    return (loginId: j['login_id'] as String, maskedName: j['masked_name'] as String);
   }
 
-  Future<void> checkUploadToken(String token) =>
-      _c.get('/api/uploads/${Uri.encodeComponent(token)}'); // 5
+  Future<VideoCase> createCase(String victimLoginId) async =>
+      VideoCase.fromJson(await _c.post('/api/cases', {'victim_login_id': victimLoginId})); // 21
 
-  Future<String> presignUpload(
-    String token, {
+  Future<List<VideoCase>> cases() async {
+    final j = await _c.get('/api/cases'); // 22
+    return [for (final e in j['items'] as List) VideoCase.fromJson(e as Map<String, dynamic>)];
+  }
+
+  Future<void> agreeViewing(int videoId) =>
+      _c.post('/api/videos/$videoId/viewing-agreement', {'confirm_supervision': true}); // 23
+
+  Future<({int videoId, String uploadUrl})> presignUpload(
+    int caseId, {
     required String filename,
     required int sizeBytes,
     String? recordingStartedAt,
     required Map<String, Object> agreement,
   }) async {
-    final j = await _c.post('/api/uploads/${Uri.encodeComponent(token)}/presign', {
+    final j = await _c.post('/api/cases/$caseId/uploads/presign', {
       'filename': filename,
       'size_bytes': sizeBytes,
       'recording_started_at': ?recordingStartedAt,
       'agreement': agreement,
     }); // 6
-    return j['upload_url'] as String;
+    return (videoId: j['video_id'] as int, uploadUrl: j['upload_url'] as String);
   }
 
-  Future<void> completeUpload(String token) =>
-      _c.post('/api/uploads/${Uri.encodeComponent(token)}/complete'); // 7
-  Future<void> warmup(String token) =>
-      _c.post('/api/uploads/${Uri.encodeComponent(token)}/warmup'); // 16
+  Future<void> completeUpload(int videoId) => _c.post('/api/videos/$videoId/upload/complete'); // 7
+  Future<void> warmup(int videoId) => _c.post('/api/videos/$videoId/upload/warmup'); // 16
 
   // 영상 (5.5)
   Future<List<VideoSummary>> videos() async {
@@ -102,6 +109,10 @@ class Api {
       pinsFromJson(await _c.delete('/api/videos/$id/pin/$candidateClipId')); // 20
 
   Future<void> finish(int id) => _c.post('/api/videos/$id/finish'); // 17
+
+  /// 사건 지점 시간. 두 계정이 부르고, 재생 URL은 없다. 끝 상태 전에는 빈 배열이다 (D-210).
+  Future<List<PinnedIncident>> incidentTimes(int id) async =>
+      pinsFromJson(await _c.get('/api/videos/$id/incident-times')); // 25
 }
 
 // 백엔드 연결 필요: USE_BACKEND=true면 실제 API, 아니면 예시 데이터(DemoApi)

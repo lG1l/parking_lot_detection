@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
 import '../../core/api/api.dart';
@@ -9,6 +8,7 @@ import '../../core/browser/browser.dart';
 import '../../core/constants.dart';
 import '../../core/format.dart';
 import '../../core/models/analysis.dart';
+import '../../core/session.dart';
 import '../../core/widgets/common.dart';
 import '../video_status/status_rules.dart';
 import '../video_status/video_status_page.dart';
@@ -114,10 +114,12 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
   /// 9번으로 이 화면이 맞는지 본 뒤 10번을 한 번 부른다.
   Future<void> _open() async {
     try {
+      final me = await ref.read(meProvider.future);
       final d = await _api.video(_id); // 9
       if (!mounted) return;
-      if (selectScreen(d) != StatusScreen.input) {
-        goStatus(context, _id); // 입력을 마쳤으면 입력 화면을 열지 않는다 (D-66)
+      // 입력을 마쳤거나 관리자 계정이면 입력 화면을 열지 않는다 (D-66, D-204)
+      if (selectScreen(d, admin: me.isAdmin) != StatusScreen.input) {
+        goStatus(context, _id);
         return;
       }
       _viewExpiresAt = d.viewExpiresAt;
@@ -349,17 +351,12 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
     return StateCard(
       icon: Icons.directions_car_outlined,
       messages: const [
-        '이 장면에서 본인 차량을 찾지 못했습니다. 관리자에게 차가 이미 주차된 뒤의 장면부터 영상을 다시 잘라 달라고 '
-            '요청한 뒤, 새 업로드 링크를 발급해 전달해 주세요.',
+        '이 장면에서 본인 차량을 찾지 못했습니다. 관리자에게 차가 이미 주차된 뒤의 장면부터 영상을 다시 잘라 '
+            '같은 사건에 올려 달라고 요청해 주세요.',
       ],
       actions: [
         if (_still!.detections.isNotEmpty)
           OutlinedButton(onPressed: () => setState(() => _reupload = false), child: const Text('차량 고르기로 돌아가기')),
-        FilledButton(
-          style: largeButtonStyle,
-          onPressed: () => context.go('/videos/upload-link'),
-          child: const Text('업로드 링크 받기'),
-        ),
       ],
     );
   }
@@ -422,10 +419,18 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
       children: [
         _StepBar(current: _step),
         const SizedBox(height: 20),
+        // 파일 이름 | 관리자 ○○ | 열람기한 (캔버스 2.6)
         if (_filename != null)
-          Text(
-            _filename!,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: subColor),
+          Wrap(
+            spacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(_filename!, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: subColor)),
+              for (final note in [...counterpartNote(ref, _id), viewExpiresText(_viewExpiresAt)]) ...[
+                const Text('|', style: TextStyle(fontSize: 13, color: noteColor)),
+                Text(note, style: const TextStyle(fontSize: 13, color: noteColor)),
+              ],
+            ],
           ),
         const SizedBox(height: 10),
         Text(title, style: pageTitleStyle),
@@ -435,14 +440,7 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
               ? Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 열람기한은 정지 장면 바로 아래. 오른쪽 칸이 길어져도(사진·설명 단계) 같은 자리다
-                    Expanded(
-                      flex: 760,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [_canvas(), const SizedBox(height: 16), SmallText(viewExpiresText(_viewExpiresAt))],
-                      ),
-                    ),
+                    Expanded(flex: 760, child: _canvas()),
                     const SizedBox(width: 28),
                     Expanded(
                       flex: 412,
@@ -473,8 +471,6 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
                     _canvas(),
                     const SizedBox(height: 20),
                     _panel(context, hintInside: true),
-                    const SizedBox(height: 16),
-                    SmallText(viewExpiresText(_viewExpiresAt)),
                   ],
                 ),
         ),

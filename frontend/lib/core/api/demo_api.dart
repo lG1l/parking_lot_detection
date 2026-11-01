@@ -1,5 +1,6 @@
 import 'package:http/http.dart' as http;
 
+import '../models/account.dart';
 import '../models/analysis.dart';
 import '../models/video.dart';
 import 'api.dart';
@@ -11,48 +12,65 @@ import 'api_error.dart';
 
 String _iso(DateTime t) => t.toUtc().toIso8601String();
 
+/// 데모 업로드 주소. 관리자 업로드 화면은 이 주소면 S3에 보내지 않고 올린 것으로 본다.
+const demoUploadUrl = 'demo://upload';
+
 /// 백엔드 없이 화면을 보기 위한 가짜 API. 네트워크를 쓰지 않고 메모리 안의 예시 데이터만 바꾼다.
 /// 목록의 영상마다 상태가 달라 각 화면을 눌러 볼 수 있다.
+/// 아이디가 `victim`으로 시작하면 피해자 계정, 그 밖은 관리자 계정으로 로그인한다 (D-204).
 class DemoApi extends Api {
   DemoApi() : super(ApiClient(http.Client())) {
     final expires = _iso(DateTime.now().add(const Duration(days: 30)));
-    void add(int id, String name, String status, [Map<String, Object?> extra = const {}]) {
+    void add(int id, int caseId, String name, String status, [Map<String, Object?> extra = const {}]) {
       _videos[id] = {
         'video_id': id,
+        'case_id': caseId,
         'original_filename': name,
         'status': status,
         'input_done': false,
         'raw_deleted': false,
         'masked_deleted': false,
-        'created_at': _iso(DateTime.now()),
+        'created_at': _iso(DateTime.now().subtract(Duration(hours: id))),
         'duration_sec': 86400.0,
         'view_expires_at': expires,
         ...extra,
       };
     }
 
-    add(1, '01_입력필요.mp4', VideoStatus.stage1Done);
-    add(2, '02_확인가능.mp4', VideoStatus.ready);
-    add(3, '03_결과.mp4', VideoStatus.finished);
-    add(4, '04_대기중.mp4', VideoStatus.queued, {'queue_ahead': 2});
-    add(5, '05_분석중.mp4', VideoStatus.stage2Running);
-    add(6, '06_업로드중.mp4', VideoStatus.uploading, {'view_expires_at': null, 'duration_sec': null});
-    add(7, '07_분석실패_재시도.mp4', VideoStatus.failed, {
+    void addCase(int id, String victim) => _cases[id] = {
+      'id': id,
+      'admin_name': 'parking_admin',
+      'victim_name': victim,
+      'created_at': _iso(DateTime.now().subtract(Duration(days: id))),
+    };
+
+    addCase(1, 'victim01');
+    addCase(2, 'victim02');
+    // 연결만 하고 영상을 아직 올리지 않은 사건. 관리자 목록에서 누르면 업로드 화면으로 간다
+    addCase(3, 'victim03');
+
+    add(1, 1, '01_입력필요.mp4', VideoStatus.stage1Done);
+    add(2, 1, '02_확인가능.mp4', VideoStatus.ready);
+    add(3, 1, '03_결과.mp4', VideoStatus.finished);
+    add(4, 1, '04_대기중.mp4', VideoStatus.queued, {'queue_ahead': 2});
+    add(5, 1, '05_분석중.mp4', VideoStatus.stage2Running);
+    add(6, 1, '06_업로드중.mp4', VideoStatus.uploading, {'view_expires_at': null, 'duration_sec': null});
+    add(7, 2, '07_분석실패_재시도.mp4', VideoStatus.failed, {
       'error_kind': 'temporary',
       'can_retry': true,
       'retry_left': 2,
     });
-    add(8, '08_분석실패_파일문제.mp4', VideoStatus.failed, {
+    add(8, 2, '08_분석실패_파일문제.mp4', VideoStatus.failed, {
       'error_kind': 'file',
       'can_retry': false,
       'retry_left': 3,
     });
-    add(9, '09_후보없음.mp4', VideoStatus.exhausted, {'candidate_total': 0, 'candidate_unavailable': 0});
-    add(10, '10_후보확인완료.mp4', VideoStatus.exhausted, {
+    add(9, 2, '09_후보없음.mp4', VideoStatus.exhausted, {'candidate_total': 0, 'candidate_unavailable': 0});
+    add(10, 2, '10_후보확인완료.mp4', VideoStatus.exhausted, {
       'candidate_total': 12,
       'candidate_unavailable': 2,
     });
-    add(11, '11_보관기간종료.mp4', VideoStatus.finished, {
+    add(11, 2, '11_보관기간종료.mp4', VideoStatus.finished, {
       'masked_deleted': true,
       'raw_deleted': true,
       'view_expires_at': _iso(DateTime.now().subtract(const Duration(days: 1))),
@@ -65,10 +83,14 @@ class DemoApi extends Api {
   static const _perBatch = 10; // 서버와 같은 묶음당 최대 개수 (01장)
 
   final _videos = <int, Map<String, Object?>>{};
+  final _cases = <int, Map<String, Object?>>{};
+  final _agreed = <int>{}; // 관리·감독 안내에 동의한 영상 (23번)
   final _pins = <int, List<Map<String, Object?>>>{};
   final _mainBatch = <int, int>{}; // 영상별 지금 묶음 번호
   final _failedSeen = <int>{}; // 점수 미산출 탭을 넘긴 영상
-  bool _loggedIn = false;
+  Me? _me;
+
+  bool get _admin => _me?.isAdmin ?? false;
 
   Future<void> _wait() => Future<void>.delayed(const Duration(milliseconds: 200));
 
@@ -76,6 +98,12 @@ class DemoApi extends Api {
     final v = _videos[id];
     if (v == null) throw ApiException(404, 'VIDEO_NOT_FOUND');
     return v;
+  }
+
+  /// 후보·고정 API는 관리자 계정에서, 안내창 동의 뒤에만 허용한다 (D-204).
+  void _checkViewing(int id) {
+    if (!_admin) throw ApiException(403, 'ROLE_NOT_ALLOWED');
+    if (!_agreed.contains(id)) throw ApiException(403, 'SUPERVISION_AGREEMENT_REQUIRED');
   }
 
   // 후보 클립 예시. 재생할 영상 파일은 없어 clip_url을 비워 둔다 (재생기가 안내를 보인다).
@@ -119,57 +147,105 @@ class DemoApi extends Api {
 
   // 계정
   @override
-  Future<void> login(String loginId, String password) async {
+  Future<Me> login(String loginId, String password) async {
     await _wait();
-    _loggedIn = true;
+    final victim = loginId.startsWith('victim');
+    return _me = Me(id: victim ? 2 : 1, loginId: loginId, name: loginId, role: victim ? 'victim' : 'admin');
   }
 
   @override
-  Future<void> logout() async => _loggedIn = false;
+  Future<void> logout() async => _me = null;
 
   @override
-  Future<void> me() async {
-    if (!_loggedIn) throw ApiException(401, 'UNAUTHENTICATED');
+  Future<Me> me() async {
+    final me = _me;
+    if (me == null) throw ApiException(401, 'UNAUTHENTICATED');
+    return me;
   }
 
-  // 업로드 링크·업로드
+  // 사건·업로드
   @override
-  Future<({String token, String expiresAt})> issueUploadLink() async {
+  Future<({String loginId, String maskedName})> lookupInvitee(String loginId) async {
     await _wait();
-    return (
-      token: 'demo-${DateTime.now().millisecondsSinceEpoch}',
-      expiresAt: _iso(DateTime.now().add(const Duration(hours: 24))),
-    );
+    // 아이디가 victim으로 시작하지 않으면 없는 피해자 계정으로 본다
+    if (!loginId.startsWith('victim')) throw ApiException(422, 'INVITEE_INVALID');
+    return (loginId: loginId, maskedName: '홍*동');
   }
 
   @override
-  Future<void> checkUploadToken(String token) async {
+  Future<VideoCase> createCase(String victimLoginId) async {
     await _wait();
-    // 주소에 used·expired를 넣으면 링크 오류 안내를 볼 수 있다
-    if (token == 'used') throw ApiException(410, 'UPLOAD_TOKEN_USED');
-    if (token == 'expired') throw ApiException(410, 'UPLOAD_TOKEN_EXPIRED');
+    // 아이디가 victim으로 시작하지 않으면 없는 피해자 계정으로 본다
+    if (!victimLoginId.startsWith('victim')) throw ApiException(422, 'INVITEE_INVALID');
+    final id = _cases.keys.fold(0, (a, b) => a > b ? a : b) + 1;
+    _cases[id] = {
+      'id': id,
+      'admin_name': _me?.name ?? 'parking_admin',
+      'victim_name': victimLoginId,
+      'created_at': _iso(DateTime.now()),
+    };
+    return VideoCase.fromJson(_cases[id]!);
   }
 
   @override
-  Future<String> presignUpload(
-    String token, {
+  Future<List<VideoCase>> cases() async {
+    await _wait();
+    final items = _cases.values.toList()
+      ..sort((a, b) => (b['created_at'] as String).compareTo(a['created_at'] as String));
+    return [for (final c in items) VideoCase.fromJson(c)];
+  }
+
+  @override
+  Future<void> agreeViewing(int videoId) async {
+    await _wait();
+    _agreed.add(videoId);
+  }
+
+  @override
+  Future<({int videoId, String uploadUrl})> presignUpload(
+    int caseId, {
     required String filename,
     required int sizeBytes,
     String? recordingStartedAt,
     required Map<String, Object> agreement,
-  }) async => 'demo://upload';
+  }) async {
+    await _wait();
+    if (!_cases.containsKey(caseId)) throw ApiException(404, 'CASE_NOT_FOUND');
+    final id = _videos.keys.fold(0, (a, b) => a > b ? a : b) + 1;
+    _videos[id] = {
+      'video_id': id,
+      'case_id': caseId,
+      'original_filename': filename,
+      'status': VideoStatus.uploading,
+      'input_done': false,
+      'raw_deleted': false,
+      'masked_deleted': false,
+      'created_at': _iso(DateTime.now()),
+      'duration_sec': null,
+      'view_expires_at': null,
+    };
+    return (videoId: id, uploadUrl: demoUploadUrl);
+  }
 
   @override
-  Future<void> completeUpload(String token) async {}
+  Future<void> completeUpload(int videoId) async {
+    // 1단계(정지 장면)까지 끝난 것으로 둔다. 피해자 계정으로 입력 화면을 볼 수 있다
+    _video(videoId)
+      ..['status'] = VideoStatus.stage1Done
+      ..['duration_sec'] = 86400.0
+      ..['view_expires_at'] = _iso(DateTime.now().add(const Duration(days: 30)));
+  }
 
   @override
-  Future<void> warmup(String token) async {}
+  Future<void> warmup(int videoId) async {}
 
   // 영상
   @override
   Future<List<VideoSummary>> videos() async {
     await _wait();
-    return [for (final v in _videos.values) VideoSummary.fromJson(v)];
+    final items = _videos.values.toList()
+      ..sort((a, b) => (b['created_at'] as String).compareTo(a['created_at'] as String));
+    return [for (final v in items) VideoSummary.fromJson(v)];
   }
 
   @override
@@ -221,6 +297,7 @@ class DemoApi extends Api {
   @override
   Future<Batch> batch(int id, {String? list, int? batchNo}) async {
     await _wait();
+    _checkViewing(id);
     final kind = list ?? CandidateList.main;
     final lists = _lists(id);
     final latest = (lists[kind] as Map)['latest_batch_no'] as int;
@@ -240,6 +317,7 @@ class DemoApi extends Api {
   @override
   Future<NextBatchResult> nextBatch(int id, String list, int batchNo) async {
     await _wait();
+    _checkViewing(id);
     if (list == CandidateList.parseFailed) {
       _failedSeen.add(id);
     } else {
@@ -261,6 +339,7 @@ class DemoApi extends Api {
 
   @override
   Future<List<PinnedIncident>> pin(int id, int candidateClipId) async {
+    _checkViewing(id);
     final rank = candidateClipId % 500;
     final failed = candidateClipId % 1000 >= 500;
     final pins = _pins.putIfAbsent(id, () => []);
@@ -272,6 +351,7 @@ class DemoApi extends Api {
 
   @override
   Future<List<PinnedIncident>> unpin(int id, int candidateClipId) async {
+    _checkViewing(id);
     final pins = _pins[id] ?? [];
     pins.removeWhere((p) => p['candidate_clip_id'] == candidateClipId);
     return pinsFromJson(pins);
@@ -281,9 +361,26 @@ class DemoApi extends Api {
   Future<List<PinnedIncident>> pins(int id) async {
     await _wait();
     if (_video(id)['masked_deleted'] == true) throw ApiException(409, 'MASKED_EXPIRED');
+    _checkViewing(id);
     return pinsFromJson(_pins[id] ?? []);
   }
 
   @override
-  Future<void> finish(int id) async => _video(id)['status'] = VideoStatus.finished;
+  Future<List<PinnedIncident>> incidentTimes(int id) async {
+    await _wait();
+    final v = _video(id);
+    if (v['masked_deleted'] == true) throw ApiException(409, 'MASKED_EXPIRED');
+    // 끝 상태에서만 준다. 재생 URL·후보 번호는 없다 (D-210)
+    if (v['status'] != VideoStatus.finished && v['status'] != VideoStatus.exhausted) return [];
+    return pinsFromJson([
+      for (final p in _pins[id] ?? [])
+        {for (final e in p.entries) if (e.key != 'clip_url' && e.key != 'candidate_clip_id') e.key: e.value},
+    ]);
+  }
+
+  @override
+  Future<void> finish(int id) async {
+    _checkViewing(id);
+    _video(id)['status'] = VideoStatus.finished;
+  }
 }

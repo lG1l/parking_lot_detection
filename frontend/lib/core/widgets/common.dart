@@ -6,6 +6,7 @@ import '../../app/theme.dart';
 import '../api/api.dart';
 import '../api/api_error.dart';
 import '../config.dart';
+import '../session.dart';
 
 /// 데모에서 백엔드로 보내야 하는 버튼을 눌렀을 때 팝업을 띄울지. 테스트에서는 끈다.
 final backendNoticeProvider = Provider<bool>((ref) => !useBackend);
@@ -44,7 +45,7 @@ bool handleCommonError(BuildContext context, Object error) {
     case 'UNAUTHENTICATED':
       redirectTo(context, '/login');
       return true;
-    case 'VIDEO_NOT_FOUND':
+    case 'VIDEO_NOT_FOUND' || 'CASE_NOT_FOUND' || 'ROLE_NOT_ALLOWED':
       redirectTo(context, '/videos');
       return true;
   }
@@ -80,23 +81,22 @@ const narrowWidth = 720.0;
 
 bool isNarrow(BuildContext context) => MediaQuery.sizeOf(context).width < narrowWidth;
 
-/// 상단 바 가운데 메뉴 (D-190).
-enum NavItem { videos, uploadLink }
+/// 상단 바 가운데 메뉴 (D-190, D-211). [link]는 관리자 계정에만 있다.
+enum NavItem { videos, link }
 
 /// 화면 공통 틀. PC 브라우저 기준이라 가운데 최대 폭을 둔다.
-/// 상단 바는 왼쪽 로고 · 가운데 메뉴(영상 목록, 업로드 링크 발급) · 오른쪽 로그아웃이고,
-/// 화면 제목은 본문 맨 위에 둔다 (D-190).
+/// 상단 바는 왼쪽 로고 · 가운데 메뉴 · 오른쪽 로그아웃이고, 화면 제목은 본문 맨 위에 둔다 (D-190).
+/// 메뉴는 관리자 계정이 [영상 목록]·[사건 관계자 연결], 피해자 계정이 [영상 목록]이다 (D-211).
 class PageFrame extends StatelessWidget {
   const PageFrame({
     super.key,
     this.title,
     this.eyebrow,
-    this.eyebrowNote,
+    this.eyebrowNotes = const [],
     required this.child,
     this.actions = const [],
     this.maxWidth = 1200,
     this.current,
-    this.admin = false,
     this.canLeave,
     this.scrollBody = true,
   });
@@ -104,9 +104,10 @@ class PageFrame extends StatelessWidget {
   /// 본문 맨 위 제목. 없으면 두지 않는다.
   final String? title;
 
-  /// 제목 위 작은 글자 (예: "후보 확인"). [eyebrowNote]는 그 오른쪽 `| …` 안내.
+  /// 제목 위 작은 글자 (예: "후보 확인"). [eyebrowNotes]는 그 오른쪽에 `|`로 잇는 안내
+  /// (예: "피해자 victim02", "2026-10-17 23:59까지 열람 가능").
   final String? eyebrow;
-  final String? eyebrowNote;
+  final List<String> eyebrowNotes;
 
   final Widget child;
 
@@ -116,10 +117,6 @@ class PageFrame extends StatelessWidget {
 
   /// 상단 바 메뉴에서 굵게 보일 항목. 없으면 둘 다 보통 굵기.
   final NavItem? current;
-
-  /// 관리자 업로드 화면: 로고와 "관리자 업로드"만 두고 메뉴·로그아웃은 없다.
-  /// 로고를 눌러도 가지 않는다 (D-185).
-  final bool admin;
 
   /// 상단 바로 화면을 떠나기 전에 묻는다. false면 머문다 (입력 화면의 저장 안 한 입력).
   final Future<bool> Function()? canLeave;
@@ -136,7 +133,7 @@ class PageFrame extends StatelessWidget {
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            admin ? const _AdminBar() : _TopBar(current: current, canLeave: canLeave),
+            _TopBar(current: current, canLeave: canLeave),
             Expanded(
               child: Padding(
                 padding: EdgeInsets.fromLTRB(side, _bodyTop, side, 24),
@@ -163,7 +160,7 @@ class PageFrame extends StatelessWidget {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          admin ? const _AdminBar() : _TopBar(current: current, canLeave: canLeave),
+          _TopBar(current: current, canLeave: canLeave),
           Expanded(
             child: SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(side, _bodyTop, side, 40),
@@ -188,7 +185,6 @@ class PageFrame extends StatelessWidget {
 
   Widget _heading() {
     final eyebrow = this.eyebrow;
-    final eyebrowNote = this.eyebrowNote;
     final title = this.title;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
@@ -206,9 +202,9 @@ class PageFrame extends StatelessWidget {
                       eyebrow,
                       style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: subColor),
                     ),
-                    if (eyebrowNote != null) ...[
+                    for (final note in eyebrowNotes) ...[
                       const Text('|', style: TextStyle(fontSize: 13, color: noteColor)),
-                      Text(eyebrowNote, style: const TextStyle(fontSize: 13, color: noteColor)),
+                      Text(note, style: const TextStyle(fontSize: 13, color: noteColor)),
                     ],
                   ],
                 ),
@@ -253,11 +249,14 @@ class _TopBar extends ConsumerWidget {
     } on ApiException {
       // 로그아웃은 실패해도 로그인 화면으로 간다
     }
+    refreshSession(ref, account: true);
     if (context.mounted) redirectTo(context, '/login');
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final me = ref.watch(meProvider).value;
+    final admin = me?.isAdmin ?? false;
     Widget menu(NavItem item, String label, String path) {
       final selected = item == current;
       return Semantics(
@@ -268,8 +267,8 @@ class _TopBar extends ConsumerWidget {
             foregroundColor: selected ? pointColor : inkColor,
             textStyle: TextStyle(
               fontFamily: 'Pretendard',
-              fontSize: selected ? 19 : 17,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+              fontSize: selected ? 22 : 17,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             ),
           ),
           child: Text(label),
@@ -283,9 +282,13 @@ class _TopBar extends ConsumerWidget {
       spacing: narrow ? 4 : 32,
       children: [
         menu(NavItem.videos, '영상 목록', '/videos'),
-        menu(NavItem.uploadLink, '업로드 링크 발급', '/videos/upload-link'),
+        if (admin) menu(NavItem.link, '사건 관계자 연결', '/cases/new'),
       ],
     );
+    // 관리자 계정이면 로그아웃 왼쪽에 "관리자 계정"을 보인다 (캔버스)
+    final account = admin && !isNarrow(context)
+        ? const Text('관리자 계정', style: TextStyle(fontSize: 14, color: subColor))
+        : null;
     final logout = TextButton(
       onPressed: () => _leave(context, () => _logout(context, ref)),
       style: TextButton.styleFrom(
@@ -329,30 +332,20 @@ class _TopBar extends ConsumerWidget {
           ),
           nav,
           Expanded(
-            child: Align(alignment: Alignment.centerRight, child: logout),
+            child: Align(
+              alignment: Alignment.centerRight,
+              // 창이 빠듯하면 넘치지 않게 조금 줄여 보인다
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Row(mainAxisSize: MainAxisSize.min, spacing: 20, children: [?account, logout]),
+              ),
+            ),
           ),
         ],
       ),
     );
   }
-}
-
-/// 관리자 업로드 상단 바. 보이기만 하고 눌러도 가지 않는다 (D-185).
-class _AdminBar extends StatelessWidget {
-  const _AdminBar();
-
-  @override
-  Widget build(BuildContext context) => Container(
-    height: _barHeight,
-    padding: _barPadding,
-    child: const Row(
-      children: [
-        _Logo(size: 44),
-        SizedBox(width: 12),
-        Text('관리자 업로드', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-      ],
-    ),
-  );
 }
 
 class _Logo extends StatelessWidget {

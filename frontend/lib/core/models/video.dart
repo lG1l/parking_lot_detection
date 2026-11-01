@@ -15,15 +15,16 @@ abstract final class VideoStatus {
   static const failed = 'failed';
 }
 
-/// 목록에 보일 상태 짧은 이름 (07장 2.2).
-String statusLabel(String status) => switch (status) {
+/// 목록에 보일 상태 짧은 이름 (07장 2.2). 피해자 계정은 후보 확인 단계를 보지 않으므로
+/// `ready`·`batch_running`을 "분석 완료"로 보인다 (D-211).
+String statusLabel(String status, {bool admin = true}) => switch (status) {
   VideoStatus.uploading => '업로드 중',
   VideoStatus.uploadFailed => '업로드 확인 안 됨',
   VideoStatus.queued => '대기 중',
   VideoStatus.stillsRunning => '준비 중',
   VideoStatus.stage1Done => '사전 입력 필요',
   VideoStatus.stage2Running => '분석 중',
-  VideoStatus.ready || VideoStatus.batchRunning => '후보 선택 가능',
+  VideoStatus.ready || VideoStatus.batchRunning => admin ? '후보 선택 가능' : '분석 완료',
   VideoStatus.finished => '확인 완료',
   VideoStatus.exhausted => '확인 완료', // finished와 같은 이름 (D-186, D-190)
   VideoStatus.failed => '분석 실패',
@@ -33,8 +34,9 @@ String statusLabel(String status) => switch (status) {
 /// 목록 칩 색을 정하는 상태 묶음 (07장 2.2, D-183). ended는 보관 기간 종료 (D-186).
 enum StatusGroup { todo, problem, waiting, done, ended }
 
-StatusGroup statusGroup(String status) => switch (status) {
-  VideoStatus.stage1Done || VideoStatus.ready || VideoStatus.batchRunning => StatusGroup.todo,
+StatusGroup statusGroup(String status, {bool admin = true}) => switch (status) {
+  VideoStatus.stage1Done => StatusGroup.todo,
+  VideoStatus.ready || VideoStatus.batchRunning => admin ? StatusGroup.todo : StatusGroup.done,
   VideoStatus.uploadFailed || VideoStatus.failed => StatusGroup.problem,
   VideoStatus.finished || VideoStatus.exhausted => StatusGroup.done,
   _ => StatusGroup.waiting,
@@ -43,6 +45,7 @@ StatusGroup statusGroup(String status) => switch (status) {
 class VideoSummary {
   VideoSummary({
     required this.videoId,
+    this.caseId,
     required this.originalFilename,
     required this.status,
     required this.viewExpiresAt,
@@ -52,6 +55,7 @@ class VideoSummary {
 
   factory VideoSummary.fromJson(Map<String, dynamic> j) => VideoSummary(
     videoId: j['video_id'] as int,
+    caseId: j['case_id'] as int?,
     originalFilename: j['original_filename'] as String,
     status: j['status'] as String,
     viewExpiresAt: j['view_expires_at'] as String?,
@@ -60,6 +64,9 @@ class VideoSummary {
   );
 
   final int videoId;
+
+  /// 영상이 속한 사건 (D-204).
+  final int? caseId;
   final String originalFilename;
   final String status;
   final String? viewExpiresAt;
@@ -71,9 +78,9 @@ class VideoSummary {
   final bool maskedDeleted;
 
   /// 보관 기간이 끝났으면 상태와 관계없이 "종료됨" (D-186, D-187).
-  String get listLabel => maskedDeleted ? '종료됨' : statusLabel(status);
+  String listLabel({bool admin = true}) => maskedDeleted ? '종료됨' : statusLabel(status, admin: admin);
 
-  StatusGroup get listGroup => maskedDeleted ? StatusGroup.ended : statusGroup(status);
+  StatusGroup listGroup({bool admin = true}) => maskedDeleted ? StatusGroup.ended : statusGroup(status, admin: admin);
 }
 
 class VideoDetail {

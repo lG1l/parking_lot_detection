@@ -21,12 +21,34 @@ http.Response apiError(int status, String code) => json({
   'error': {'code': code, 'message': 'test'},
 }, status);
 
+/// 3번 응답. 역할은 `admin`(관리자) 또는 `victim`(피해자)이다 (D-204).
+Map<String, Object?> meJson(String role) => {
+  'id': role == 'admin' ? 1 : 2,
+  'login_id': role == 'admin' ? 'parking_admin' : 'victim02',
+  'name': role == 'admin' ? 'parking_admin' : 'victim02',
+  'role': role,
+};
+
 /// "GET /api/videos/1" 같은 키로 응답을 정하는 가짜 백엔드. 부른 순서를 [calls]에 남긴다.
+/// 로그인한 계정(3번)과 빈 사건 목록(22번)은 따로 정하지 않으면 [role] 계정으로 답한다.
 class FakeBackend {
-  FakeBackend(this.routes);
+  FakeBackend(Map<String, http.Response Function(http.Request req)> routes, {String role = 'admin'})
+    : routes = {
+        'GET /api/auth/me': (_) => json(meJson(role)),
+        'GET /api/cases': (_) => json({'items': []}),
+        ...routes,
+      };
 
   final Map<String, http.Response Function(http.Request req)> routes;
   final calls = <String>[];
+
+  /// 3번(계정)·22번(사건)을 뺀 호출. 화면이 부른 API 순서를 볼 때 쓴다.
+  List<String> get screenCalls => [
+    for (final c in calls)
+      if (c != 'GET /api/auth/me' && c != 'GET /api/cases') c,
+  ];
+
+  int count(String call) => calls.where((c) => c == call).length;
 
   http.Client get client => MockClient((req) async {
     final key = '${req.method} ${req.url.path}';
@@ -37,9 +59,28 @@ class FakeBackend {
   });
 }
 
-class FakeBrowser implements Browser {
+class FakeFile implements PickedFile {
+  FakeFile(this.name, this.size);
+
   @override
-  Future<PickedFile?> pickFile(List<String> extensions) async => null;
+  final String name;
+  @override
+  final int size;
+  @override
+  String get objectUrl => '';
+}
+
+class FakeBrowser implements Browser {
+  FakeBrowser({this.file, this.putStatus = 200});
+
+  /// 파일 고르기 창에서 고를 파일. null이면 취소한 것이다.
+  final PickedFile? file;
+
+  /// S3 PUT 결과. 0이면 네트워크가 끊긴 것이다.
+  final int putStatus;
+
+  @override
+  Future<PickedFile?> pickFile(List<String> extensions) async => file;
 
   @override
   Future<int> putFile(
@@ -47,7 +88,7 @@ class FakeBrowser implements Browser {
     PickedFile file, {
     Map<String, String> headers = const {},
     void Function(int sent, int total)? onProgress,
-  }) async => 200;
+  }) async => putStatus;
 
   @override
   Future<Size?> imageNaturalSize(String url) async => const Size(1920, 1080);
@@ -60,7 +101,7 @@ class FakeBrowser implements Browser {
 }
 
 /// 넓은 PC 화면으로 앱을 띄운다.
-Future<void> pumpApp(WidgetTester tester, FakeBackend backend, String location) async {
+Future<void> pumpApp(WidgetTester tester, FakeBackend backend, String location, {FakeBrowser? browser}) async {
   tester.view.physicalSize = const Size(1400, 1000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -68,7 +109,7 @@ Future<void> pumpApp(WidgetTester tester, FakeBackend backend, String location) 
     ProviderScope(
       overrides: [
         apiProvider.overrideWithValue(Api(ApiClient(backend.client))),
-        browserProvider.overrideWithValue(FakeBrowser()),
+        browserProvider.overrideWithValue(browser ?? FakeBrowser()),
         backendNoticeProvider.overrideWithValue(false),
       ],
       child: App(initialLocation: location),

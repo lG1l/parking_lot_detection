@@ -47,9 +47,3 @@ String viewExpiresText(String? viewExpiresAt) {
   if (viewExpiresAt == null) return '업로드 완료 후 열람기한이 정해집니다';
   return '${formatKstMinute(viewExpiresAt)}까지 열람 가능';
 }
-
-/// 결과·후보 화면 위의 기한 문구 (07장 2.7, 2.9).
-String resultExpiresText(String? viewExpiresAt) {
-  if (viewExpiresAt == null) return '업로드 완료 후 열람기한이 정해집니다';
-  return '이 결과는 ${formatKstMinute(viewExpiresAt)}까지 열람 가능합니다.';
-}

@@ -135,7 +135,7 @@ class NextBatchResult {
 
 class PinnedIncident {
   PinnedIncident({
-    required this.candidateClipId,
+    this.candidateClipId,
     required this.startSec,
     required this.endSec,
     this.estStartAt,
@@ -144,20 +144,23 @@ class PinnedIncident {
   });
 
   factory PinnedIncident.fromJson(Map<String, dynamic> j) => PinnedIncident(
-    candidateClipId: j['candidate_clip_id'] as int,
+    candidateClipId: j['candidate_clip_id'] as int?,
     startSec: (j['start_sec'] as num).toDouble(),
     endSec: (j['end_sec'] as num).toDouble(),
     estStartAt: j['est_start_at'] as String?,
     estEndAt: j['est_end_at'] as String?,
-    clipUrl: j['clip_url'] as String,
+    clipUrl: j['clip_url'] as String?,
   );
 
-  final int candidateClipId;
+  /// 14·15·20번에만 있다. 25번(사건 지점 시간)에는 없다 (D-210).
+  final int? candidateClipId;
   final double startSec;
   final double endSec;
   final String? estStartAt;
   final String? estEndAt;
-  final String clipUrl;
+
+  /// 14·15·20번에만 있다. 25번에는 재생 URL이 없다 (D-210).
+  final String? clipUrl;
 }
 
 List<PinnedIncident> pinsFromJson(dynamic j) => (j as List)

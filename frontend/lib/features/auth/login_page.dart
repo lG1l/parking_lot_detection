@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api.dart';
 import '../../core/api/api_error.dart';
 import '../../app/theme.dart';
+import '../../core/session.dart';
 import '../../core/widgets/common.dart';
 
 /// 2.1 로그인. 회원가입은 없다 (D-44).
@@ -58,6 +59,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     await backendNotice(context, ref, '로그인');
     try {
       await ref.read(apiProvider).login(_id.text, _password.text);
+      refreshSession(ref, account: true); // 역할(관리자·피해자)로 메뉴와 화면을 나눈다 (D-204)
       if (mounted) redirectTo(context, '/videos');
     } on ApiException catch (e) {
       if (!mounted) return;

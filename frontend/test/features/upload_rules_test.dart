@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:parking_lot_frontend/features/admin_upload/upload_rules.dart';
-import 'package:parking_lot_frontend/features/videos/upload_link_page.dart';
 
 void main() {
   test('확장자와 5GB를 업로드 전에 막는다 (D-22, D-43)', () {
@@ -40,12 +39,5 @@ void main() {
     expect(putOutcome(409), PutOutcome.rejected);
     expect(putOutcome(403), PutOutcome.forbidden);
     expect(putOutcome(0), PutOutcome.interrupted);
-  });
-
-  test('업로드 링크는 지금 열린 주소 앞부분에 붙인다 (D-12)', () {
-    expect(
-      uploadLinkFor(Uri.parse('http://3.35.1.2/#/videos/upload-link'), 'abc'),
-      'http://3.35.1.2/#/upload/abc',
-    );
   });
 }

@@ -10,6 +10,7 @@ import '../../core/constants.dart';
 import '../../core/format.dart';
 import '../../core/models/analysis.dart';
 import '../../core/models/video.dart';
+import '../../core/session.dart';
 import '../../core/widgets/clip_player.dart';
 import '../../core/widgets/common.dart';
 import '../video_status/status_rules.dart';
@@ -67,11 +68,12 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
     }
   }
 
-  /// 9번. 후보 확인 화면이 아니면 상태 화면으로 보내고 false.
+  /// 9번. 후보 확인 화면이 아니면(피해자 계정 포함) 상태 화면으로 보내고 false.
   Future<bool> _loadStatus() async {
+    final me = await ref.read(meProvider.future);
     final d = await _api.video(_id); // 9
     if (!mounted) return false;
-    if (selectScreen(d) != StatusScreen.candidates) {
+    if (selectScreen(d, admin: me.isAdmin) != StatusScreen.candidates) {
       goStatus(context, _id);
       return false;
     }
@@ -106,7 +108,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
     });
   }
 
-  void _setPins(List<PinnedIncident> pins) => setState(() => _pinned = pins.map((p) => p.candidateClipId).toSet());
+  void _setPins(List<PinnedIncident> pins) => setState(() => _pinned = pins.map((p) => p.candidateClipId).nonNulls.toSet());
 
   Future<void> _loadBatch({String? list, int? batchNo}) async {
     final b = await _api.batch(_id, list: list ?? _tab, batchNo: batchNo); // 12
@@ -249,6 +251,8 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
     final batch = _batch;
     return PageFrame(
       eyebrow: '후보 확인',
+      // 제목 위 작은 글자에 피해자와 열람기한 (캔버스 2.7)
+      eyebrowNotes: _filename == null ? const [] : [...counterpartNote(ref, _id), viewExpiresText(_viewExpiresAt)],
       title: _filename ?? '후보 확인',
       scrollBody: !_fixedLayout(context),
       child: batch == null ? const Center(child: CircularProgressIndicator()) : _body(context, batch),
@@ -343,23 +347,8 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
         ],
         if (fixed) Expanded(child: SingleChildScrollView(child: clips)) else clips,
         const SizedBox(height: 12),
-        // 왼쪽 아래 열람기한, 오른쪽 아래 묶음 이동 (D-190)
-        if (isNarrow(context))
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: 12,
-            children: [_navigation(batch, tab), SmallText(resultExpiresText(_viewExpiresAt))],
-          )
-        else
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // 열람기한이 남는 폭을 쓰고, 남은 후보 ~ [다음 ▶]·[확인 완료]는 한 줄로 오른쪽 끝에 붙인다
-              Expanded(child: SmallText(resultExpiresText(_viewExpiresAt))),
-              const SizedBox(width: 16),
-              _navigation(batch, tab),
-            ],
-          ),
+        // 오른쪽 아래 묶음 이동. 열람기한은 제목 위로 옮겼다 (캔버스 2.7)
+        Align(alignment: isNarrow(context) ? Alignment.centerLeft : Alignment.centerRight, child: _navigation(batch, tab)),
       ],
     );
   }

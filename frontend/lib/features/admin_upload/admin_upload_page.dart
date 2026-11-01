@@ -4,37 +4,36 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme.dart';
 import '../../core/api/api.dart';
 import '../../core/api/api_error.dart';
+import '../../core/api/demo_api.dart';
 import '../../core/browser/browser.dart';
 import '../../core/constants.dart';
+import '../../core/session.dart';
 import '../../core/widgets/common.dart';
+import '../cases/case_link_page.dart';
 import 'agreement_text.dart';
 import 'upload_rules.dart';
 
-/// 링크 오류 문구 (07장 2.4).
-String uploadTokenMessage(String code) => code == 'UPLOAD_TOKEN_NOT_FOUND'
-    ? '링크 주소가 올바르지 않습니다. 주소를 다시 확인해 주세요.'
-    : '만료되거나 이미 사용이 완료된 링크입니다. 새 링크를 받아 주세요.';
+enum _Step { agreement, upload }
 
-bool _isTokenError(String code) => code.startsWith('UPLOAD_TOKEN_');
-
-enum _Step { checking, agreement, upload, finished }
-
-/// 2.4 관리자 업로드. 로그인 없이 링크의 token으로만 들어온다 (D-28).
+/// 2.4 관리자 업로드. 관리자 계정으로 사건 관계자 연결 뒤, 또는 목록의 영상 없는 사건을 눌러 들어온다 (D-204, D-211).
 /// 위탁계약 동의 → 파일 업로드 두 단계를 한 화면에서 차례로 바꾼다 (D-147).
 class AdminUploadPage extends ConsumerStatefulWidget {
-  const AdminUploadPage({super.key, required this.token});
+  const AdminUploadPage({super.key, required this.caseId});
 
-  final String token;
+  final int caseId;
 
   @override
   ConsumerState<AdminUploadPage> createState() => _AdminUploadPageState();
 }
 
 class _AdminUploadPageState extends ConsumerState<AdminUploadPage> {
-  _Step _step = _Step.checking;
+  _Step _step = _Step.agreement;
 
-  /// 링크를 쓸 수 없거나 업로드가 끝내 실패했을 때의 안내. 있으면 이것만 보인다.
-  String? _blocked;
+  /// 업로드가 끝내 실패했을 때의 안내. 동의 단계 위에 보이고, 다시 올리면 동의부터 다시 받는다 (07장 2.4).
+  String? _failure;
+
+  /// 머리에 보일 피해자 이름 (22번). 못 읽으면 비워 둔다.
+  String? _victimName;
 
   final _checks = {for (final c in agreementChecks) c.$1: false};
   final _bodyScroll = ScrollController();
@@ -52,7 +51,8 @@ class _AdminUploadPageState extends ConsumerState<AdminUploadPage> {
   @override
   void initState() {
     super.initState();
-    _checkToken();
+    requireAdmin(context, ref);
+    _loadCase();
   }
 
   @override
@@ -64,16 +64,14 @@ class _AdminUploadPageState extends ConsumerState<AdminUploadPage> {
 
   Api get _api => ref.read(apiProvider);
 
-  Future<void> _checkToken() async {
+  /// 머리의 "피해자 ○○"만 쓴다. 사건이 없으면 6번이 `CASE_NOT_FOUND`로 알려 준다.
+  Future<void> _loadCase() async {
     try {
-      await _api.checkUploadToken(widget.token); // 5
-      if (mounted) setState(() => _step = _Step.agreement);
-    } catch (e) {
-      final code = errorCode(e);
-      if (!mounted) return;
-      setState(() {
-        _blocked = _isTokenError(code) ? uploadTokenMessage(code) : errorMessage(code);
-      });
+      final cases = await _api.cases(); // 22
+      final found = cases.where((c) => c.id == widget.caseId);
+      if (mounted && found.isNotEmpty) setState(() => _victimName = found.first.victimName);
+    } catch (_) {
+      // 이름 없이 그린다
     }
   }
 
@@ -108,7 +106,10 @@ class _AdminUploadPageState extends ConsumerState<AdminUploadPage> {
 
   void _agree() {
     // 서버를 부르지 않는다. 체크 값은 6번 요청에 함께 싣는다 (D-147)
-    setState(() => _step = _Step.upload);
+    setState(() {
+      _failure = null;
+      _step = _Step.upload;
+    });
   }
 
   Future<void> _pickFile() async {
@@ -131,10 +132,11 @@ class _AdminUploadPageState extends ConsumerState<AdminUploadPage> {
     // 백엔드 연결 필요: 6번 업로드 URL 발급 → S3 PUT → 16번 GPU 켜기 → 7번 완료 알림
     await backendNotice(context, ref, '업로드');
     if (!mounted) return;
+    final int videoId;
     final String uploadUrl;
     try {
-      uploadUrl = await _api.presignUpload(
-        widget.token,
+      (:videoId, :uploadUrl) = await _api.presignUpload(
+        widget.caseId,
         filename: file.name,
         sizeBytes: file.size,
         recordingStartedAt: recordingAt,
@@ -147,42 +149,43 @@ class _AdminUploadPageState extends ConsumerState<AdminUploadPage> {
 
     final browser = ref.read(browserProvider);
     final started = DateTime.now();
-    final status = await browser.putFile(
-      uploadUrl,
-      file,
-      headers: const {'If-None-Match': '*'}, // 서명에 들어 있다 (D-100)
-      onProgress: (sent, total) {
-        if (!mounted) return;
-        setState(() => _progress = total > 0 ? sent / total : null);
-        final left = remainingUploadTime(sent, total, DateTime.now().difference(started));
-        if (!_warmupSent && left != null && left <= warmupThreshold) {
-          _warmupSent = true;
-          _api.warmup(widget.token).catchError((_) {}); // 16, 실패해도 무시 (D-62)
-        }
-      },
-    );
+    // 데모는 S3가 없어 올린 것으로 본다
+    final status = uploadUrl == demoUploadUrl
+        ? 200
+        : await browser.putFile(
+            uploadUrl,
+            file,
+            headers: const {'If-None-Match': '*'}, // 서명에 들어 있다 (D-100)
+            onProgress: (sent, total) {
+              if (!mounted) return;
+              setState(() => _progress = total > 0 ? sent / total : null);
+              final left = remainingUploadTime(sent, total, DateTime.now().difference(started));
+              if (!_warmupSent && left != null && left <= warmupThreshold) {
+                _warmupSent = true;
+                _api.warmup(videoId).catchError((_) {}); // 16, 실패해도 무시 (D-62)
+              }
+            },
+          );
     if (!mounted) return;
 
     switch (putOutcome(status)) {
       case PutOutcome.ok:
-        await _complete();
+        await _complete(videoId);
       case PutOutcome.rejected:
-        _fail('업로드가 거절됐습니다. 새 링크를 받으세요.');
+        _fail('업로드가 거절됐습니다. 다시 올려 주세요.');
       case PutOutcome.forbidden:
         browser.log('S3 PUT 403 — If-None-Match 헤더 누락 여부 확인 (D-100)');
-        _fail('업로드할 수 없습니다. 새 링크를 받아 주세요.');
+        _fail('업로드할 수 없습니다. 다시 올려 주세요.');
       case PutOutcome.interrupted:
-        _fail('업로드가 중단됐습니다. 이 링크는 다시 쓸 수 없으니 새 링크를 받아 주세요.');
+        _fail('업로드가 중단됐습니다. 다시 올려 주세요.');
     }
   }
 
   void _onPresignError(String code) {
     if (!mounted) return;
     setState(() => _uploading = false);
-    if (_isTokenError(code)) {
-      _fail(uploadTokenMessage(code));
-    } else if (code == 'AGREEMENT_REQUIRED') {
-      // 동의 단계로 돌아간다. 링크는 쓴 것이 되지 않았다 (D-147)
+    if (code == 'AGREEMENT_REQUIRED') {
+      // 동의 단계로 돌아간다. 영상 행은 만들어지지 않았다 (D-147)
       showMessage(context, errorMessage(code));
       setState(() {
         _checks.updateAll((_, _) => false);
@@ -194,16 +197,19 @@ class _AdminUploadPageState extends ConsumerState<AdminUploadPage> {
         _file = null;
       });
     } else {
-      showMessage(context, errorMessage(code));
+      handleCommonError(context, ApiException(0, code)); // CASE_NOT_FOUND면 목록으로
     }
   }
 
   /// S3가 200을 주면 7번. 500이면 같은 요청을 다시 보낸다 (두 번 불러도 된다, 05장 7번).
-  Future<void> _complete() async {
+  Future<void> _complete(int videoId) async {
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
-        await _api.completeUpload(widget.token); // 7
-        if (mounted) setState(() => _step = _Step.finished);
+        await _api.completeUpload(videoId); // 7
+        if (!mounted) return;
+        refreshSession(ref);
+        showMessage(context, '업로드가 끝났습니다.');
+        redirectTo(context, '/videos/$videoId'); // 영상 상태 화면으로 (07장 2.4)
         return;
       } catch (e) {
         final code = errorCode(e);
@@ -217,24 +223,41 @@ class _AdminUploadPageState extends ConsumerState<AdminUploadPage> {
     }
   }
 
+  /// 업로드가 끊기거나 거절되면 안내를 띄우고 동의 단계로 돌아간다.
+  /// 다시 올리면 6번부터 다시 부르므로 동의도 다시 받는다 (07장 2.4, 05장 6번).
   void _fail(String message) {
-    if (mounted) setState(() => _blocked = message);
+    if (!mounted) return;
+    setState(() {
+      _failure = message;
+      _uploading = false;
+      _progress = null;
+      _warmupSent = false;
+      _file = null;
+      _checks.updateAll((_, _) => false);
+      _step = _Step.agreement;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final blocked = _blocked;
+    final failure = _failure;
+    final victim = _victimName;
     return PageFrame(
-      admin: true,
       maxWidth: 1200,
-      child: blocked != null
-          ? _Message(blocked, ok: false)
-          : switch (_step) {
-              _Step.checking => const Center(child: CircularProgressIndicator()),
-              _Step.agreement => _agreementStep(context),
-              _Step.upload => _uploadStep(context),
-              _Step.finished => const _Message('업로드가 끝났습니다. 이 창을 닫아도 됩니다.', ok: true),
-            },
+      // "영상 올리기 | 피해자 ○○ | 위탁계약 동의 완료" (D-211). 열람기한은 업로드가 끝난 뒤에 생기므로 넣지 않는다
+      eyebrow: '영상 올리기',
+      eyebrowNotes: [if (victim != null) '피해자 $victim', if (_step == _Step.upload) '위탁계약 동의 완료'],
+      title: 'CCTV 영상 올리기',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (failure != null) ...[_Message(failure), const SizedBox(height: 16)],
+          switch (_step) {
+            _Step.agreement => _agreementStep(context),
+            _Step.upload => _uploadStep(context),
+          },
+        ],
+      ),
     );
   }
 
@@ -293,8 +316,6 @@ class _AdminUploadPageState extends ConsumerState<AdminUploadPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('CCTV 영상 업로드', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 18),
           const Text.rich(
             TextSpan(
               text: '차가 ',
@@ -375,27 +396,34 @@ class _AdminUploadPageState extends ConsumerState<AdminUploadPage> {
             ),
           ],
           const SizedBox(height: 18),
-          FilledButton(onPressed: file == null || _uploading ? null : _upload, child: const Text('업로드')),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              FilledButton(onPressed: file == null || _uploading ? null : _upload, child: const Text('업로드')),
+              const SmallText('업로드가 끝나면 영상 상태 화면으로 넘어갑니다.'),
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-/// 업로드 화면 맨 위 안내 상자. 성공은 초록, 오류는 빨강 테두리 (캔버스 2.4).
+/// 업로드 화면 맨 위 오류 안내 상자. 빨강 테두리 (캔버스 2.4).
 class _Message extends StatelessWidget {
-  const _Message(this.text, {required this.ok});
+  const _Message(this.text);
 
   final String text;
-  final bool ok;
 
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
     decoration: BoxDecoration(
-      color: ok ? const Color(0xFFEEF7F0) : const Color(0xFFFCEEEE),
+      color: const Color(0xFFFCEEEE),
       borderRadius: BorderRadius.circular(cardRadius),
-      border: Border.all(color: ok ? const Color(0xFF1F7A3D) : failColor, width: 1.5),
+      border: Border.all(color: failColor, width: 1.5),
     ),
     child: Text(text, style: const TextStyle(fontSize: 15, height: 1.5)),
   );
