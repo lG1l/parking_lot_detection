@@ -5,16 +5,13 @@ import pytest
 from botocore.exceptions import ClientError
 
 from app import periodic
-from tests.test_uploads import admin, new_link, presign, queue_files  # noqa: F401 - admin은 fixture
-from tests.test_videos import add_video, sql, user_id
+from tests.test_uploads import admin, case_id, presign, queue_files  # noqa: F401 - fixture
+from tests.test_videos import add_video, setup_case, sql
 
 
 @pytest.fixture
-def me(client):
-    from tests.test_uploads import login
-
-    login(client)
-    return user_id()
+def me():
+    return setup_case()
 
 
 def deleted(vid):
@@ -57,9 +54,9 @@ def test_mark_expired_leaves_already_marked_video(me):
     assert delete_logs() == []
 
 
-def test_delete_old_agreements(admin):  # noqa: F811
+def test_delete_old_agreements(admin, case_id):  # noqa: F811
     for _ in range(2):
-        presign(admin, new_link(admin))
+        presign(admin, case_id)
     first, second = sql("SELECT id FROM upload_agreements ORDER BY id").scalars().all()
     sql(
         "UPDATE upload_agreements SET agreed_at = now() - interval '91 days' WHERE id = :i", i=first

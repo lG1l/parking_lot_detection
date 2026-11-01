@@ -10,7 +10,7 @@ from app.auth import current_user
 from app.db import get_engine
 from app.errors import ApiError
 from app.uploads import _iso
-from app.videos import VIEW_DAYS, _owned_video, _view_expires_at
+from app.videos import VIEW_DAYS, _case_video, _view_expires_at
 
 router = APIRouter(prefix="/api/videos")
 
@@ -108,7 +108,7 @@ def get_batch(
     if list_kind not in _CURRENT:
         raise _invalid("list must be main or parse_failed")
     with get_engine().connect() as conn:
-        row = _owned_video(conn, video_id, user["id"])
+        row = _case_video(conn, video_id, user, "admin")
         expires_at = _view_expires_at(row.upload_completed_at)
         _check_masked_alive(row, expires_at)
         job = _job(conn, video_id)
@@ -168,7 +168,7 @@ def next_batch(video_id: int, body: NextBody, user: Annotated[dict, Depends(curr
     kind, n = body.list_kind, body.batch_no
     send = False
     with get_engine().begin() as conn:
-        row = _owned_video(conn, video_id, user["id"])
+        row = _case_video(conn, video_id, user, "admin")
         expires_at = _view_expires_at(row.upload_completed_at)
         if row.raw_deleted_at is not None or (expires_at is not None and row.now > expires_at):
             raise ApiError(409, "RAW_EXPIRED", "raw video was deleted or the viewing period ended")

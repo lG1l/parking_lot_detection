@@ -24,11 +24,12 @@ END
 """
 
 _VIDEO = f"""
-SELECT v.id, v.original_filename, v.created_at, v.upload_completed_at, v.duration_sec,
+SELECT v.id, v.case_id, v.original_filename, v.created_at, v.upload_completed_at, v.duration_sec,
        v.raw_deleted_at, v.masked_deleted_at, now() AS now,
        j.id AS job_id, j.failure_kind, j.user_retry_count, j.input_completed_at,
        {_STATUS} AS status
-  FROM videos v LEFT JOIN analysis_jobs j ON j.video_id = v.id
+  FROM videos v JOIN cases c ON c.id = v.case_id
+  LEFT JOIN analysis_jobs j ON j.video_id = v.id
 """  # noqa: S608 - 상수만 이어 붙인다
 
 # 04장 4.5: 나보다 먼저 줄에 섰고 아직 GPU 차례가 끝나지 않은 작업 수
@@ -55,13 +56,19 @@ def _masked_gone(row, expires_at: datetime | None) -> bool:
     return row.masked_deleted_at is not None or (expires_at is not None and row.now > expires_at)
 
 
-def _owned_video(conn, video_id: int, user_id: int):
+_MEMBER = "(c.admin_user_id = :u OR c.victim_user_id = :u)"
+
+
+def _case_video(conn, video_id: int, user: dict, role: str | None = None):
+    """내가 묶인 사건의 영상만 준다. 사건 소속을 먼저 보고(404) 역할을 본다(403) (08장 8.7)"""
     row = conn.execute(
-        text(_VIDEO + " WHERE v.id = :v AND v.owner_user_id = :u"),
-        {"v": video_id, "u": user_id},
+        text(_VIDEO + f" WHERE v.id = :v AND {_MEMBER}"),
+        {"v": video_id, "u": user["id"]},
     ).one_or_none()
     if row is None:
         raise ApiError(404, "VIDEO_NOT_FOUND", "video not found")
+    if role is not None and user["role"] != role:
+        raise ApiError(403, "ROLE_NOT_ALLOWED", f"{role} account required")
     return row
 
 
@@ -81,7 +88,7 @@ def _error_kind(row, expires_at: datetime | None) -> tuple[str, bool]:
 def list_videos(user: Annotated[dict, Depends(current_user)]):
     with get_engine().connect() as conn:
         rows = conn.execute(
-            text(_VIDEO + " WHERE v.owner_user_id = :u ORDER BY v.created_at DESC, v.id DESC"),
+            text(_VIDEO + f" WHERE {_MEMBER} ORDER BY v.created_at DESC, v.id DESC"),
             {"u": user["id"]},
         ).all()
     result = []
@@ -90,6 +97,7 @@ def list_videos(user: Annotated[dict, Depends(current_user)]):
         result.append(
             {
                 "video_id": row.id,
+                "case_id": row.case_id,
                 "original_filename": row.original_filename,
                 "status": row.status,
                 "created_at": _iso(row.created_at),
@@ -103,7 +111,7 @@ def list_videos(user: Annotated[dict, Depends(current_user)]):
 @router.get("/{video_id}")
 def get_video(video_id: int, user: Annotated[dict, Depends(current_user)]):
     with get_engine().connect() as conn:
-        row = _owned_video(conn, video_id, user["id"])
+        row = _case_video(conn, video_id, user)
         expires_at = _view_expires_at(row.upload_completed_at)
         input_done = row.input_completed_at is not None
         body = {
@@ -121,7 +129,8 @@ def get_video(video_id: int, user: Annotated[dict, Depends(current_user)]):
             body["queue_ahead"] = conn.execute(
                 text(_QUEUE_AHEAD), {"job_id": row.job_id}
             ).scalar_one()
-        if row.status == "exhausted":
+        # 피해자 계정에는 후보 필드를 주지 않는다 (D-204)
+        if row.status == "exhausted" and user["role"] == "admin":
             total, unavailable = conn.execute(
                 text(
                     "SELECT count(*), count(*) FILTER (WHERE verdict = 'unavailable') "
@@ -142,7 +151,7 @@ def get_video(video_id: int, user: Annotated[dict, Depends(current_user)]):
 @router.get("/{video_id}/still")
 def get_still(video_id: int, request: Request, user: Annotated[dict, Depends(current_user)]):
     with get_engine().connect() as conn:
-        row = _owned_video(conn, video_id, user["id"])
+        row = _case_video(conn, video_id, user, "victim")
         expires_at = _view_expires_at(row.upload_completed_at)
         # 만료를 먼저 본다. 파기된 키에 서명해 주면 브라우저가 S3의 404를 받는다
         if row.masked_deleted_at is not None or (expires_at is not None and row.now > expires_at):

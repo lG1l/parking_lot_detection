@@ -6,9 +6,8 @@ import pytest
 from local import fake_worker
 from tests.conftest import make_client
 from tests.test_batches import make_ready
-from tests.test_input import login_again
-from tests.test_uploads import login, queue_files
-from tests.test_videos import add_video, sql, user_id
+from tests.test_uploads import queue_files
+from tests.test_videos import add_video, setup_case, sign_in, sql
 
 
 @pytest.fixture(autouse=True)
@@ -18,8 +17,9 @@ def fast(monkeypatch):
 
 @pytest.fixture
 def me(client):
-    login(client)
-    return user_id()
+    case = setup_case()
+    sign_in(client, "admin1")
+    return case
 
 
 def retry(client, vid):
@@ -94,6 +94,12 @@ def test_retry_counts_down_and_stops_at_limit(client, me):
     assert job_state()[:2] == ("failed", 3)
 
 
+def test_victim_cannot_retry(me):
+    vid, _ = add_video(me, "a.mp4", "failed", failure_kind="vlm_outage")
+    r = retry(sign_in(make_client(), "victim1"), vid)
+    assert (r.status_code, r.json()["error"]["code"]) == (403, "ROLE_NOT_ALLOWED")
+
+
 def test_retry_rejects_not_failed_and_duplicate(client, me):
     ok, _ = add_video(me, "a.mp4", "ready")
     assert retry(client, ok).json()["error"]["code"] == "INVALID_STATE"
@@ -124,7 +130,7 @@ def test_retry_rejects_file_problem_and_expired_raw(client, me):
 def test_queue_failure_rolls_back_retry(me, monkeypatch):
     vid, job = add_video(me, "a.mp4", "failed", failure_kind="vlm_outage")
     fail(job)
-    client = login_again(make_client(raise_server_exceptions=False))
+    client = sign_in(make_client(raise_server_exceptions=False), "admin1")
 
     def boom(*_):
         raise RuntimeError("queue down")
@@ -138,7 +144,7 @@ def test_concurrent_retry_with_one_left_accepts_one(me):
     """10장 9번: 재시도를 2번 쓴 뒤 두 요청이 동시에 와도 마지막 1번만 접수한다."""
     vid, job = add_video(me, "a.mp4", "failed", failure_kind="vlm_outage", retries=2)
     fail(job)
-    clients = [login_again(make_client()) for _ in range(2)]
+    clients = [sign_in(make_client(), "admin1") for _ in range(2)]
     codes = []
     threads = [
         threading.Thread(target=lambda c=c: codes.append(retry(c, vid).status_code))

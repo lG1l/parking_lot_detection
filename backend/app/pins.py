@@ -11,7 +11,7 @@ from app.batches import _check_masked_alive
 from app.db import get_engine
 from app.errors import ApiError
 from app.uploads import _iso
-from app.videos import VIEW_DAYS, _owned_video, _view_expires_at
+from app.videos import VIEW_DAYS, _case_video, _view_expires_at
 
 router = APIRouter(prefix="/api/videos")
 
@@ -69,7 +69,7 @@ def pin(
     user: Annotated[dict, Depends(current_user)],
 ):
     with get_engine().begin() as conn:
-        row = _owned_video(conn, video_id, user["id"])
+        row = _case_video(conn, video_id, user, "admin")
         _check_masked_alive(row, _view_expires_at(row.upload_completed_at))
         found = conn.execute(
             text(
@@ -111,7 +111,7 @@ def unpin(
     user: Annotated[dict, Depends(current_user)],
 ):
     with get_engine().begin() as conn:
-        row = _owned_video(conn, video_id, user["id"])
+        row = _case_video(conn, video_id, user, "admin")
         _check_masked_alive(row, _view_expires_at(row.upload_completed_at))
         # FOR SHARE로 [확인 끝내기]·마지막 [다음]과 순서를 정한다 (D-101, D-181)
         status = conn.execute(
@@ -131,7 +131,7 @@ def unpin(
 @router.get("/{video_id}/pin")
 def get_pinned(video_id: int, request: Request, user: Annotated[dict, Depends(current_user)]):
     with get_engine().connect() as conn:
-        row = _owned_video(conn, video_id, user["id"])
+        row = _case_video(conn, video_id, user, "admin")
     _check_masked_alive(row, _view_expires_at(row.upload_completed_at))
     return _list_pinned(video_id, row.job_id, request, user["id"], row)
 
@@ -139,7 +139,7 @@ def get_pinned(video_id: int, request: Request, user: Annotated[dict, Depends(cu
 @router.post("/{video_id}/finish")
 def finish(video_id: int, user: Annotated[dict, Depends(current_user)]):
     with get_engine().begin() as conn:
-        _owned_video(conn, video_id, user["id"])
+        _case_video(conn, video_id, user, "admin")
         # 14번의 고정(FOR SHARE)과 줄을 세운다 (D-101)
         job = conn.execute(
             text("SELECT id, status FROM analysis_jobs WHERE video_id = :v FOR UPDATE"),

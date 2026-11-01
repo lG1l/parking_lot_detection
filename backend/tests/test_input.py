@@ -6,8 +6,8 @@ import pytest
 from local import fake_worker
 from tests.conftest import STORAGE, make_client
 from tests.test_fake_worker import job_row
-from tests.test_uploads import login, queue_files
-from tests.test_videos import add_still, add_video, sql, user_id
+from tests.test_uploads import queue_files
+from tests.test_videos import add_still, add_video, setup_case, sign_in, sql
 
 BOX = [100, 100, 500, 400]  # det 1
 GOOD = {
@@ -25,8 +25,9 @@ GOOD = {
 
 @pytest.fixture
 def me(client):
-    login(client)
-    return user_id()
+    case = setup_case()
+    sign_in(client, "victim1")
+    return case
 
 
 @pytest.fixture
@@ -42,9 +43,7 @@ def ready(me):
 
 
 def login_again(client):
-    body = {"login_id": "demo", "password": "demo-password"}
-    assert client.post("/api/auth/login", json=body).status_code == 200
-    return client
+    return sign_in(client, "victim1")
 
 
 def put(client, vid, body):
@@ -160,10 +159,7 @@ def test_raw_expired_is_checked_first(client, me):
 
 
 def test_other_users_video_is_404(client, me):
-    other = sql(
-        "INSERT INTO users (login_id, password_hash, name) VALUES ('o','x','o') RETURNING id"
-    ).scalar_one()
-    vid, _ = add_video(other, status="stage1_done")
+    vid, _ = add_video(setup_case("admin2", "victim2"), status="stage1_done")
     assert put(client, vid, GOOD).status_code == 404
     assert (
         client.post(
@@ -171,6 +167,16 @@ def test_other_users_video_is_404(client, me):
         ).status_code
         == 404
     )
+
+
+def test_admin_cannot_input(ready):
+    vid, _, body = ready
+    admin = sign_in(make_client(), "admin1")
+    for r in (
+        put(admin, vid, body),
+        admin.post(f"/api/videos/{vid}/input/photo", json={"filename": "a.jpg", "size_bytes": 1}),
+    ):
+        assert (r.status_code, r.json()["error"]["code"]) == (403, "ROLE_NOT_ALLOWED")
 
 
 def test_login_required(client):

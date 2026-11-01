@@ -8,7 +8,7 @@ from app.auth import current_user
 from app.batches import _BUILDING
 from app.db import get_engine
 from app.errors import ApiError
-from app.videos import MAX_USER_RETRIES, _error_kind, _owned_video, _view_expires_at
+from app.videos import MAX_USER_RETRIES, _case_video, _error_kind, _view_expires_at
 
 router = APIRouter(prefix="/api/videos")
 
@@ -39,12 +39,12 @@ def _resume_point(conn, job) -> tuple[str, str]:
 @router.post("/{video_id}/retry", status_code=202)
 def retry(video_id: int, user: Annotated[dict, Depends(current_user)]):
     with get_engine().begin() as conn:
-        _owned_video(conn, video_id, user["id"])
+        _case_video(conn, video_id, user, "admin")
         job = conn.execute(text(_JOB), {"v": video_id}).one_or_none()
         if job is None or job.status != "failed":
             raise ApiError(409, "INVALID_STATE", "analysis has not failed")
         # 잠근 뒤 다시 읽어 실패 종류와 재시도 횟수를 최신으로 본다
-        row = _owned_video(conn, video_id, user["id"])
+        row = _case_video(conn, video_id, user, "admin")
         kind, _ = _error_kind(row, _view_expires_at(row.upload_completed_at))
         if kind == "expired":
             raise ApiError(409, "RAW_EXPIRED", "raw video was deleted or the viewing period ended")

@@ -5,9 +5,8 @@ import pytest
 from local import fake_worker
 from tests.conftest import make_client
 from tests.test_fake_worker import job_row
-from tests.test_input import login_again
-from tests.test_uploads import login, queue_files
-from tests.test_videos import add_video, sql, user_id
+from tests.test_uploads import queue_files
+from tests.test_videos import add_video, setup_case, sign_in, sql
 
 
 @pytest.fixture(autouse=True)
@@ -18,8 +17,9 @@ def fast(monkeypatch):
 
 @pytest.fixture
 def me(client):
-    login(client)
-    return user_id()
+    case = setup_case()
+    sign_in(client, "admin1")
+    return case
 
 
 def make_ready(me, scenario="normal"):
@@ -142,6 +142,13 @@ def test_get_batch_requires_login(client):
     assert nxt(client, 1).status_code == 401
 
 
+def test_victim_cannot_use_batch_apis(me):
+    vid, _ = make_ready(me)
+    victim = sign_in(make_client(), "victim1")
+    for r in (batch(victim, vid), nxt(victim, vid)):
+        assert (r.status_code, r.json()["error"]["code"]) == (403, "ROLE_NOT_ALLOWED")
+
+
 # ---- API 13 ----
 
 
@@ -219,7 +226,7 @@ def test_next_validation_and_state_errors(client, me):
 
 def test_queue_failure_rolls_back_next(me, monkeypatch):
     vid, _ = make_ready(me, "many")
-    client = login_again(make_client(raise_server_exceptions=False))
+    client = sign_in(make_client(raise_server_exceptions=False), "admin1")
 
     def boom(*_):
         raise RuntimeError("queue down")
@@ -232,7 +239,7 @@ def test_queue_failure_rolls_back_next(me, monkeypatch):
 
 def test_concurrent_next_yields_one_success(me):
     vid, _ = make_ready(me, "many")
-    clients = [login_again(make_client()) for _ in range(2)]
+    clients = [sign_in(make_client(), "admin1") for _ in range(2)]
     codes = []
     threads = [
         threading.Thread(target=lambda c=c: codes.append(nxt(c, vid).status_code)) for c in clients

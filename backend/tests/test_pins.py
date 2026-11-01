@@ -5,9 +5,8 @@ import pytest
 from local import fake_worker
 from tests.conftest import make_client
 from tests.test_batches import batch, make_ready, nxt
-from tests.test_input import login_again
-from tests.test_uploads import new_link, presign
-from tests.test_videos import add_video, sql
+from tests.test_uploads import presign
+from tests.test_videos import add_video, setup_case, sign_in, sql
 
 
 @pytest.fixture(autouse=True)
@@ -17,11 +16,9 @@ def fast(monkeypatch):
 
 @pytest.fixture
 def me(client):
-    from tests.test_uploads import login
-    from tests.test_videos import user_id
-
-    login(client)
-    return user_id()
+    case = setup_case()
+    sign_in(client, "admin1")
+    return case
 
 
 def pin(client, vid, clip_id):
@@ -148,6 +145,13 @@ def test_pin_requires_login(client):
     assert pin(client, 1, 1).status_code == 401
 
 
+def test_victim_cannot_use_pin_apis(me):
+    vid, _ = make_ready(me)
+    victim = sign_in(make_client(), "victim1")
+    for r in (pin(victim, vid, 1), pinned(victim, vid), unpin(victim, vid, 1), finish(victim, vid)):
+        assert (r.status_code, r.json()["error"]["code"]) == (403, "ROLE_NOT_ALLOWED")
+
+
 # ---- API 15 ----
 
 
@@ -218,7 +222,7 @@ def test_finish_state_errors(client, me):
 
 def test_concurrent_pin_and_finish_never_pin_after_finish(me):
     vid, _ = make_ready(me)
-    clients = [login_again(make_client()) for _ in range(2)]
+    clients = [sign_in(make_client(), "admin1") for _ in range(2)]
     first, second, _ = clip_ids(clients[0], vid)
     pin(clients[0], vid, first)
     codes = {}
@@ -242,9 +246,8 @@ def test_other_upload_keeps_review_in_progress(client, me):
     vid, _ = make_ready(me)
     first = clip_ids(client, vid)[0]
     pin(client, vid, first)
-    token = new_link(client)
-    presign(client, token)
-    assert client.post(f"/api/uploads/{token}/complete").status_code == 204
+    new_vid = presign(client, me).json()["video_id"]
+    assert client.post(f"/api/videos/{new_vid}/upload/complete").status_code == 204
     other = sql("SELECT id FROM analysis_jobs WHERE status = 'queued'").scalar_one()
     fake_worker.Worker("normal", step=False).handle(other, "stage1")
     assert client.get(f"/api/videos/{vid}").json()["status"] == "ready"

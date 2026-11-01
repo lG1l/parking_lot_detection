@@ -10,7 +10,7 @@ from app import jobs, storage
 from app.auth import current_user
 from app.db import get_engine
 from app.errors import ApiError
-from app.videos import _owned_video, _view_expires_at
+from app.videos import _case_video, _view_expires_at
 
 router = APIRouter(prefix="/api/videos")
 
@@ -116,7 +116,7 @@ def photo_upload_url(video_id: int, body: PhotoBody, user: Annotated[dict, Depen
     if body.size_bytes > storage.MAX_PHOTO_BYTES:
         raise ApiError(422, "FILE_TOO_LARGE", "file is too large")
     with get_engine().connect() as conn:
-        row = _owned_video(conn, video_id, user["id"])
+        row = _case_video(conn, video_id, user, "victim")
     expires_at = _view_expires_at(row.upload_completed_at)
     _check_raw_alive(row, expires_at)
     if row.status != "stage1_done" or row.input_completed_at is not None:
@@ -131,7 +131,7 @@ def photo_upload_url(video_id: int, body: PhotoBody, user: Annotated[dict, Depen
 @router.put("/{video_id}/input")
 def save_input(video_id: int, body: InputBody, user: Annotated[dict, Depends(current_user)]):
     with get_engine().begin() as conn:
-        row = _owned_video(conn, video_id, user["id"])
+        row = _case_video(conn, video_id, user, "victim")
         expires_at = _view_expires_at(row.upload_completed_at)
         _check_raw_alive(row, expires_at)
         # 같은 입력이 동시에 두 번 와도 한쪽만 통과하게 작업 행을 잠근다 (D-46)

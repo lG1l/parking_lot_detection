@@ -5,8 +5,7 @@ import pytest
 
 from local import fake_worker
 from tests.conftest import STORAGE
-from tests.test_uploads import login
-from tests.test_videos import add_video, sql, user_id
+from tests.test_videos import add_video, setup_case, sql
 
 
 @pytest.fixture(autouse=True)
@@ -16,9 +15,8 @@ def fast(monkeypatch):
 
 
 @pytest.fixture
-def me(client):
-    login(client)
-    return user_id()
+def me():
+    return setup_case()
 
 
 def job_row(job_id):

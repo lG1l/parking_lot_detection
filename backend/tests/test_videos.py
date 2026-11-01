@@ -1,16 +1,11 @@
 import json
-import secrets
 
 import pytest
 from sqlalchemy import text
 
 from app.db import get_engine
-from tests.test_uploads import login
-
-
-@pytest.fixture
-def admin(client):
-    return login(client)
+from tests.conftest import make_client
+from tests.test_auth import make_user
 
 
 def sql(query, **params):
@@ -18,25 +13,50 @@ def sql(query, **params):
         return conn.execute(text(query), params)
 
 
-def user_id(login_id="demo"):
+def user_id(login_id):
     return sql("SELECT id FROM users WHERE login_id = :l", l=login_id).scalar_one()
 
 
-def add_video(owner, name="a.mp4", status=None, completed_days_ago=0, created_minutes_ago=0, **job):
-    """영상 행을 직접 만든다. status가 있으면 업로드를 마친 영상이고 작업 행도 만든다."""
-    token_id = sql(
-        "INSERT INTO upload_tokens (token_hash, owner_user_id, expires_at, used_at) "
-        "VALUES (:h, :o, now() + interval '1 day', now()) RETURNING id",
-        h=secrets.token_hex(32),
-        o=owner,
+def setup_case(admin="admin1", victim="victim1"):
+    """관리자·피해자 계정과 둘을 묶은 사건을 만들고 사건 번호를 준다."""
+    return sql(
+        "INSERT INTO cases (admin_user_id, victim_user_id) VALUES (:a, :v) RETURNING id",
+        a=make_user(login_id=admin, role="admin"),
+        v=make_user(login_id=victim, role="victim"),
     ).scalar_one()
+
+
+def sign_in(client, login_id):
+    r = client.post("/api/auth/login", json={"login_id": login_id, "password": "demo-password"})
+    assert r.status_code == 200
+    return client
+
+
+@pytest.fixture
+def case():
+    return setup_case()
+
+
+@pytest.fixture
+def admin(client, case):
+    return sign_in(client, "admin1")
+
+
+@pytest.fixture
+def victim(case):
+    return sign_in(make_client(), "victim1")
+
+
+def add_video(
+    case_id, name="a.mp4", status=None, completed_days_ago=0, created_minutes_ago=0, **job
+):
+    """영상 행을 직접 만든다. status가 있으면 업로드를 마친 영상이고 작업 행도 만든다."""
     video_id = sql(
-        "INSERT INTO videos (owner_user_id, upload_token_id, s3_key, original_filename, created_at, "
-        "upload_completed_at) VALUES (:o, :t, 'k', :n, now() - make_interval(mins => :m), "
+        "INSERT INTO videos (case_id, s3_key, original_filename, created_at, "
+        "upload_completed_at) VALUES (:c, 'k', :n, now() - make_interval(mins => :m), "
         "CASE WHEN CAST(:s AS text) IS NULL THEN NULL ELSE now() - make_interval(days => :d) END) "
         "RETURNING id",
-        o=owner,
-        t=token_id,
+        c=case_id,
         n=name,
         m=created_minutes_ago,
         s=status,
@@ -76,21 +96,18 @@ def test_list_requires_login(client):
     assert client.get("/api/videos").status_code == 401
 
 
-def test_list_only_mine_newest_first(admin):
-    me = user_id()
-    other = sql(
-        "INSERT INTO users (login_id, password_hash, name) VALUES ('o','x','o') RETURNING id"
-    ).scalar_one()
-    add_video(me, "old.mp4", "finished", created_minutes_ago=300)
-    add_video(me, "new.mp4", "queued", created_minutes_ago=5)
-    add_video(other, "theirs.mp4", "queued")
-    body = admin.get("/api/videos").json()
-    assert [v["original_filename"] for v in body] == ["new.mp4", "old.mp4"]
-    assert body[0]["status"] == "queued"
+def test_list_only_my_cases_newest_first(admin, victim, case):
+    add_video(case, "old.mp4", "finished", created_minutes_ago=300)
+    add_video(case, "new.mp4", "queued", created_minutes_ago=5)
+    add_video(setup_case("admin2", "victim2"), "theirs.mp4", "queued")
+    for client in (admin, victim):
+        body = client.get("/api/videos").json()
+        assert [v["original_filename"] for v in body] == ["new.mp4", "old.mp4"]
+        assert (body[0]["status"], body[0]["case_id"]) == ("queued", case)
 
 
-def test_list_computed_statuses_and_expiry(admin):
-    me = user_id()
+def test_list_computed_statuses_and_expiry(admin, case):
+    me = case
     add_video(me, "up.mp4", created_minutes_ago=5)  # 작업 행 없음, 30분 안
     add_video(me, "failed-upload.mp4", created_minutes_ago=31)
     add_video(me, "done.mp4", "queued", completed_days_ago=2)
@@ -101,9 +118,9 @@ def test_list_computed_statuses_and_expiry(admin):
     assert by_name["done.mp4"]["view_expires_at"].endswith("+09:00")
 
 
-def test_masked_deleted_counts_expired_before_purge(admin):
+def test_masked_deleted_counts_expired_before_purge(admin, case):
     """열람기한이 지났으면 파기 작업 전이어도 8·9번 모두 true (D-187)"""
-    me = user_id()
+    me = case
     fresh, _ = add_video(me, "fresh.mp4", "finished", completed_days_ago=2)
     late, _ = add_video(me, "late.mp4", "finished", completed_days_ago=31)
     purged, _ = add_video(me, "purged.mp4", "finished", completed_days_ago=2)
@@ -123,20 +140,36 @@ def test_masked_deleted_counts_expired_before_purge(admin):
 # ---- 9번 상태 ----
 
 
-def test_detail_not_found_for_missing_and_foreign(admin):
-    other = sql(
-        "INSERT INTO users (login_id, password_hash, name) VALUES ('o','x','o') RETURNING id"
-    ).scalar_one()
-    foreign, _ = add_video(other, status="queued")
+def test_detail_not_found_for_missing_and_foreign(admin, victim):
+    foreign, _ = add_video(setup_case("admin2", "victim2"), status="queued")
     for vid in (foreign, 9999):
-        r = admin.get(f"/api/videos/{vid}")
-        assert r.status_code == 404
-        assert r.json()["error"]["code"] == "VIDEO_NOT_FOUND"
+        for client in (admin, victim):
+            r = client.get(f"/api/videos/{vid}")
+            assert r.status_code == 404
+            assert r.json()["error"]["code"] == "VIDEO_NOT_FOUND"
+        # 역할보다 사건 소속을 먼저 본다: 관리자도 403이 아니라 404
         assert admin.get(f"/api/videos/{vid}/still").status_code == 404
 
 
-def test_queue_ahead_counts_earlier_jobs(admin):
-    me = user_id()
+def test_victim_detail_has_progress_and_failure_but_no_candidates(victim, case):
+    exhausted, _ = add_video(case, status="exhausted")
+    failed, _ = add_video(case, status="failed", failure_kind="vlm_outage")
+    body = victim.get(f"/api/videos/{exhausted}").json()
+    assert body["status"] == "exhausted"
+    assert {"candidate_total", "candidate_unavailable"}.isdisjoint(body)
+    body = victim.get(f"/api/videos/{failed}").json()
+    assert (body["error_kind"], body["can_retry"], body["retry_left"]) == ("temporary", True, 3)
+
+
+def test_still_is_victim_only(admin, case):
+    vid, job = add_video(case, status="stage1_done")
+    add_still(job, vid)
+    r = admin.get(f"/api/videos/{vid}/still")
+    assert (r.status_code, r.json()["error"]["code"]) == (403, "ROLE_NOT_ALLOWED")
+
+
+def test_queue_ahead_counts_earlier_jobs(admin, case):
+    me = case
     add_video(me, status="queued", created_minutes_ago=30)
     add_video(me, status="stills_running", created_minutes_ago=20)
     mine, _ = add_video(me, status="queued", created_minutes_ago=10)
@@ -147,8 +180,8 @@ def test_queue_ahead_counts_earlier_jobs(admin):
     assert {"error_kind", "can_retry", "candidate_total"}.isdisjoint(body)
 
 
-def test_queue_ahead_only_when_waiting(admin):
-    me = user_id()
+def test_queue_ahead_only_when_waiting(admin, case):
+    me = case
     waiting, _ = add_video(me, status="stage1_done", input_done=True)
     not_yet, _ = add_video(me, status="stage1_done")
     running, _ = add_video(me, status="stills_running")
@@ -157,8 +190,8 @@ def test_queue_ahead_only_when_waiting(admin):
     assert "queue_ahead" not in admin.get(f"/api/videos/{running}").json()
 
 
-def test_exhausted_reports_candidate_counts(admin):
-    me = user_id()
+def test_exhausted_reports_candidate_counts(admin, case):
+    me = case
     vid, job = add_video(me, status="exhausted")
     assert admin.get(f"/api/videos/{vid}").json()["candidate_total"] == 0
     for verdict in ("not_found", "unavailable", "unavailable"):
@@ -184,9 +217,11 @@ def test_exhausted_reports_candidate_counts(admin):
         ("worker_died", 3, 0, "service", False, 0),
     ],
 )
-def test_failed_error_kind(admin, failure_kind, retries, days_ago, kind, can_retry, retry_left):
+def test_failed_error_kind(
+    admin, case, failure_kind, retries, days_ago, kind, can_retry, retry_left
+):
     vid, _ = add_video(
-        user_id(),
+        case,
         status="failed",
         failure_kind=failure_kind,
         retries=retries,
@@ -201,8 +236,8 @@ def test_failed_error_kind(admin, failure_kind, retries, days_ago, kind, can_ret
     assert "error_message" not in body
 
 
-def test_failed_with_deleted_raw_is_expired(admin):
-    vid, _ = add_video(user_id(), status="failed", failure_kind="vlm_outage")
+def test_failed_with_deleted_raw_is_expired(admin, case):
+    vid, _ = add_video(case, status="failed", failure_kind="vlm_outage")
     sql("UPDATE videos SET raw_deleted_at = now() WHERE id = :v", v=vid)
     body = admin.get(f"/api/videos/{vid}").json()
     assert (body["error_kind"], body["can_retry"], body["raw_deleted"]) == ("expired", False, True)
@@ -211,47 +246,47 @@ def test_failed_with_deleted_raw_is_expired(admin):
 # ---- 10번 정지 장면 ----
 
 
-def test_still_not_ready_states(admin):
-    me = user_id()
+def test_still_not_ready_states(victim, case):
+    me = case
     uploading, _ = add_video(me)
     queued, _ = add_video(me, status="queued")
     for vid in (uploading, queued):
-        r = admin.get(f"/api/videos/{vid}/still")
+        r = victim.get(f"/api/videos/{vid}/still")
         assert (r.status_code, r.json()["error"]["code"]) == (409, "INVALID_STATE")
 
 
-def test_still_expired_checked_before_missing(admin):
-    me = user_id()
+def test_still_expired_checked_before_missing(victim, case):
+    me = case
     old, _ = add_video(me, status="queued", completed_days_ago=31)  # 장면도 없다
     deleted, _ = add_video(me, status="finished")
     sql("UPDATE videos SET masked_deleted_at = now() WHERE id = :v", v=deleted)
     for vid in (old, deleted):
-        r = admin.get(f"/api/videos/{vid}/still")
+        r = victim.get(f"/api/videos/{vid}/still")
         assert (r.status_code, r.json()["error"]["code"]) == (409, "MASKED_EXPIRED")
 
 
-def test_still_ok_hides_conf_and_url_works(admin, tmp_path):
+def test_still_ok_hides_conf_and_url_works(victim, case, tmp_path):
     from tests.conftest import STORAGE
 
-    vid, job = add_video(user_id(), status="stage1_done")
+    vid, job = add_video(case, status="stage1_done")
     add_still(job, vid, [{"det_id": 1, "bbox": [1, 2, 3, 4], "conf": 0.9}])
     path = STORAGE / "masked" / f"videos/{vid}/stills/0.jpg"
     path.parent.mkdir(parents=True)
     path.write_bytes(b"0123456789")
-    body = admin.get(f"/api/videos/{vid}/still").json()
+    body = victim.get(f"/api/videos/{vid}/still").json()
     assert body["detections"] == [{"det_id": 1, "bbox": [1, 2, 3, 4]}]
     assert body["t_sec"] == 0.0
     url = body["image_url"].removeprefix("http://localhost:8000")
-    r = admin.get(url)
+    r = victim.get(url)
     assert (r.status_code, r.content) == (200, b"0123456789")
-    ranged = admin.get(url, headers={"Range": "bytes=2-4"})
+    ranged = victim.get(url, headers={"Range": "bytes=2-4"})
     assert (ranged.status_code, ranged.content) == (206, b"234")
 
 
-def test_still_empty_detections_is_200(admin):
-    vid, job = add_video(user_id(), status="stage1_done")
+def test_still_empty_detections_is_200(victim, case):
+    vid, job = add_video(case, status="stage1_done")
     add_still(job, vid, [])
-    r = admin.get(f"/api/videos/{vid}/still")
+    r = victim.get(f"/api/videos/{vid}/still")
     assert (r.status_code, r.json()["detections"]) == (200, [])
 
 
@@ -316,16 +351,10 @@ def logs():
     return [tuple(r) for r in sql("SELECT action, user_id, video_id FROM access_logs ORDER BY id")]
 
 
-def test_still_view_is_logged_only_on_success(admin):
-    me = user_id()
-    vid, job = add_video(me, status="stage1_done")
-    admin.get(f"/api/videos/{vid}/still")  # 409, 장면이 없다
+def test_still_view_is_logged_only_on_success(victim, case):
+    vid, job = add_video(case, status="stage1_done")
+    victim.get(f"/api/videos/{vid}/still")  # 409, 장면이 없다
     assert [a for a, *_ in logs() if a == "view_still"] == []
     add_still(job, vid)
-    admin.get(f"/api/videos/{vid}/still")
-    assert ("view_still", me, vid) in logs()
-
-
-def test_issue_upload_link_is_logged(admin):
-    admin.post("/api/upload-links")
-    assert ("issue_upload_link", user_id(), None) in logs()
+    victim.get(f"/api/videos/{vid}/still")
+    assert ("view_still", user_id("victim1"), vid) in logs()
