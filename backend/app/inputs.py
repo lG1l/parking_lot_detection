@@ -15,7 +15,7 @@ from app.videos import _case_video, _view_expires_at
 router = APIRouter(prefix="/api/videos")
 
 PHOTO_EXT = ("jpg", "jpeg", "png", "heic")  # 01장 1.6, D-83
-SCHEMA_VERSION = 5  # 05장 5.7, D-99
+SCHEMA_VERSION = 6  # 05장 5.7, D-99, D-208
 
 
 class PhotoBody(BaseModel):
@@ -33,6 +33,7 @@ class Damage(BaseModel):
     visible: StrictBool
     damage_bbox: list[StrictInt]
     floor_corners: list[list[StrictInt]]
+    front_edge: StrictInt
     damage_edges: list[StrictInt]
     # 선택 키는 없으면 저장하지 않는다. null은 받지 않는다 (04장 damage_inputs)
     description: str = Field(default=None, min_length=1, max_length=500)
@@ -42,7 +43,7 @@ class Damage(BaseModel):
 class InputBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     still_frame_id: StrictInt
-    schema_version: Literal[5]
+    schema_version: Literal[6]
     vehicle: Vehicle
     damage: Damage
 
@@ -106,6 +107,8 @@ def _check_geometry(damage: Damage, vehicle_bbox: list[int], width: int, height:
         raise _invalid("damage.damage_edges must be one or two edge numbers from 0 to 3")
     if len(edges) == 2 and abs(edges[0] - edges[1]) not in (1, 3):
         raise _invalid("damage.damage_edges must be neighboring edges")
+    if not 0 <= damage.front_edge <= 3:  # damage_edges와 겹쳐도 된다 (D-208)
+        raise _invalid("damage.front_edge must be an edge number from 0 to 3")
 
 
 @router.post("/{video_id}/input/photo")

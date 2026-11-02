@@ -12,12 +12,13 @@ from tests.test_videos import add_still, add_video, setup_case, sign_in, sql
 BOX = [100, 100, 500, 400]  # det 1
 GOOD = {
     "still_frame_id": 1,
-    "schema_version": 5,
+    "schema_version": 6,
     "vehicle": {"det_id": 1},
     "damage": {
         "visible": True,
         "damage_bbox": [150, 150, 300, 300],
         "floor_corners": [[100, 600], [700, 600], [800, 900], [50, 900]],
+        "front_edge": 2,
         "damage_edges": [0, 1],
     },
 }
@@ -78,7 +79,7 @@ def set_path(body, path, value):
 @pytest.mark.parametrize(
     ("path", "value"),
     [
-        (["schema_version"], 4),
+        (["schema_version"], 5),
         (["unknown"], 1),
         (["vehicle", "det_id"], 99),
         (["vehicle", "det_id"], "1"),
@@ -103,6 +104,12 @@ def set_path(body, path, value):
         (["damage", "damage_edges"], [1, 1]),
         (["damage", "damage_edges"], [4]),
         (["damage", "damage_edges"], [0, 1, 2]),
+        (["damage", "front_edge"], KeyError),
+        (["damage", "front_edge"], None),
+        (["damage", "front_edge"], 4),
+        (["damage", "front_edge"], -1),
+        (["damage", "front_edge"], [2]),
+        (["damage", "front_edge"], True),
     ],
 )
 def test_invalid_input_is_422(client, ready, path, value):
@@ -113,6 +120,12 @@ def test_invalid_input_is_422(client, ready, path, value):
     assert r.json()["error"]["code"] == "VALIDATION_FAILED"
     assert sql("SELECT count(*) FROM vehicle_selections").scalar_one() == 0
     assert queue_files() == []
+
+
+def test_front_edge_may_overlap_damage_edges(client, ready):
+    vid, _, body = ready
+    body["damage"]["front_edge"] = 0  # damage_edges [0, 1]과 겹친다 (D-208)
+    assert put(client, vid, body).status_code == 200
 
 
 def test_neighbor_edges_including_wraparound(client, ready):
