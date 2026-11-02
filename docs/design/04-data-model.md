@@ -1,8 +1,6 @@
 # 04. 데이터 모델
 
 > **D-204(2026-11-01, 팀장): 관리자 주도 흐름으로 바꾼다. `upload_tokens`를 없애고 `cases`·`viewing_agreements`와 `users.role`을 더하며, `videos`는 사건에 속한다.**
->
-> ⚠️ **확인 필요 — 백엔드(팀원 2)**: 코드는 아직 이전 스키마다. `backend/alembic/versions/`에 새 마이그레이션을 더해 `upload_tokens` 삭제, `cases`·`viewing_agreements` 추가, `users` 역할 칼럼 추가, `videos`·`upload_agreements` 칼럼 변경을 반영하고, 이 스키마를 쓰는 `backend/app/uploads.py`, `videos.py`, `periodic.py`, 테스트를 함께 바꿔야 한다.
 
 > **D-210(2026-11-01, 팀장): `access_logs.action`에 `view_incident_times`를 더한다. 테이블·칼럼은 바뀌지 않는다.**
 

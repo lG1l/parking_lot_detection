@@ -4,8 +4,6 @@
 >
 > **D-210(2026-11-01, 팀장): 피해자 계정은 확인이 끝난 뒤 사건 지점 시간만 25번으로 본다. 재생 URL은 주지 않는다.**
 >
-> ⚠️ **확인 필요 — 백엔드(팀원 2)**: 코드는 아직 이전 구조다. `backend/app/auth.py`의 역할 검사, `backend/app/uploads.py`의 링크 라우트 전체(쿠키 인증·사건 기준으로 교체), `backend/app/videos.py`의 소유 검사(`owner_user_id` → 사건 소속), `backend/scripts/create_user`의 역할 옵션, `backend/tests/test_log_filter.py`의 토큰 경로 필터 테스트를 이 장에 맞춰 바꿔야 한다. 25번은 두 계정 모두 부를 수 있게 하고, 안내 동의 검사에서 뺀다.
->
 > ⚠️ **확인 필요 — 프론트엔드(팀원 1)**: 로그인 뒤 역할에 따라 화면을 나눠야 한다. `frontend/lib/app/router.dart`, `frontend/lib/features/admin_upload/`, `frontend/lib/features/videos/upload_link_page.dart`를 07장에 맞춰 바꿔야 한다.
 
 > 마지막 수정: 2026-11-01

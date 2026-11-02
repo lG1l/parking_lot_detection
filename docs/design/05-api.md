@@ -4,8 +4,6 @@
 >
 > **D-210(2026-11-01, 팀장): 피해자 계정이 끝 상태에서 사건 지점 시간만 보는 25번을 더한다.**
 >
-> ⚠️ **확인 필요 — 백엔드(팀원 2)**: 코드는 아직 이전 API다. `backend/app/uploads.py`의 `/api/upload-links`·`/api/uploads/{token}` 라우트를 이 장의 사건·영상 기준 라우트로 바꾸고, `backend/app/videos.py`·`inputs.py`·`pins.py`·`batches.py`에 사건 소속·역할·안내 동의 검사를 더해야 한다. 8·9번의 피해자 응답에서 결과 필드를 빼야 한다. 25번(`pins.py`)을 새로 만들어야 한다.
->
 > ⚠️ **확인 필요 — 프론트엔드(팀원 1)**: `frontend/lib/core/api/api.dart`·`demo_api.dart`의 호출을 21·22·23번과 바뀐 6·7·16번에 맞춰야 한다. 쿠키가 함께 가야 하고, 6번 응답의 `video_id`를 7·16번에 쓴다. 피해자 계정의 끝 상태 화면에서 25번을 불러 사건 시간을 보여야 한다.
 
 > **D-111: 보류·목록 이동은 종료나 다음 묶음 처리가 아니다. 기존 작업을 유지한 채 새 영상 접수를 허용하며 재진입 시 최신 상태를 조회한다. 분석 정지·재개 API는 두지 않는다.**
@@ -774,7 +772,6 @@ END
 - `status`는 저장 뒤의 상태다. 화면은 이 값으로 다시 그리고 9번을 따로 부르지 않아도 된다. 상태는 워커가 2단계 메시지를 꺼낼 때 `stage2_running`으로 바뀐다 (전이 7).
 - **PUT인 이유**: 같은 요청을 다시 보내도 DB가 바뀌지 않는다. 두 번째부터는 409다(아래 "상태별로 하는 일", D-66).
 
-> ⚠️ **확인 필요 — 백엔드(팀원 2)**: 코드는 아직 `schema_version` 5다. `backend/app/inputs.py`의 검증(`extra="forbid"`, `schema_version` 6, `front_edge`)과 `backend/tests/test_input.py`를 D-208에 맞춰 바꿔야 한다.
 > ⚠️ **확인 필요 — 프론트엔드(팀원 1)**: `frontend/lib/features/damage_input/damage_input_page.dart`·`still_canvas.dart`에 앞쪽 변 누르기 단계와 요청 필드 추가가 필요하다(07장 2.3).
 
 **`schema_version` 6의 검증 규칙** (D-25, D-65, D-92, D-99, D-208)

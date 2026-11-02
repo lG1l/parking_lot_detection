@@ -68,7 +68,8 @@ cp .env.example .env                 # LOCAL_URL_SECRET만 채운다
 docker compose up -d                 # DB 켜기 (끌 때 docker compose down)
 uv sync
 uv run alembic upgrade head          # 처음과 git pull 뒤마다
-uv run python -m scripts.create_user --login-id victim1 --name 홍길동
+uv run python -m scripts.create_user --login-id admin1 --name 관리자 --role admin
+uv run python -m scripts.create_user --login-id victim1 --name 홍길동 --role victim
 uv run uvicorn app.main:app          # API 서버 (터미널 1)
 uv run python -m local.fake_worker   # 가짜 워커 (터미널 2, --scenario·--step)
 uv run python -m app.periodic        # 주기 작업 (터미널 3, D-105)
