@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/auth")
 
 
 class LoginBody(BaseModel):
-    login_id: str = Field(min_length=1)
+    login_id: str = Field(min_length=1, pattern=r"^[^\x00]*$")
     password: str = Field(min_length=1)
 
 

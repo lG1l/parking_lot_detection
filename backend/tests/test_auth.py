@@ -66,6 +66,12 @@ def test_login_rejects_empty_and_overlong(client):
     assert r.status_code == 401
 
 
+def test_login_rejects_nul_character(client):
+    make_user()
+    r = client.post("/api/auth/login", json={"login_id": "de\u0000mo", "password": "x"})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "VALIDATION_FAILED"
+
+
 def test_me_requires_login(client):
     r = client.get("/api/auth/me")
     assert r.status_code == 401 and r.json()["error"]["code"] == "UNAUTHENTICATED"

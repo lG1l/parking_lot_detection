@@ -35,6 +35,14 @@ def test_lookup_shows_masked_name_and_logs():
     assert actions() == ["login", "lookup_invitee"]
 
 
+def test_nul_in_login_id_is_422():
+    admin = login("admin1", "admin", "관리자")
+    r = admin.get("/api/users/lookup", params={"login_id": "vic\u0000tim1"})
+    assert (r.status_code, r.json()["error"]["code"]) == (422, "VALIDATION_FAILED")
+    r = admin.post("/api/cases", json={"victim_login_id": "vic\u0000tim1"})
+    assert (r.status_code, r.json()["error"]["code"]) == (422, "VALIDATION_FAILED")
+
+
 def test_lookup_and_create_hide_admin_accounts():
     admin = login("admin1", "admin", "관리자")
     make_user(login_id="admin2", name="다른관리자", role="admin")

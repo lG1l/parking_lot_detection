@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api")
 
 
 class CaseBody(BaseModel):
-    victim_login_id: str = Field(min_length=1)
+    victim_login_id: str = Field(min_length=1, pattern=r"^[^\x00]*$")
 
 
 def mask_name(name: str) -> str:
@@ -43,7 +43,7 @@ def _victim(conn, login_id: str):
 def lookup_invitee(
     request: Request,
     user: Annotated[dict, Depends(current_admin)],
-    login_id: Annotated[str, Query(min_length=1)],
+    login_id: Annotated[str, Query(min_length=1, pattern=r"^[^\x00]*$")],
 ):
     with get_engine().connect() as conn:
         victim = _victim(conn, login_id)

@@ -123,6 +123,7 @@ BAD_REQUESTS = [
     ({"size_bytes": 5 * 1024**3 + 1}, "FILE_TOO_LARGE"),
     ({"size_bytes": 0}, "VALIDATION_FAILED"),
     ({"filename": ""}, "VALIDATION_FAILED"),
+    ({"filename": "a\u0000b.mp4"}, "VALIDATION_FAILED"),
     ({"recording_started_at": "2026-09-17T00:00:00"}, "VALIDATION_FAILED"),
     ({"recording_started_at": "2999-01-01T00:00:00+09:00"}, "VALIDATION_FAILED"),
     ({"agreement": None}, "AGREEMENT_REQUIRED"),

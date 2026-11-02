@@ -93,6 +93,7 @@ def set_path(body, path, value):
         (["damage", "description"], ""),
         (["damage", "description"], "가" * 501),
         (["damage", "description"], None),
+        (["damage", "description"], "a\u0000b"),
         (["damage", "photo_key"], "videos/999/inputs/photo.jpg"),
         (["damage", "photo_key"], "../x.jpg"),
         (["damage", "floor_corners"], [[0, 0], [1, 1], [2, 2]]),

@@ -27,7 +27,7 @@ class Agreement(BaseModel):
 
 
 class PresignBody(BaseModel):
-    filename: str = Field(min_length=1)
+    filename: str = Field(min_length=1, pattern=r"^[^\x00]*$")
     size_bytes: int = Field(gt=0)
     recording_started_at: AwareDatetime | None = None
     agreement: Agreement | None = None

@@ -36,7 +36,7 @@ class Damage(BaseModel):
     front_edge: StrictInt
     damage_edges: list[StrictInt]
     # 선택 키는 없으면 저장하지 않는다. null은 받지 않는다 (04장 damage_inputs)
-    description: str = Field(default=None, min_length=1, max_length=500)
+    description: str = Field(default=None, min_length=1, max_length=500, pattern=r"^[^\x00]*$")
     photo_key: str = Field(default=None)
 
 
