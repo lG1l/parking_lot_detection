@@ -22,7 +22,7 @@
 | [06-pipeline.md](06-pipeline.md) | 비전·VLM 파이프라인 상세 | 작성 (일부 🚧) |
 | [07-screens.md](07-screens.md) | 화면 설계 | 🚧 |
 | [08-auth.md](08-auth.md) | 인증·권한 | 작성 |
-| [09-evaluation.md](09-evaluation.md) | KPI 평가 설계 | 🚧 (평가 데이터·라벨링·보고 형식만 작성) |
+| [09-evaluation.md](09-evaluation.md) | KPI 평가 설계 | 🚧 (평가 데이터·라벨링·보고 형식·시연 촬영 장면만 작성) |
 | [10-dev-guide.md](10-dev-guide.md) | 로컬 개발·테스트 가이드, 개발 규칙 | 🚧 (문답 진행 중) |
 | [11-decisions.md](11-decisions.md) | 결정 기록, 미결정 사항 | 작성 (계속 추가) |
 
