@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import time
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 
 import boto3
@@ -34,6 +35,18 @@ def verify_local_signature(method: str, area: str, key: str, exp: int, sig: str)
     return hmac.compare_digest(_signature(method, area, key, exp), sig)
 
 
+@lru_cache
+def _s3():
+    # 지역 주소를 직접 지정한다. 기본값은 전역 주소라 새 버킷에서 리디렉션이 나온다
+    settings = get_settings()
+    return boto3.client(
+        "s3",
+        region_name=settings.aws_region,
+        endpoint_url=f"https://s3.{settings.aws_region}.amazonaws.com",
+        config=Config(s3={"addressing_style": "virtual"}),
+    )
+
+
 def make_upload_url(key: str) -> str:
     """원본 버킷에 PUT할 주소. AWS는 presigned URL, 로컬은 백엔드가 서명한 주소 (D-158)."""
     settings = get_settings()
@@ -41,14 +54,7 @@ def make_upload_url(key: str) -> str:
         exp = int(time.time()) + UPLOAD_URL_SECONDS
         sig = _signature("PUT", "raw", key, exp)
         return f"{settings.local_base_url}/_local/raw/{key}?exp={exp}&sig={sig}"
-    # 지역 주소를 직접 지정한다. 기본값은 전역 주소라 새 버킷에서 리디렉션이 나온다
-    s3 = boto3.client(
-        "s3",
-        region_name=settings.aws_region,
-        endpoint_url=f"https://s3.{settings.aws_region}.amazonaws.com",
-        config=Config(s3={"addressing_style": "virtual"}),
-    )
-    return s3.generate_presigned_url(
+    return _s3().generate_presigned_url(
         "put_object",
         # IfNoneMatch는 서명에 들어가, 이미 있는 객체를 덮어쓰지 못하게 한다 (D-100)
         Params={
@@ -71,13 +77,7 @@ def make_view_url(key: str, valid_until: datetime) -> str:
         exp = int(time.time()) + seconds
         sig = _signature("GET", "masked", key, exp)
         return f"{settings.local_base_url}/_local/masked/{key}?exp={exp}&sig={sig}"
-    s3 = boto3.client(
-        "s3",
-        region_name=settings.aws_region,
-        endpoint_url=f"https://s3.{settings.aws_region}.amazonaws.com",
-        config=Config(s3={"addressing_style": "virtual"}),
-    )
-    return s3.generate_presigned_url(
+    return _s3().generate_presigned_url(
         "get_object",
         Params={"Bucket": f"{settings.s3_bucket_prefix}-masked", "Key": key},
         ExpiresIn=seconds,
@@ -98,13 +98,7 @@ def make_photo_upload_url(key: str, size_bytes: int, valid_until: datetime) -> s
         exp = int(time.time()) + seconds
         sig = _signature("PUT", "raw", key, exp)
         return f"{settings.local_base_url}/_local/raw/{key}?exp={exp}&sig={sig}"
-    s3 = boto3.client(
-        "s3",
-        region_name=settings.aws_region,
-        endpoint_url=f"https://s3.{settings.aws_region}.amazonaws.com",
-        config=Config(s3={"addressing_style": "virtual"}),
-    )
-    return s3.generate_presigned_url(
+    return _s3().generate_presigned_url(
         "put_object",
         # ContentLength가 서명에 들어가 알려준 크기와 다른 파일은 S3가 거절한다
         Params={
