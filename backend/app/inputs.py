@@ -137,6 +137,8 @@ def save_input(video_id: int, body: InputBody, user: Annotated[dict, Depends(cur
         row = _case_video(conn, video_id, user, "victim")
         expires_at = _view_expires_at(row.upload_completed_at)
         _check_raw_alive(row, expires_at)
+        if row.job_id is None:  # 업로드 중·실패 영상은 분석 작업이 없다
+            raise ApiError(409, "INVALID_STATE", "input is not accepted (no analysis job yet)")
         # 같은 입력이 동시에 두 번 와도 한쪽만 통과하게 작업 행을 잠근다 (D-46)
         job = conn.execute(
             text("SELECT status, input_completed_at FROM analysis_jobs WHERE id = :j FOR UPDATE"),

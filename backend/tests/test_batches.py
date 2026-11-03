@@ -327,3 +327,9 @@ def test_batch_fail_always_fails_again_after_retry(client, me):
     fake_worker.Worker("batch_fail_always", step=False).handle(job, "next_batch")
     row = job_row(job)
     assert (row.status, row.user_retry_count) == ("failed", 1)
+
+
+def test_video_without_job_is_409(client, me):
+    vid, _ = add_video(me)  # 업로드 중: 작업 행이 없다
+    for r in (batch(client, vid), nxt(client, vid)):
+        assert r.status_code == 409 and r.json()["error"]["code"] == "INVALID_STATE"

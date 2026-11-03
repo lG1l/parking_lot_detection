@@ -166,6 +166,12 @@ def test_wrong_state_is_409(client, me):
     assert r.status_code == 409 and r.json()["error"]["code"] == "INVALID_STATE"
 
 
+def test_video_without_job_is_409(client, me):
+    vid, _ = add_video(me)  # 업로드 중: 작업 행이 없다
+    r = put(client, vid, GOOD)
+    assert r.status_code == 409 and r.json()["error"]["code"] == "INVALID_STATE"
+
+
 def test_raw_expired_is_checked_first(client, me):
     vid, _ = add_video(me, status="stage1_done", completed_days_ago=31)
     r = put(client, vid, GOOD)

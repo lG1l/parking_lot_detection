@@ -42,7 +42,10 @@ _JOB = (
 
 
 def _job(conn, video_id: int, lock: bool = False):
-    return conn.execute(text(_JOB + " FOR UPDATE" if lock else _JOB), {"v": video_id}).one()
+    job = conn.execute(text(_JOB + " FOR UPDATE" if lock else _JOB), {"v": video_id}).one_or_none()
+    if job is None:  # 업로드 중·실패 영상은 분석 작업이 없다
+        raise ApiError(409, "INVALID_STATE", "batch is not available (no analysis job yet)")
+    return job
 
 
 def _latest(conn, job, kind: str) -> int | None:
