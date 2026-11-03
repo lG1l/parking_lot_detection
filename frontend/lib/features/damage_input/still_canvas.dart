@@ -213,11 +213,11 @@ class _OverlayPainter extends CustomPainter {
     }
     for (var i = 0; i < o.corners.length; i++) {
       final c = _off(o.corners[i]);
-      canvas.drawCircle(c, 11, Paint()..color = inkColor);
+      canvas.drawCircle(c, 8, Paint()..color = inkColor);
       final tp = TextPainter(
         text: TextSpan(
           text: '${i + 1}',
-          style: const TextStyle(color: offWhiteColor, fontSize: 12, fontWeight: FontWeight.bold),
+          style: const TextStyle(color: offWhiteColor, fontSize: 9, fontWeight: FontWeight.bold),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
