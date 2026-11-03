@@ -765,6 +765,42 @@ void main() {
     await unmount(tester);
   });
 
+  testWidgets('차 안쪽을 누르면 [다음]이 켜지고, bbox 안이어도 polygon 밖을 누르면 풀린다 (2.6, D-221)', (tester) async {
+    final backend = FakeBackend({
+      'GET /api/videos/7': (_) => json(video('stage1_done')),
+      'GET /api/videos/7/still': (_) => json({
+        'still_frame_id': 305,
+        't_sec': 0.0,
+        'image_url': 'http://x/0.jpg',
+        'detections': [
+          {
+            'det_id': 1,
+            'bbox': [400, 300, 1200, 800],
+            'polygon': [[400, 300], [1200, 300], [400, 800]], // 삼각형: 오른쪽 아래는 bbox 안이지만 차 밖
+          },
+        ],
+      }),
+    }, role: 'victim');
+    await pumpApp(tester, backend, '/videos/7/input');
+
+    final still = tester.getRect(
+      find.descendant(of: find.byType(StillCanvas), matching: find.byType(GestureDetector)).first,
+    );
+    final scale = still.width / 1920;
+    Offset at(double x, double y) => still.topLeft + Offset(x * scale, y * scale);
+    final next = find.widgetWithText(FilledButton, '다음');
+
+    expect(tester.widget<FilledButton>(next).onPressed, isNull);
+    await tester.tapAt(at(500, 400)); // 차 안쪽
+    await tester.pump();
+    expect(tester.widget<FilledButton>(next).onPressed, isNotNull);
+
+    await tester.tapAt(at(1100, 700)); // bbox 안, polygon 밖
+    await tester.pump();
+    expect(tester.widget<FilledButton>(next).onPressed, isNull);
+    await unmount(tester);
+  });
+
   testWidgets('탐지 0건이면 관리자에게 다시 올려 달라는 안내 (2.6, D-65)', (tester) async {
     final backend = FakeBackend({
       'GET /api/videos/7': (_) => json(video('stage1_done')),
