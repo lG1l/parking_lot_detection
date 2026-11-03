@@ -415,3 +415,9 @@ def test_incident_times_expired_and_foreign(client, me):
     assert (r.status_code, r.json()["error"]["code"]) == (409, "MASKED_EXPIRED")
     foreign, _ = add_video(setup_case("admin2", "victim2"), "b.mp4", "finished")
     assert times(sign_in(make_client(), "victim1"), foreign).status_code == 404
+
+
+def test_pin_on_video_without_job_is_409(client, me):
+    vid, _ = add_video(me, "u.mp4")  # 업로드 중: 작업 행이 없다
+    r = pin(client, vid, 1)
+    assert r.status_code == 409 and r.json()["error"]["code"] == "INVALID_STATE"

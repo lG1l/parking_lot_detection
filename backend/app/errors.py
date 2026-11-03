@@ -5,6 +5,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 _CODE_BY_STATUS = {
     401: "UNAUTHENTICATED",
+    403: "FORBIDDEN",
     404: "NOT_FOUND",
     409: "INVALID_STATE",
     422: "VALIDATION_FAILED",

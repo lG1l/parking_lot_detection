@@ -71,6 +71,8 @@ def pin(
     with get_engine().begin() as conn:
         row = _viewing_video(conn, video_id, user)
         _check_masked_alive(row, _view_expires_at(row.upload_completed_at))
+        if row.job_id is None:  # 업로드 중·실패 영상은 분석 작업이 없다
+            raise ApiError(409, "INVALID_STATE", "cannot pin (no analysis job yet)")
         found = conn.execute(
             text(
                 "SELECT 1 FROM candidate_clips c JOIN candidates d ON d.id = c.candidate_id "

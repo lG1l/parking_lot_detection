@@ -57,3 +57,17 @@ def test_app_does_not_import_local():
         "sys.exit(any(m == 'local' or m.startswith('local.') for m in sys.modules))"
     )
     assert subprocess.run([sys.executable, "-c", code], check=False).returncode == 0
+
+
+def test_http_403_has_forbidden_code():
+    from fastapi import HTTPException
+
+    sub = FastAPI()
+    install_error_handlers(sub)
+
+    @sub.get("/f")
+    def f():
+        raise HTTPException(403, "no")
+
+    r = TestClient(sub).get("/f")
+    assert r.status_code == 403 and r.json()["error"]["code"] == "FORBIDDEN"
