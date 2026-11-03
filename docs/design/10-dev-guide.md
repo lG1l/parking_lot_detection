@@ -39,6 +39,7 @@
 | GPU 켜기 | `backend/app/jobs.py` `start_gpu` | 역할에 `ec2:StartInstances`가 있는가. 실패해도 API가 204를 주므로(D-42) 응답이 아니라 로그(`gpu start failed: <예외 타입>`)로 확인한다. 예외 타입만 남기므로 원인을 가리기 어려우면 로그 내용을 늘릴지 판단한다 | 백엔드 |
 | GPU 켜기 점검 | `backend/app/periodic.py` `GpuCheck` | 역할에 `ec2:DescribeInstances`가 있는가. 기다리는 작업이 있고 GPU가 `stopped`일 때만 `StartInstances`를 부르는가. 실패 로그는 `GPU start failed: <에러 코드>`이고, 같은 코드가 이어지면 한 번만 남는가. 다시 성공하면 `GPU start succeeded after N failures`가 남는가 (D-42) | 백엔드 |
 | 자격 증명 | 코드 전체 | 액세스 키 없이 EC2 역할(boto3 기본 체인)만으로 위 호출이 모두 되는가 (D-123) | 백엔드 |
+| S3 클라이언트 캐시 | `backend/app/storage.py` `_s3` | 첫 URL 요청 때 자격 증명을 못 찾으면 그 클라이언트가 캐시에 남아 재시작 전까지 `NoCredentialsError`가 난다. EC2에서 URL 발급이 정상인지 확인하고, 실패가 반복되면 자격 증명이 없을 때 캐시하지 않도록 고친다 | 백엔드 |
 
 ## 로컬 PostgreSQL (D-116)
 
