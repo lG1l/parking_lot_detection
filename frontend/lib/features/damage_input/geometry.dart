@@ -2,8 +2,7 @@ import 'dart:math' as math;
 
 import '../../core/models/analysis.dart';
 
-/// 원본 해상도 기준 픽셀 점 (05장 5.7).
-typedef Pt = ({int x, int y});
+export '../../core/models/analysis.dart' show Pt;
 
 /// 화면 좌표(표시 배율 [scale])를 원본 픽셀 정수로 되돌린다. 이미지 밖은 가장자리로 붙인다.
 Pt toImagePoint(double dx, double dy, double scale, int width, int height) => (
@@ -18,13 +17,37 @@ bool boxContainsPoint(Box b, double x, double y) =>
 bool boxInside(Box inner, Box outer) =>
     inner[0] >= outer[0] && inner[1] >= outer[1] && inner[2] <= outer[2] && inner[3] <= outer[3];
 
-int _area(Box b) => (b[2] - b[0]) * (b[3] - b[1]);
+/// 점이 다각형 안인지. 점에서 오른쪽으로 반직선을 그어 변과 만나는 횟수가 홀수면 안이다.
+bool polygonContainsPoint(List<Pt> poly, double x, double y) {
+  var inside = false;
+  for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    final a = poly[i];
+    final b = poly[j];
+    if ((a.y > y) != (b.y > y) && x < (b.x - a.x) * (y - a.y) / (b.y - a.y) + a.x) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
 
-/// 누른 점을 품는 차량 중 고를 것 (07장 2.6 "겹친 사각형").
-/// 넓이가 가장 작은 것을 잡고, 이미 고른 것을 다시 누르면 그다음으로 작은 것으로 바꾼다.
+/// 다각형 넓이 (신발끈 공식).
+double polygonArea(List<Pt> poly) {
+  var sum = 0;
+  for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    sum += poly[j].x * poly[i].y - poly[i].x * poly[j].y;
+  }
+  return sum.abs() / 2;
+}
+
+/// 누른 점을 품는 차량을 넓이가 작은 순으로 (07장 2.6 "겹친 곳", D-221).
+List<Detection> detectionsAt(List<Detection> detections, double x, double y) =>
+    detections.where((d) => polygonContainsPoint(d.polygon, x, y)).toList()
+      ..sort((a, b) => polygonArea(a.polygon).compareTo(polygonArea(b.polygon)));
+
+/// 누른 점을 품는 차량 중 고를 것. 넓이가 가장 작은 것을 잡고,
+/// 이미 고른 것을 다시 누르면 그다음으로 작은 것으로 바꾼다.
 int? pickDetection(List<Detection> detections, double x, double y, int? current) {
-  final hits = detections.where((d) => boxContainsPoint(d.bbox, x, y)).toList()
-    ..sort((a, b) => _area(a.bbox).compareTo(_area(b.bbox)));
+  final hits = detectionsAt(detections, x, y);
   if (hits.isEmpty) return null;
   final i = hits.indexWhere((d) => d.detId == current);
   return hits[(i + 1) % hits.length].detId;

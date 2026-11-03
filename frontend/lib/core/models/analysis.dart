@@ -2,16 +2,26 @@
 
 typedef Box = List<int>; // [x1, y1, x2, y2], 원본 해상도 픽셀
 
+/// 원본 해상도 기준 픽셀 점 (05장 5.7).
+typedef Pt = ({int x, int y});
+
 Box _box(dynamic v) => (v as List).map((e) => (e as num).toInt()).toList();
 
+/// `polygon`은 [[x, y], ...] 꼴이다 (05장 5.6, D-221).
+List<Pt> _polygon(dynamic v) => (v as List).map((e) {
+  final p = e as List;
+  return (x: (p[0] as num).toInt(), y: (p[1] as num).toInt());
+}).toList();
+
 class Detection {
-  Detection(this.detId, this.bbox);
+  Detection(this.detId, this.bbox, this.polygon);
 
   factory Detection.fromJson(Map<String, dynamic> j) =>
-      Detection(j['det_id'] as int, _box(j['bbox']));
+      Detection(j['det_id'] as int, _box(j['bbox']), _polygon(j['polygon']));
 
   final int detId;
   final Box bbox;
+  final List<Pt> polygon;
 }
 
 class Still {

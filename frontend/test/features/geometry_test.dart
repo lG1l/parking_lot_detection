@@ -10,11 +10,20 @@ void main() {
     expect(toImagePoint(-3, 2000, 0.5, 1920, 1080), p(0, 1080));
   });
 
-  group('겹친 사각형 고르기 (07장 2.6)', () {
+  List<Pt> rect(int x1, int y1, int x2, int y2) => [p(x1, y1), p(x2, y1), p(x2, y2), p(x1, y2)];
+
+  test('다각형 안쪽 판정은 bbox가 아니라 윤곽을 따른다', () {
+    // ㄷ자: 오른쪽이 x 40~100, y 30~70만큼 파여 있다
+    final c = [p(0, 0), p(100, 0), p(100, 30), p(40, 30), p(40, 70), p(100, 70), p(100, 100), p(0, 100)];
+    expect(polygonContainsPoint(c, 20, 50), isTrue);
+    expect(polygonContainsPoint(c, 70, 50), isFalse); // bbox 안이지만 파인 곳
+  });
+
+  group('겹친 곳 고르기 (07장 2.6)', () {
     final dets = [
-      Detection(1, [0, 0, 100, 100]),
-      Detection(2, [20, 20, 60, 60]),
-      Detection(3, [200, 200, 300, 300]),
+      Detection(1, [0, 0, 100, 100], rect(0, 0, 100, 100)),
+      Detection(2, [20, 20, 60, 60], rect(20, 20, 60, 60)),
+      Detection(3, [200, 200, 300, 300], rect(200, 200, 300, 300)),
     ];
 
     test('누른 점을 품는 것 중 가장 작은 것', () {
