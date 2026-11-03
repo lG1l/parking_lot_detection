@@ -8,11 +8,13 @@ import '../../core/models/analysis.dart';
 import 'geometry.dart';
 
 /// 정지 장면 위에 그릴 것. 좌표는 모두 원본 픽셀이다.
+/// [detections]는 마우스를 올린 차를 칠하는 데만 쓴다. 평소에는 차량 표시를 하지 않는다 (D-221).
 class StillOverlay {
   const StillOverlay({
     this.detections = const [],
     this.hoveredDetId,
-    this.selectedBox,
+    this.selectedPolygon,
+    this.selectedStrong = false,
     this.damageBox,
     this.corners = const [],
     this.frontEdge,
@@ -22,7 +24,10 @@ class StillOverlay {
 
   final List<Detection> detections;
   final int? hoveredDetId;
-  final Box? selectedBox;
+  final List<Pt>? selectedPolygon;
+
+  /// 고르는 단계(①)에서는 진하게, 뒤 단계에서는 옅게 칠한다 (D-221, D-222).
+  final bool selectedStrong;
   final Box? damageBox;
   final List<Pt> corners;
   final int? frontEdge;
@@ -148,34 +153,26 @@ class _OverlayPainter extends CustomPainter {
   final StillOverlay o;
   final double scale;
 
+  static const _lightAlpha = 0.25;
+  static const _strongAlpha = 0.6;
+
+  void _fill(Canvas canvas, List<Pt> polygon, double alpha) {
+    final path = Path()..addPolygon(polygon.map(_off).toList(), true);
+    canvas.drawPath(path, Paint()..color = vehicleColor.withValues(alpha: alpha));
+  }
+
   Rect _rect(Box b) => Rect.fromLTRB(b[0] * scale, b[1] * scale, b[2] * scale, b[3] * scale);
   Offset _off(Pt p) => Offset(p.x * scale, p.y * scale);
 
   @override
   void paint(Canvas canvas, Size size) {
-    // 고르기 전 사각형은 얇은 선(2px)만, 마우스를 올린 것만 굵게 (07장 2.6)
+    // 사각형과 윤곽선은 그리지 않는다. 마우스를 올린 차는 옅게, 고른 차는 ①에서 진하게, 뒤 단계에서 옅게 칠한다 (D-221, D-222).
+    // 고른 차량은 노랑, 파손 부위는 주황, 바닥 변은 흰색, 고른 파손 변은 빨강 (D-190)
     for (final d in o.detections) {
-      final hovered = d.detId == o.hoveredDetId;
-      canvas.drawRect(
-        _rect(d.bbox),
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = hovered ? 4 : 2
-          ..color = hovered ? Colors.white : Colors.white70,
-      );
+      if (d.detId == o.hoveredDetId) _fill(canvas, d.polygon, _lightAlpha);
     }
-    final selected = o.selectedBox;
-    if (selected != null) {
-      // 고른 차량은 노랑, 파손 부위는 주황, 바닥 변은 흰색, 고른 파손 변은 빨강 (D-190)
-      canvas.drawRect(_rect(selected), Paint()..color = vehicleColor.withValues(alpha: 0.12));
-      canvas.drawRect(
-        _rect(selected),
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 4
-          ..color = vehicleColor,
-      );
-    }
+    final selected = o.selectedPolygon;
+    if (selected != null) _fill(canvas, selected, o.selectedStrong ? _strongAlpha : _lightAlpha);
     final damage = o.damageBox;
     if (damage != null) {
       final r = _rect(damage);

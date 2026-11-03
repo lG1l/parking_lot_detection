@@ -700,6 +700,7 @@ void main() {
           {
             'det_id': 1,
             'bbox': [400, 300, 1200, 800],
+            'polygon': [[400, 300], [1200, 300], [1200, 800], [400, 800]],
           },
         ],
       }),
@@ -760,6 +761,7 @@ void main() {
     expect(saved?['schema_version'], 6);
     expect(saved?['damage']['front_edge'], 2);
     expect(saved?['damage']['damage_edges'], [0]);
+    expect(saved?['vehicle'], {'det_id': 1}); // polygon은 보내지 않는다 (D-221)
     await unmount(tester);
   });
 

@@ -105,11 +105,13 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
     super.dispose();
   }
 
-  Box? get _vehicleBox {
+  Detection? get _vehicle {
     final still = _still;
     if (still == null || _detId == null) return null;
-    return still.detections.firstWhere((d) => d.detId == _detId).bbox;
+    return still.detections.firstWhere((d) => d.detId == _detId);
   }
+
+  Box? get _vehicleBox => _vehicle?.bbox;
 
   bool get _entered =>
       _detId != null || _visible != null || _corners.isNotEmpty || _photo != null || _description.text.isNotEmpty;
@@ -170,21 +172,19 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
   // ① 차량 고르기
   void _tapVehicle(double x, double y) {
     final picked = pickDetection(_still!.detections, x, y, _detId);
-    if (picked == null) return;
     setState(() {
-      _detId = picked;
-      final box = _vehicleBox!;
-      if (_damage != null && !boxInside(_damage!, box)) _damage = null;
+      _detId = picked; // 빈 곳을 누르면 null이라 선택이 풀린다 (D-221)
+      final box = _vehicleBox;
+      if (box == null) {
+        _damage = null;
+      } else if (_damage != null && !boxInside(_damage!, box)) {
+        _damage = null;
+      }
     });
   }
 
   void _hoverVehicle(double x, double y) {
-    final hits = _still!.detections.where((d) => boxContainsPoint(d.bbox, x, y)).toList()
-      ..sort(
-        (a, b) => ((a.bbox[2] - a.bbox[0]) * (a.bbox[3] - a.bbox[1])).compareTo(
-          (b.bbox[2] - b.bbox[0]) * (b.bbox[3] - b.bbox[1]),
-        ),
-      );
+    final hits = detectionsAt(_still!.detections, x, y);
     final id = hits.isEmpty ? null : hits.first.detId;
     if (id != _hoverDetId) setState(() => _hoverDetId = id);
   }
@@ -394,7 +394,8 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
     return StillOverlay(
       detections: _step == InputStep.vehicle ? _still!.detections : const [],
       hoveredDetId: _step == InputStep.vehicle ? _hoverDetId : null,
-      selectedBox: _vehicleBox,
+      selectedPolygon: _vehicle?.polygon,
+      selectedStrong: _step == InputStep.vehicle,
       damageBox: s >= InputStep.damage.index ? (_dragBox ?? _damage) : null,
       corners: s >= InputStep.corners.index ? _corners : const [],
       frontEdge: s >= InputStep.front.index ? _frontEdge : null,
