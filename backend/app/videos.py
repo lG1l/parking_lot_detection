@@ -188,8 +188,11 @@ def get_still(video_id: int, request: Request, user: Annotated[dict, Depends(cur
     return {
         "still_frame_id": still.id,
         "t_sec": still.t_sec,
-        # conf는 화면이 쓰지 않아 뺀다 (D-65)
-        "detections": [{"det_id": d["det_id"], "bbox": d["bbox"]} for d in still.detections],
+        # conf는 화면이 쓰지 않아 뺀다 (D-65). polygon은 차를 칠하고 고르는 데 쓴다 (D-221)
+        "detections": [
+            {"det_id": d["det_id"], "bbox": d["bbox"], "polygon": d["polygon"]}
+            for d in still.detections
+        ],
         "image_url": storage.make_view_url(
             still.masked_s3_key, expires_at or row.now + timedelta(days=VIEW_DAYS)
         ),

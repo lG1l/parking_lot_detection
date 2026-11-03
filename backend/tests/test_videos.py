@@ -85,7 +85,9 @@ def add_video(
 
 def add_still(job_id, video_id, detections=None):
     detections = (
-        [{"det_id": 1, "bbox": [1, 2, 3, 4], "conf": 0.9}] if detections is None else detections
+        [{"det_id": 1, "bbox": [1, 2, 3, 4], "conf": 0.9, "polygon": [[1, 2], [3, 2], [3, 4]]}]
+        if detections is None
+        else detections
     )
     sql(
         "INSERT INTO still_frames (analysis_job_id, t_sec, masked_s3_key, detections) "
@@ -276,12 +278,18 @@ def test_still_ok_hides_conf_and_url_works(victim, case, tmp_path):
     from tests.conftest import STORAGE
 
     vid, job = add_video(case, status="stage1_done")
-    add_still(job, vid, [{"det_id": 1, "bbox": [1, 2, 3, 4], "conf": 0.9}])
+    add_still(
+        job,
+        vid,
+        [{"det_id": 1, "bbox": [1, 2, 3, 4], "conf": 0.9, "polygon": [[1, 2], [3, 2], [3, 4]]}],
+    )
     path = STORAGE / "masked" / f"videos/{vid}/stills/0.jpg"
     path.parent.mkdir(parents=True)
     path.write_bytes(b"0123456789")
     body = victim.get(f"/api/videos/{vid}/still").json()
-    assert body["detections"] == [{"det_id": 1, "bbox": [1, 2, 3, 4]}]
+    assert body["detections"] == [
+        {"det_id": 1, "bbox": [1, 2, 3, 4], "polygon": [[1, 2], [3, 2], [3, 4]]}
+    ]
     assert body["t_sec"] == 0.0
     url = body["image_url"].removeprefix("http://localhost:8000")
     r = victim.get(url)
