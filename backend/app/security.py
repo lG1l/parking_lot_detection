@@ -19,6 +19,8 @@ def verify_password(plain: str, hashed: str) -> bool:
     data = plain.encode("utf-8")
     if len(data) > MAX_PASSWORD_BYTES:
         return False  # 만들 수 없는 길이라 맞을 수 없다
+    if b"\x00" in data:
+        return False  # bcrypt가 NUL을 거부해 ValueError(500)가 나므로 401로 처리한다
     return bcrypt.checkpw(data, hashed.encode())
 
 
