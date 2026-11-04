@@ -90,3 +90,6 @@ origin_docs/
 
 # 스킬 도구 생성 파일
 skills-lock.json
+
+# Flutter Web 빌드 결과를 서버에서 푸는 곳 (D-154)
+backend/web/

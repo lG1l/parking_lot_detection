@@ -1,9 +1,15 @@
+from pathlib import Path
+
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from app import auth, batches, cases, inputs, local_routes, pins, retry, uploads, videos
 from app.config import get_settings
 from app.errors import install_error_handlers
 from app.log_filter import install_log_filter
+
+# 갱신 스크립트가 web.tar.gz를 여기에 푼다 (D-154). 로컬은 Flutter 개발 서버를 쓰므로 없다.
+WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
 
 def create_app() -> FastAPI:
@@ -26,6 +32,10 @@ def create_app() -> FastAPI:
     @app.get("/api/health")
     def health():
         return {"status": "ok"}
+
+    # 화면 파일은 API와 같은 서버에서 준다 (D-11). 라우터보다 뒤에 둬야 /api/*가 먼저 처리된다.
+    if WEB_DIR.is_dir():
+        app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")
 
     return app
 

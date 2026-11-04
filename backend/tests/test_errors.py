@@ -71,3 +71,16 @@ def test_http_403_has_forbidden_code():
 
     r = TestClient(sub).get("/f")
     assert r.status_code == 403 and r.json()["error"]["code"] == "FORBIDDEN"
+
+
+def test_web_files_served_after_api(tmp_path, monkeypatch):
+    from app import main
+
+    (tmp_path / "index.html").write_text("<p>web</p>")
+    monkeypatch.setattr(main, "WEB_DIR", tmp_path)
+    c = TestClient(main.create_app())
+    assert c.get("/").text == "<p>web</p>"
+    assert c.get("/api/health").json() == {"status": "ok"}
+    r = c.get("/api/nope")
+    assert r.status_code == 404
+    assert set(r.json()["error"]) == {"code", "message"}
