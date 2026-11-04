@@ -596,6 +596,36 @@ void main() {
     await unmount(tester);
   });
 
+  testWidgets('전부 열람 불가로 두 탭이 끝났으면 [다음 ▶]으로 확인창 뒤 끝낸다 (2.7, D-203)', (tester) async {
+    final done = {
+      'main': {'latest_batch_no': 1, 'remaining': 0, 'done': true, 'unavailable': 3},
+      'parse_failed': {'latest_batch_no': null, 'remaining': 0, 'done': true, 'unavailable': 0},
+    };
+    final backend = FakeBackend({
+      'GET /api/videos/7': (_) => json(video('ready')),
+      'GET /api/videos/7/batch': (_) => json({
+        'list': 'main',
+        'batch_no': 1,
+        'unavailable': 3,
+        'candidates': [],
+        'lists': done,
+      }),
+      'GET /api/videos/7/pin': (_) => json([]),
+      'POST /api/videos/7/batch/next': (_) => json({'status': 'exhausted', 'lists': done}),
+    });
+    await pumpApp(tester, backend, '/videos/7/candidates');
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '확인 완료')).onPressed, isNull);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '다음 ▶'));
+    await settle(tester);
+    expect(find.textContaining('마지막 묶음입니다.'), findsOneWidget);
+    expect(backend.calls, isNot(contains('POST /api/videos/7/batch/next')));
+    await tester.tap(find.widgetWithText(FilledButton, '넘기기'));
+    await settle(tester);
+    expect(backend.calls, contains('POST /api/videos/7/batch/next'));
+    await unmount(tester);
+  });
+
   testWidgets('[고정 해제]로 풀면 확정됨과 [확인 완료]가 막히고 [고정]이 돌아온다 (2.7, D-189)', (tester) async {
     final backend = FakeBackend({
       'GET /api/videos/7': (_) => json(video('ready')),

@@ -24,6 +24,13 @@ void main() {
     expect(canFetchNext(batch(2), s(2, 10, false), 'batch_running'), isFalse);
   });
 
+  test('두 탭이 모두 끝났는데 ready면 끝내는 버튼을 남긴다 (D-203)', () {
+    expect(canFetchNext(batch(2), s(2, 0, true), 'ready', otherDone: true), isTrue);
+    expect(canFetchNext(batch(1), s(2, 0, true), 'ready', otherDone: true), isFalse); // 앞 묶음
+    expect(canFetchNext(batch(2), s(2, 0, true), 'exhausted', otherDone: true), isFalse);
+    expect(isLastPage(batch(2), s(2, 0, true), 'ready'), isFalse); // [확인 완료]가 아니라 [다음 ▶]로 끝낸다
+  });
+
   test('마지막 페이지는 받을 후보가 없고 마지막 묶음을 아직 넘기지 않았을 때 (D-190)', () {
     expect(isLastPage(batch(2), s(2, 0, false), 'ready'), isTrue);
     expect(isLastPage(batch(2), s(2, 10, false), 'ready'), isFalse); // 받을 후보가 남았다 → [다음 ▶]

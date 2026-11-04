@@ -201,6 +201,16 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
     if (ok && mounted) await _fetchNext();
   }
 
+  /// 두 탭이 모두 끝났는데 ready일 때의 [다음 ▶]. 확인창 뒤 13번으로 끝낸다 (D-203, 07장 2.7).
+  Future<void> _endAll() async {
+    final ok = await confirm(
+      context,
+      '마지막 묶음입니다. 넘기면 후보 확인이 끝나고 더는 [고정]을 누를 수 없습니다.',
+      okLabel: '넘기기',
+    );
+    if (ok && mounted) await _fetchNext();
+  }
+
   Future<void> _fetchNext() async {
     final b = _batch!;
     // 백엔드 연결 필요: 13번 다음 묶음 받기
@@ -478,7 +488,8 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
   Widget _navigation(Batch batch, ListSummary tab) {
     final latest = tab.latestBatchNo ?? batch.batchNo;
     final lastPage = isLastPage(batch, tab, _status!);
-    final showFetch = canFetchNext(batch, tab, _status!) && !lastPage;
+    final otherDone = _lists![CandidateList.other(_tab)]!.done;
+    final showFetch = canFetchNext(batch, tab, _status!, otherDone: otherDone) && !lastPage;
     return Wrap(
       alignment: WrapAlignment.end,
       crossAxisAlignment: WrapCrossAlignment.center,
@@ -493,7 +504,10 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
         Text('묶음 ${batch.batchNo} / $latest', style: const TextStyle(fontWeight: FontWeight.w600)),
         if (showFetch)
           // 이름은 [다음 ▶]과 같다. 받은 묶음이 끝이면 13번으로 새 묶음을 받는다 (D-190)
-          OutlinedButton(onPressed: _busy ? null : _fetchNext, child: const Text('다음 ▶'))
+          OutlinedButton(
+            onPressed: _busy ? null : (tab.done ? _endAll : _fetchNext),
+            child: const Text('다음 ▶'),
+          )
         else
           OutlinedButton(
             onPressed: _busy || batch.batchNo >= latest

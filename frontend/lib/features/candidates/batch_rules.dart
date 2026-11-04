@@ -3,8 +3,9 @@ import '../../core/models/video.dart';
 
 /// [다음 묶음 받기]를 보일지 (07장 2.7, 05장 5.8).
 /// 보고 있는 묶음이 그 탭의 마지막이고, 그 탭을 다 넘기지 않았고, 상태가 ready일 때만.
-bool canFetchNext(Batch batch, ListSummary tab, String status) =>
-    status == VideoStatus.ready && batch.batchNo == tab.latestBatchNo && !tab.done;
+/// 두 탭이 모두 끝났는데([otherDone]) ready면 13번으로 끝내도록 버튼을 남긴다. 전부 열람 불가일 때 이 길로 끝난다 (D-203).
+bool canFetchNext(Batch batch, ListSummary tab, String status, {bool otherDone = false}) =>
+    status == VideoStatus.ready && batch.batchNo == tab.latestBatchNo && (!tab.done || otherDone);
 
 /// 이 탭의 마지막 페이지인지: 받을 후보가 더 없고(remaining 0) 마지막 묶음을 보고 있으며 아직 넘기지 않았다.
 /// 이때는 [다음 ▶]을 막고 [확인 완료]로 이 탭을 끝낸다(13번) (D-190).

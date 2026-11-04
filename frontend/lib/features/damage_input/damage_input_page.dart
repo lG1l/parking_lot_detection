@@ -671,7 +671,7 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
     final photo = _photo;
     final text = _description.text.trim();
     final rows = [
-      ('선택한 차량', '노란 사각형'),
+      ('선택한 차량', '노랗게 칠한 차'),
       ('파손 보임', _visible == true ? '보임' : '안 보임'),
       ('파손 부위', '빨간 사각형'),
       ('바닥 모서리', '${_corners.length}개'),
