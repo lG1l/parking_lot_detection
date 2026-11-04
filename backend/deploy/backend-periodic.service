@@ -1,0 +1,11 @@
+# 주기 작업 (D-105). update.sh만 시작한다
+[Unit]
+Description=backend periodic jobs
+After=postgresql.service
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/app/backend
+ExecStart=/home/ubuntu/app/backend/.venv/bin/python -m app.periodic
+Restart=on-failure
+RestartSec=5

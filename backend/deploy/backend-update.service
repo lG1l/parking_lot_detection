@@ -1,0 +1,13 @@
+# 부팅 때 최신 코드로 갱신하고 API 서버·주기 작업을 시작한다 (D-125)
+[Unit]
+Description=backend update
+Wants=network-online.target
+After=network-online.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/ubuntu/app/backend/deploy/update.sh
+
+[Install]
+WantedBy=multi-user.target

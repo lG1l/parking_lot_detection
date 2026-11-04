@@ -1,0 +1,12 @@
+# API 서버. update.sh만 시작한다. 갱신이 실패하면 시작되지 않는다 (D-126)
+[Unit]
+Description=backend API
+After=postgresql.service
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/app/backend
+# 8000번은 보안 그룹으로 연다 (D-133). 데모는 HTTP (D-11)
+ExecStart=/home/ubuntu/app/backend/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=5
