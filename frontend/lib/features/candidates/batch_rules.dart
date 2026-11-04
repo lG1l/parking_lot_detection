@@ -8,7 +8,7 @@ bool canFetchNext(Batch batch, ListSummary tab, String status, {bool otherDone =
     status == VideoStatus.ready && batch.batchNo == tab.latestBatchNo && (!tab.done || otherDone);
 
 /// 이 탭의 마지막 페이지인지: 받을 후보가 더 없고(remaining 0) 마지막 묶음을 보고 있으며 아직 넘기지 않았다.
-/// 이때는 [다음 ▶]을 막고 [확인 완료]로 이 탭을 끝낸다(13번) (D-190).
+/// 이때는 [다음 ▶]을 막고 [확인 끝내기]로 이 탭을 끝낸다(13번) (D-190).
 bool isLastPage(Batch batch, ListSummary tab, String status) =>
     canFetchNext(batch, tab, status) && tab.remaining == 0;
 

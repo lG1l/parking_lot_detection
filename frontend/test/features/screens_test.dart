@@ -523,7 +523,7 @@ void main() {
     expect(backend.calls, isNot(contains('POST /api/videos/17/upload/complete')));
   });
 
-  testWidgets('[고정]을 누르면 확정됨 표시와 [확인 완료]를 누를 수 있다 (2.7)', (tester) async {
+  testWidgets('[찾음]을 누르면 확정됨 표시와 [확인 끝내기]를 누를 수 있다 (2.7)', (tester) async {
     final backend = FakeBackend({
       'GET /api/videos/7': (_) => json(video('ready')),
       'GET /api/videos/7/batch': (_) => json({
@@ -552,17 +552,17 @@ void main() {
     expect(find.text('2026-11-19 10:00까지 열람 가능'), findsOneWidget); // 제목 위 작은 글자 (캔버스 2.7)
     expect(find.text('이 묶음에 영상을 준비하지 못해 볼 수 없는 후보가 1건 있습니다.'), findsOneWidget);
     expect(find.text('다음 ▶'), findsOneWidget); // 새 묶음을 받는 버튼도 이름은 [다음 ▶] (D-190)
-    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '확인 완료')).onPressed, isNull); // 늘 보이지만 막힘
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '확인 끝내기')).onPressed, isNull); // 늘 보이지만 막힘
 
-    await tester.tap(find.widgetWithText(FilledButton, '고정'));
+    await tester.tap(find.widgetWithText(FilledButton, '찾음'));
     await settle(tester);
     expect(find.byType(AlertDialog), findsNothing); // 확인창 없이 바로 고정 (D-190)
     expect(find.text('확정됨'), findsOneWidget);
-    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '확인 완료')).onPressed, isNotNull);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '확인 끝내기')).onPressed, isNotNull);
     expect(backend.calls, contains('POST /api/videos/7/pin'));
   });
 
-  testWidgets('마지막 페이지는 [다음 ▶]이 막히고 [확인 완료]로 확인창 뒤 끝낸다 (2.7, D-190)', (tester) async {
+  testWidgets('마지막 페이지는 [다음 ▶]이 막히고 [확인 끝내기]로 확인창 뒤 끝낸다 (2.7, D-190)', (tester) async {
     final backend = FakeBackend({
       'GET /api/videos/7': (_) => json(video('ready')),
       'GET /api/videos/7/batch': (_) => json({
@@ -587,7 +587,7 @@ void main() {
     await pumpApp(tester, backend, '/videos/7/candidates');
     expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, '다음 ▶')).onPressed, isNull);
 
-    await tester.tap(find.widgetWithText(FilledButton, '확인 완료')); // 고정이 없어도 보인다
+    await tester.tap(find.widgetWithText(FilledButton, '확인 끝내기')); // 고정이 없어도 보인다
     await settle(tester);
     expect(find.text('후보 확인을 끝낼까요?'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, '끝내기'));
@@ -614,7 +614,7 @@ void main() {
       'POST /api/videos/7/batch/next': (_) => json({'status': 'exhausted', 'lists': done}),
     });
     await pumpApp(tester, backend, '/videos/7/candidates');
-    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '확인 완료')).onPressed, isNull);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '확인 끝내기')).onPressed, isNull);
 
     await tester.tap(find.widgetWithText(OutlinedButton, '다음 ▶'));
     await settle(tester);
@@ -626,7 +626,7 @@ void main() {
     await unmount(tester);
   });
 
-  testWidgets('[고정 해제]로 풀면 확정됨과 [확인 완료]가 막히고 [고정]이 돌아온다 (2.7, D-189)', (tester) async {
+  testWidgets('[고정 해제]로 풀면 확정됨과 [확인 끝내기]가 막히고 [찾음]이 돌아온다 (2.7, D-189)', (tester) async {
     final backend = FakeBackend({
       'GET /api/videos/7': (_) => json(video('ready')),
       'GET /api/videos/7/batch': (_) => candidateBatch1187(),
@@ -635,20 +635,20 @@ void main() {
     });
     await pumpApp(tester, backend, '/videos/7/candidates');
     expect(find.text('확정됨'), findsOneWidget);
-    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '확인 완료')).onPressed, isNotNull);
-    expect(find.widgetWithText(FilledButton, '고정'), findsNothing);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '확인 끝내기')).onPressed, isNotNull);
+    expect(find.widgetWithText(FilledButton, '찾음'), findsNothing);
 
     await tester.tap(find.widgetWithText(OutlinedButton, '고정 해제'));
     await settle(tester);
     expect(find.byType(AlertDialog), findsNothing); // 확인창 없이 바로 해제 (D-190)
     expect(backend.calls, contains('DELETE /api/videos/7/pin/1187'));
     expect(find.text('확정됨'), findsNothing);
-    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '확인 완료')).onPressed, isNull); // 늘 보이지만 막힘
-    expect(find.widgetWithText(FilledButton, '고정'), findsOneWidget);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '확인 끝내기')).onPressed, isNull); // 늘 보이지만 막힘
+    expect(find.widgetWithText(FilledButton, '찾음'), findsOneWidget);
   });
 
   testWidgets('다른 탭에서 이미 끝냈으면 해제가 INVALID_STATE로 거절되고 상태를 다시 읽는다 (2.7, D-189)', (tester) async {
-    var finished = false; // 화면을 연 뒤 다른 탭에서 [확인 완료]를 눌렀다고 본다
+    var finished = false; // 화면을 연 뒤 다른 탭에서 [확인 끝내기]를 눌렀다고 본다
     final backend = FakeBackend({
       'GET /api/videos/7': (_) => json(video(finished ? 'finished' : 'ready')),
       'GET /api/videos/7/batch': (_) => candidateBatch1187(),

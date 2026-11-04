@@ -17,7 +17,7 @@ import '../video_status/status_rules.dart';
 import '../video_status/video_status_page.dart';
 import 'batch_rules.dart';
 
-/// 2.7 후보 확인. 두 탭(후보군·파싱 실패)을 묶음 단위로 보고 [고정]으로 사건 지점을 고정한다.
+/// 2.7 후보 확인. 두 탭(후보군·파싱 실패)을 묶음 단위로 보고 [찾음]으로 사건 지점을 고정한다.
 class CandidatesPage extends ConsumerStatefulWidget {
   const CandidatesPage({super.key, required this.videoId});
 
@@ -152,9 +152,9 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
   }
 
   Future<void> _pin(CandidateClip c) async {
-    // 확인창 없이 바로 고정한다. [확인 완료] 전까지 [고정 해제]로 풀 수 있다 (D-190)
+    // 확인창 없이 바로 고정한다. [확인 끝내기] 전까지 [고정 해제]로 풀 수 있다 (D-190)
     // 백엔드 연결 필요: 14번 사건 지점 고정
-    await backendNotice(context, ref, '고정');
+    await backendNotice(context, ref, '찾음');
     setState(() => _pinning.add(c.candidateClipId));
     try {
       _setPins(await _api.pin(_id, c.candidateClipId)); // 14, 응답이 곧 고정 목록
@@ -166,7 +166,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
   }
 
   Future<void> _unpin(CandidateClip c) async {
-    // 확인창 없이 바로 해제한다. [확인 완료] 전까지 다시 [고정]할 수 있다 (D-190)
+    // 확인창 없이 바로 해제한다. [확인 끝내기] 전까지 다시 [찾음]을 누를 수 있다 (D-190)
     // 백엔드 연결 필요: 20번 사건 지점 고정 해제
     await backendNotice(context, ref, '고정 해제');
     setState(() => _pinning.add(c.candidateClipId));
@@ -179,7 +179,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
     }
   }
 
-  /// 마지막 페이지의 [확인 완료]: 확인창을 띄운 뒤 13번으로 이 탭의 마지막 묶음을 넘긴다 (D-190).
+  /// 마지막 페이지의 [확인 끝내기]: 확인창을 띄운 뒤 13번으로 이 탭의 마지막 묶음을 넘긴다 (D-190).
   /// 다른 탭도 끝났으면 영상 전체가 끝나(exhausted) 완료 또는 결과 화면으로 간다.
   /// 다른 탭에 후보가 남았으면 이 탭만 끝나고, 이 페이지에 "모두 확인했습니다" 안내가 뜬다.
   Future<void> _endTab() async {
@@ -188,7 +188,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
     final ok = whole
         ? await confirm(
             context,
-            '모든 후보를 확인한 것으로 끝냅니다. 끝낸 뒤에는 더는 [고정]을 누를 수 없습니다. 고정한 장면은 결과 화면에서 볼 수 있습니다.',
+            '모든 후보를 확인한 것으로 끝냅니다. 끝낸 뒤에는 더는 [찾음]을 누를 수 없습니다. 고정한 장면은 결과 화면에서 볼 수 있습니다.',
             title: '후보 확인을 끝낼까요?',
             okLabel: '끝내기',
           )
@@ -205,7 +205,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
   Future<void> _endAll() async {
     final ok = await confirm(
       context,
-      '마지막 묶음입니다. 넘기면 후보 확인이 끝나고 더는 [고정]을 누를 수 없습니다.',
+      '마지막 묶음입니다. 넘기면 후보 확인이 끝나고 더는 [찾음]을 누를 수 없습니다.',
       okLabel: '넘기기',
     );
     if (ok && mounted) await _fetchNext();
@@ -236,7 +236,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
   Future<void> _finish() async {
     if (!await confirm(
       context,
-      '끝낸 뒤에는 더는 [고정]을 누를 수 없습니다. 고정한 장면은 결과 화면에서 볼 수 있습니다.',
+      '끝낸 뒤에는 더는 [찾음]을 누를 수 없습니다. 고정한 장면은 결과 화면에서 볼 수 있습니다.',
       title: '후보 확인을 끝낼까요?',
       okLabel: '끝내기',
     )) {
@@ -244,7 +244,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
     }
     if (!mounted) return;
     // 백엔드 연결 필요: 17번 확인 끝내기
-    await backendNotice(context, ref, '확인 완료');
+    await backendNotice(context, ref, '확인 끝내기');
     await _run(() async {
       await _api.finish(_id); // 17
       if (mounted) redirectTo(context, '/videos/$_id/results');
@@ -307,7 +307,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
         Text(
           _tab == CandidateList.main
               ? '점수(0~100)는 차량 접촉 근거가 얼마나 뚜렷한지를 나타내며, 사고가 났을 확률이 아닙니다.'
-              : 'AI가 점수를 내지 못한 후보입니다. 사건 가능성이 낮다는 뜻은 아닙니다.',
+              : 'AI 답변 형식이 맞지 않아 3번 다시 불러도 점수를 읽지 못한 후보를 모았습니다. 사건 가능성이 낮다는 뜻은 아닙니다.',
           style: const TextStyle(fontSize: 15, color: subColor),
         ),
         const SizedBox(height: 12),
@@ -321,7 +321,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
                 Text('다음 영상 묶음을 만드는 중입니다.', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
                 SizedBox(height: 8),
                 Text(
-                  '그동안 [◀ 이전]으로 앞 묶음을 다시 보고 [고정]을 누를 수 있습니다.',
+                  '그동안 [◀ 이전]으로 앞 묶음을 다시 보고 [찾음]을 누를 수 있습니다.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 15, height: 1.6, color: subColor),
                 ),
@@ -475,7 +475,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
               else
                 FilledButton(
                   onPressed: _pinning.contains(c.candidateClipId) ? null : () => _pin(c),
-                  child: const Text('고정'),
+                  child: const Text('찾음'),
                 ),
             ],
           ),
@@ -484,7 +484,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
     );
   }
 
-  /// 아래 오른쪽 줄: 남은 후보 · [◀ 이전] · 묶음 n / m · [다음 ▶] · [확인 완료] (캔버스 2.7).
+  /// 아래 오른쪽 줄: 남은 후보 · [◀ 이전] · 묶음 n / m · [다음 ▶] · [확인 끝내기] (캔버스 2.7).
   Widget _navigation(Batch batch, ListSummary tab) {
     final latest = tab.latestBatchNo ?? batch.batchNo;
     final lastPage = isLastPage(batch, tab, _status!);
@@ -515,7 +515,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
                 : () => _run(() => _loadBatch(batchNo: batch.batchNo + 1)),
             child: const Text('다음 ▶'),
           ),
-        // [확인 완료]는 늘 보인다 (D-190). 마지막 페이지면 이 탭을 끝내고(13번),
+        // [확인 끝내기]는 늘 보인다 (D-190). 마지막 페이지면 이 탭을 끝내고(13번),
         // 그 전에는 고정이 1개 이상일 때 영상 전체를 끝낸다(17번). 둘 다 아니면 막는다.
         Tooltip(
           message: lastPage || _pinned.isNotEmpty ? '' : '장면을 고정했거나 마지막 묶음까지 보면 누를 수 있습니다',
@@ -527,7 +527,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
                 : _pinned.isNotEmpty
                 ? _finish
                 : null,
-            child: const Text('확인 완료'),
+            child: const Text('확인 끝내기'),
           ),
         ),
       ],
