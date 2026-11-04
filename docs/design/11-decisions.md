@@ -8207,3 +8207,35 @@ Claude Code의 동일 프로젝트 세션 `9cbe17d0-a7d4-420e-88d8-de4870913c2b`
 
 - **보안**: DB 비밀번호를 명령 인자나 스크립트에 넣지 않고 입력받아 셸 기록에 남지 않게 한다. 5432 포트는 계속 GPU 보안 그룹만 허용한다.
 - **적용 위치**: D-17 설치 절차 / D-125 담당 / 10장 작성할 항목 / `backend/deploy/install.sh`
+
+
+## D-224. 백엔드 배포 워크플로의 Secrets 이름과 서버 호스트 키 고정
+
+- **날짜**: 2026-11-04
+- **상태**: **확정** (팀원 2 결정) — D-123 6번 "GitHub Secrets 이름과 배포 워크플로 작성은 팀원 2가 정한다"를 정한다.
+- **결정**
+  1. 배포 워크플로는 `.github/workflows/deploy.yml`이다. Actions에서 수동 실행하고 입력값은 백엔드 퍼블릭 IP 하나다(D-125). 서버 `.env`를 다시 쓰고 `sudo backend/deploy/update.sh`를 실행한다.
+  2. GitHub Secrets
+
+     | Secret | 내용 |
+     |---|---|
+     | `BACKEND_SSH_KEY` | 배포 전용 SSH 개인 키 (02장 2.8) |
+     | `BACKEND_SSH_HOST_KEY` | 백엔드 EC2의 호스트 공개 키. 첫 설치 뒤 `ssh-keyscan -t ed25519 <IP> \| cut -d' ' -f2-` 결과 |
+     | `DATABASE_URL` | D-163. 호스트는 `127.0.0.1`, DB는 `parking` (D-223에서 입력한 비밀번호) |
+     | `S3_BUCKET_PREFIX`, `SQS_QUEUE_URL`, `GPU_INSTANCE_ID` | D-163. 비밀은 아니지만 계정 ID 등이 실행 로그에 남지 않게 Secrets에 둔다 |
+
+     `APP_MODE=aws`(D-163 4번)와 `AWS_REGION=ap-northeast-2`(Terraform provider와 같은 값)는 워크플로 코드에 고정한다.
+  3. SSH 접속은 `BACKEND_SSH_HOST_KEY`와 대조해 다르면 끊는다. IP는 켤 때마다 바뀌므로 `HostKeyAlias`로 IP가 아니라 별칭에 키를 묶는다.
+  4. `.env` 내용은 SSH 표준 입력으로 보내고 서버에서 권한 600으로 쓴다. 입력 IP는 환경변수로 넘겨 형식을 검사한 뒤 쓴다.
+- **이유**
+  - 퍼블릭 IP는 껐다 켜면 다른 인스턴스에 다시 배정된다(D-12). 지난 IP나 잘못 입력한 IP, 중간 가로채기 상대에게 DB 비밀번호가 든 `.env`를 보내지 않는다.
+  - 호스트 키는 인스턴스를 삭제하지 않는 한 중지·시작으로 바뀌지 않아 한 번만 등록하면 된다.
+- **비교한 대안**
+
+  | 안 | 버린 이유 |
+  |---|---|
+  | 호스트 키 확인 안 함 (`StrictHostKeyChecking=no`) | 위 경우에 `.env`가 다른 서버로 간다 |
+  | 실행 때 `ssh-keyscan`으로 받아 믿음 | 접속한 서버의 키를 그대로 믿으므로 확인하지 않는 것과 같다 |
+
+- **한계**: 인스턴스를 새로 만들면 `BACKEND_SSH_HOST_KEY`를 다시 넣어야 한다. 안 넣으면 `Host key verification failed`로 배포가 실패한다(서버는 바뀌지 않는다).
+- **적용 위치**: 02장 2.8 SSH 키 관리 / 10장 작성할 항목 / D-123 / `.github/workflows/deploy.yml`
