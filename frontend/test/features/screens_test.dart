@@ -187,6 +187,25 @@ void main() {
     expect(find.text('동의하고 영상 선택하기'), findsOneWidget);
   });
 
+  testWidgets('피해자 계정은 영상 없는 사건을 [업로드 중] 줄로 보고 누를 수 없다 (2.2, D-226)', (tester) async {
+    final backend = FakeBackend({
+      'GET /api/videos': (_) => json([]),
+      'GET /api/cases': (_) => json({
+        'items': [case3()],
+      }),
+    }, role: 'victim');
+    await pumpApp(tester, backend, '/videos');
+    expect(find.text('아직 올라온 영상이 없습니다'), findsNothing);
+    expect(find.text('영상 1건'), findsOneWidget); // 제목은 줄 수다
+    expect(find.text('업로드 중'), findsOneWidget);
+    expect(find.text('parking_admin'), findsOneWidget);
+
+    await tester.tap(find.text('업로드 중'));
+    await settle(tester);
+    expect(find.text('CCTV 영상 올리기'), findsNothing);
+    expect(find.text('업로드 중'), findsOneWidget);
+  });
+
   testWidgets('피해자 계정 목록은 관리자 칸과 안내 줄, 연결 메뉴 없음 (2.2, D-204)', (tester) async {
     final backend = FakeBackend({
       'GET /api/videos': (_) => json([video('ready')]),
@@ -402,6 +421,54 @@ void main() {
     await agreeSupervision(tester);
     expect(backend.calls, contains('POST /api/videos/7/viewing-agreement'));
     expect(find.text('점수: 87'), findsOneWidget);
+  });
+
+  testWidgets('확인 끝내기 뒤 결과 화면은 안내창 없이, 목록에서 들어가면 안내창을 띄운다 (2.7, D-226)', (tester) async {
+    var ended = false;
+    final backend = FakeBackend({
+      'GET /api/videos/7': (_) => json(
+        ended ? video('exhausted', extra: {'candidate_total': 1, 'candidate_unavailable': 0}) : video('ready'),
+      ),
+      'GET /api/videos/7/batch': (_) => json({
+        'list': 'main',
+        'batch_no': 1,
+        'unavailable': 0,
+        'candidates': [
+          {
+            'candidate_clip_id': 1187,
+            'rank': 1,
+            'vlm_score': 87,
+            'start_sec': 13235.0,
+            'end_sec': 13265.0,
+            'clip_url': 'http://x/1187.mp4',
+          },
+        ],
+        'lists': lists(mainRemaining: 0),
+      }),
+      'GET /api/videos/7/pin': (_) => json([pinned1187()]),
+      'POST /api/videos/7/batch/next': (_) {
+        ended = true;
+        return json({'status': 'exhausted', 'lists': lists(mainRemaining: 0)});
+      },
+      'POST /api/videos/7/viewing-agreement': (_) => json(null, 204),
+    });
+    await pumpApp(tester, backend, '/videos/7/candidates');
+    await tester.tap(find.widgetWithText(FilledButton, '확인 끝내기'));
+    await settle(tester);
+    await tester.tap(find.widgetWithText(FilledButton, '끝내기'));
+    await settle(tester);
+    expect(find.text('피해자와 함께 열람하고, 함께 고정합니다'), findsNothing);
+    expect(backend.count('POST /api/videos/7/viewing-agreement'), 0);
+    expect(find.text('고정 목록'), findsOneWidget);
+    await unmount(tester);
+
+    // 영상 목록에서 누른 것처럼 상태 화면부터 들어가면 다시 띄운다
+    await pumpApp(tester, backend, '/videos/7');
+    expect(find.text('피해자와 함께 열람하고, 함께 고정합니다'), findsOneWidget);
+    await agreeSupervision(tester);
+    expect(backend.count('POST /api/videos/7/viewing-agreement'), 1);
+    expect(find.text('고정 목록'), findsOneWidget);
+    await unmount(tester);
   });
 
   testWidgets('안내창에서 [취소]하면 동의를 남기지 않고 목록으로 (2.7)', (tester) async {

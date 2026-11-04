@@ -228,7 +228,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
         case VideoStatus.batchRunning:
           _schedulePoll();
         default:
-          goStatus(context, _id); // exhausted → 완료 또는 결과 화면
+          goStatus(context, _id, agreed: true); // exhausted → 완료 또는 결과 화면. 안내창은 이미 거쳤다 (D-226)
       }
     });
   }

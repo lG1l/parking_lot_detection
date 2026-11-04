@@ -28,8 +28,12 @@ String? screenPath(int videoId, StatusScreen screen) => switch (screen) {
 /// 상태 화면으로 돌아가 9번부터 다시 그린다 (07장 3.1).
 /// [expired]: 서버가 MASKED_EXPIRED·RAW_EXPIRED로 답했다. 열람기한이 지났어도 파기 작업이 돌기
 /// 전에는 9번의 masked_deleted가 false라, 이 표시 없이 9번만 보면 같은 화면을 오가게 된다.
-void goStatus(BuildContext context, int videoId, {bool expired = false}) =>
-    redirectTo(context, expired ? '/videos/$videoId?expired=1' : '/videos/$videoId');
+/// [agreed]: 후보 확인 화면에서 끝내고 오는 길이라 안내창을 다시 띄우지 않는다 (D-226).
+/// 동의가 30분을 넘겼으면 서버가 403으로 막고, 그때는 안내창을 다시 띄운다.
+void goStatus(BuildContext context, int videoId, {bool expired = false, bool agreed = false}) {
+  final query = [if (expired) 'expired=1', if (agreed) 'agreed=1'].join('&');
+  redirectTo(context, query.isEmpty ? '/videos/$videoId' : '/videos/$videoId?$query');
+}
 
 bool isExpiredCode(String code) => code == 'MASKED_EXPIRED' || code == 'RAW_EXPIRED';
 
@@ -44,10 +48,11 @@ List<String> counterpartNote(WidgetRef ref, int videoId) {
 /// 2.5 영상 상태. 목록에서 영상을 누르면 늘 여기부터 온다 (07장 3.7).
 /// 9번을 5초마다 불러 화면을 고른다 (D-138). 갈 화면은 계정 역할에 따라 다르다 (D-204).
 class VideoStatusPage extends ConsumerStatefulWidget {
-  const VideoStatusPage({super.key, required this.videoId, this.expired = false});
+  const VideoStatusPage({super.key, required this.videoId, this.expired = false, this.agreed = false});
 
   final String videoId;
   final bool expired;
+  final bool agreed;
 
   @override
   ConsumerState<VideoStatusPage> createState() => _VideoStatusPageState();
@@ -62,7 +67,7 @@ class _VideoStatusPageState extends ConsumerState<VideoStatusPage> {
   late bool _serverExpired = widget.expired;
 
   /// 이 화면에서 관리·감독 안내에 동의했는지. 동의하면 23번이 기록하고 다음 화면을 연다.
-  bool _agreed = false;
+  late bool _agreed = widget.agreed;
 
   int get _id => int.parse(widget.videoId);
 

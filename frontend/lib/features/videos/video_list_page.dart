@@ -25,7 +25,7 @@ bool _folded(BuildContext context) => MediaQuery.sizeOf(context).width < _tableM
 /// 칸 안 내용이 칸보다 넓으면 줄바꿈·넘침 대신 조금 줄여 보인다.
 Widget _fit(Widget child) => FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: child);
 
-/// 목록 한 줄. 영상이거나, 관리자 계정에서 영상을 아직 올리지 않은 사건이다 (D-211).
+/// 목록 한 줄. 영상이거나, 영상을 아직 올리지 않은 사건이다 (D-211, D-226).
 class ListRow {
   ListRow.video(VideoSummary this.video, this.videoCase);
   ListRow.emptyCase(VideoCase this.videoCase) : video = null;
@@ -45,7 +45,7 @@ List<ListRow> sortRows(List<ListRow> rows, ListSort sort, {required bool admin})
   // 상태 순위: 업로드 필요·사전 입력 필요 0 → 후보 선택 가능 1 → 문제 2 → 기다림 3 → 완료 4 → 종료됨 5
   int rank(ListRow r) {
     final v = r.video;
-    if (v == null) return 0;
+    if (v == null) return admin ? 0 : 3; // 관리자는 할 일, 피해자는 기다림 (D-226)
     return switch (v.listGroup(admin: admin)) {
       StatusGroup.ended => 5,
       StatusGroup.todo => v.status == VideoStatus.stage1Done ? 0 : 1,
@@ -122,10 +122,9 @@ class _VideoListPageState extends ConsumerState<VideoListPage> {
     final withVideo = {for (final v in videos) v.caseId};
     return [
       for (final v in videos) ListRow.video(v, byId[v.caseId]),
-      // 연결만 하고 영상이 없는 사건. 누르면 업로드 화면으로 간다 (D-211)
-      if (admin)
-        for (final c in _cases)
-          if (!withVideo.contains(c.id)) ListRow.emptyCase(c),
+      // 연결만 하고 영상이 없는 사건. 관리자는 눌러 업로드 화면으로 가고, 피해자는 "업로드 중"으로 본다 (D-211, D-226)
+      for (final c in _cases)
+        if (!withVideo.contains(c.id)) ListRow.emptyCase(c),
     ];
   }
 
@@ -174,7 +173,7 @@ class _VideoListPageState extends ConsumerState<VideoListPage> {
   /// 누르면 갈 곳. 관리자가 올리는 중인 영상은 열 것이 없어 누를 수 없다 (캔버스).
   VoidCallback? _onTap(ListRow r, bool admin) {
     final v = r.video;
-    if (v == null) return () => context.go('/cases/${r.videoCase!.id}/upload');
+    if (v == null) return admin ? () => context.go('/cases/${r.videoCase!.id}/upload') : null;
     if (admin && v.status == VideoStatus.uploading && !v.maskedDeleted) return null;
     return () => context.go('/videos/${v.videoId}');
   }
@@ -345,7 +344,7 @@ class _StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final video = row.video;
-    final group = video?.listGroup(admin: admin) ?? StatusGroup.todo;
+    final group = video?.listGroup(admin: admin) ?? (admin ? StatusGroup.todo : StatusGroup.waiting);
     final ended = group == StatusGroup.ended;
     final (background, foreground) = switch (group) {
       StatusGroup.todo => (pointColor, offWhiteColor),
@@ -355,7 +354,7 @@ class _StatusChip extends StatelessWidget {
       StatusGroup.ended => (lineColor, inkColor),
     };
     final icon = video == null
-        ? Icons.upload_outlined
+        ? (admin ? Icons.upload_outlined : Icons.hourglass_empty)
         : ended
         ? Icons.inventory_2_outlined
         : switch (video.status) {
@@ -363,8 +362,7 @@ class _StatusChip extends StatelessWidget {
             VideoStatus.stillsRunning || VideoStatus.stage2Running => Icons.autorenew,
             VideoStatus.stage1Done => Icons.edit_outlined,
             VideoStatus.ready || VideoStatus.batchRunning => admin ? Icons.search : Icons.check_circle_outline,
-            VideoStatus.finished ||
-            VideoStatus.exhausted => admin ? Icons.check_circle_outline : Icons.push_pin_outlined,
+            VideoStatus.finished || VideoStatus.exhausted => Icons.push_pin_outlined,
             VideoStatus.uploadFailed || VideoStatus.failed => Icons.priority_high,
             _ => Icons.schedule,
           };
@@ -378,7 +376,7 @@ class _StatusChip extends StatelessWidget {
           Icon(icon, size: 15, color: foreground),
           const SizedBox(width: 6),
           Text(
-            video == null ? '업로드 필요' : video.listLabel(admin: admin),
+            video == null ? (admin ? '업로드 필요' : '업로드 중') : video.listLabel(admin: admin),
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,

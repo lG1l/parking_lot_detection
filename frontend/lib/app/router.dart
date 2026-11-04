@@ -31,6 +31,7 @@ GoRouter createRouter({String initialLocation = '/'}) => GoRouter(
       builder: (_, state) => VideoStatusPage(
         videoId: state.pathParameters['videoId']!,
         expired: state.uri.queryParameters['expired'] == '1',
+        agreed: state.uri.queryParameters['agreed'] == '1',
       ),
     ),
     GoRoute(
