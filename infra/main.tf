@@ -143,6 +143,11 @@ variable "backend_key_name" {
   type        = string
 }
 
+variable "backend_instance_name" {
+  description = "콘솔 이름 칸에 보일 백엔드 EC2 이름(Name 태그). 값은 terraform.tfvars에만 둔다"
+  type        = string
+}
+
 # Ubuntu 24.04 LTS (D-144). Canonical 공식 계정의 이미지
 data "aws_ami" "ubuntu" {
   most_recent = true
@@ -160,6 +165,10 @@ resource "aws_instance" "backend" {
   instance_type          = "t3.small"
   key_name               = var.backend_key_name
   vpc_security_group_ids = [aws_security_group.backend.id]
+
+  tags = {
+    Name = var.backend_instance_name
+  }
 
   # 인스턴스 메타데이터는 토큰 방식(IMDSv2)만 허용한다
   metadata_options {
