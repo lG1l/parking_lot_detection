@@ -136,14 +136,11 @@ resource "aws_s3_bucket_cors_configuration" "raw" {
   }
 }
 
-variable "backend_ssh_public_key" {
-  description = "백엔드 배포용 SSH 공개 키(ssh-ed25519 ...). 개인 키는 GitHub Secrets와 접속하는 사람 PC에만 둔다 (2.8)"
+# 계정에 ec2:ImportKeyPair 권한이 없어 키 페어는 콘솔에서 만들고 이름만 받는다.
+# 이름은 terraform.tfvars에만 둔다. 개인 키(.pem)는 GitHub Secrets와 접속하는 사람 PC에만 둔다 (2.8)
+variable "backend_key_name" {
+  description = "콘솔에서 만든 백엔드 배포용 키 페어 이름"
   type        = string
-}
-
-resource "aws_key_pair" "backend" {
-  key_name   = "${var.name_prefix}-backend-deploy"
-  public_key = var.backend_ssh_public_key
 }
 
 # Ubuntu 24.04 LTS (D-144). Canonical 공식 계정의 이미지
@@ -161,7 +158,7 @@ data "aws_ami" "ubuntu" {
 resource "aws_instance" "backend" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = "t3.small"
-  key_name               = aws_key_pair.backend.key_name
+  key_name               = var.backend_key_name
   vpc_security_group_ids = [aws_security_group.backend.id]
 
   # 인스턴스 메타데이터는 토큰 방식(IMDSv2)만 허용한다
