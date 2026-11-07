@@ -135,3 +135,44 @@ resource "aws_s3_bucket_cors_configuration" "raw" {
     allowed_headers = ["Content-Type", "If-None-Match"]
   }
 }
+
+variable "backend_ssh_public_key" {
+  description = "백엔드 배포용 SSH 공개 키(ssh-ed25519 ...). 개인 키는 GitHub Secrets와 접속하는 사람 PC에만 둔다 (2.8)"
+  type        = string
+}
+
+resource "aws_key_pair" "backend" {
+  key_name   = "${var.name_prefix}-backend-deploy"
+  public_key = var.backend_ssh_public_key
+}
+
+# Ubuntu 24.04 LTS (D-144). Canonical 공식 계정의 이미지
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  owners      = ["099720109477"]
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"]
+  }
+}
+
+# 백엔드 EC2: 웹·API·PostgreSQL (D-10, D-17). 첫 설치는 SSH로 install.sh를 실행한다 (D-223)
+resource "aws_instance" "backend" {
+  ami                    = data.aws_ami.ubuntu.id
+  instance_type          = "t3.small"
+  key_name               = aws_key_pair.backend.key_name
+  vpc_security_group_ids = [aws_security_group.backend.id]
+
+  # 인스턴스 메타데이터는 토큰 방식(IMDSv2)만 허용한다
+  metadata_options {
+    http_tokens = "required"
+  }
+
+  # DB가 이 인스턴스 디스크에 있어 삭제·교체되면 데이터가 사라진다 (D-17).
+  # 새 Ubuntu 이미지가 나와도 교체하지 않는다
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes  = [ami]
+  }
+}
