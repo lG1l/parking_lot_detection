@@ -8301,3 +8301,61 @@ Claude Code의 동일 프로젝트 세션 `9cbe17d0-a7d4-420e-88d8-de4870913c2b`
 - **담당자 확인 요청** (진행은 확인 필요 사항 C-12에서 본다)
   - **팀원 2 (05장 23번, 08장 8.6)**: 두 곳은 "열람 화면에 들어갈 때마다 안내창"으로 적혀 있어 결정 1의 예외와 다르다. 팀원 1은 담당자 문서라 고치지 않았다. 필요하면 담당자가 예외를 적는다. API와 서버의 30분 동의 검사는 바뀌지 않아 백엔드 코드 수정은 필요 없다. **2026-11-07 반영했다 (C-12).**
 - **적용 위치**: 07장 2.2·2.7, `frontend/lib/features/videos/video_list_page.dart`, `frontend/lib/features/video_status/video_status_page.dart`, `frontend/lib/features/candidates/candidates_page.dart`, `frontend/lib/app/router.dart`, `frontend/test/features/screens_test.dart`
+
+## D-227. 백엔드 EC2 인스턴스 유형은 t3.small
+
+- **날짜**: 2026-11-07
+- **상태**: **확정** — 02장 2.9의 🚧 "t3.small 또는 t3.medium"을 정한다.
+- **결정**: 백엔드 EC2는 t3.small(vCPU 2, 메모리 2GiB) 1대다.
+- **이유**
+  - 백엔드는 웹·API·PostgreSQL만 돌리고 분석은 GPU 워커가 한다(D-14). 시연 규모에서 t3.small로 충분하다.
+  - 다른 팀이 같은 계정 정책에서 t3.small을 만들었고, 우리 Terraform apply도 기본 권한으로 성공했다. 따로 승인받을 필요가 없다.
+  - t3.medium보다 시간당 비용이 절반이다.
+- **비교한 대안**
+
+  | 안 | 버린 이유 |
+  |---|---|
+  | t3.medium (메모리 4GiB) | 비용이 두 배다. 사용 가능 여부도 확인하지 않았다 |
+
+- **적용 위치**: 02장 2.9 / `infra/main.tf`
+
+## D-228. EC2 키 페어는 콘솔에서 만들고 Terraform은 이름만 받는다
+
+- **날짜**: 2026-11-07
+- **상태**: **확정** (팀원 2 결정)
+- **결정**
+  1. 백엔드 배포용 키 페어는 EC2 콘솔에서 만든다(ED25519, `.pem`). 개인 키는 만들 때 한 번만 내려받을 수 있다.
+  2. Terraform은 변수 `backend_key_name`으로 이름만 받아 `aws_instance.backend`에 넣는다. 이름은 `terraform.tfvars`에만 둔다.
+  3. 개인 키는 GitHub Secret `BACKEND_SSH_KEY`와 접속하는 사람 PC에만 둔다(2.8).
+- **이유**
+  - 계정에 `ec2:ImportKeyPair` 권한이 없어 Terraform `aws_key_pair`로 공개 키를 등록하면 403 `UnauthorizedOperation`이 난다. 콘솔 생성은 기본 권한으로 된다.
+  - 개인 키가 Terraform state에 남지 않는다.
+- **비교한 대안**
+
+  | 안 | 버린 이유 |
+  |---|---|
+  | `aws_key_pair`로 PC에서 만든 공개 키 등록 | `ImportKeyPair` 권한이 없다 |
+  | `tls_private_key`로 Terraform이 키 생성 | 등록에 같은 권한이 필요하고, 개인 키가 state 파일에 평문으로 남는다 |
+  | 멘토에게 `ImportKeyPair` 권한 요청 | 콘솔로 같은 결과를 얻으므로 요청할 이유가 없다 |
+
+- **적용 위치**: 02장 2.8 / `infra/main.tf`
+
+## D-229. Terraform이 백엔드 EC2를 지우거나 교체하지 못하게 막는다
+
+- **날짜**: 2026-11-07
+- **상태**: **확정** (팀원 2 결정)
+- **결정**: `aws_instance.backend`에 아래 두 설정을 둔다.
+  1. `ignore_changes = [ami]`: Ubuntu 최신 이미지가 바뀌어도 서버를 교체하지 않는다. AMI는 `most_recent = true`로 찾기 때문에, 이 설정이 없으면 Canonical이 새 이미지를 올린 뒤 다른 것을 고치려고 apply할 때 교체가 끼어든다.
+  2. `prevent_destroy = true`: 교체나 `terraform destroy`가 plan에 잡히면 아무것도 지우지 않고 에러로 멈춘다.
+- **이유**
+  - DB가 이 인스턴스 디스크에 있어(D-17) 교체되면 데이터가 사라지고, `install.sh`와 `BACKEND_SSH_HOST_KEY`도 다시 해야 한다.
+  - OS 패치는 서버 안에서 `apt upgrade`로 한다. 새 이미지로 다시 만들 필요가 없다.
+- **비교한 대안**
+
+  | 안 | 버린 이유 |
+  |---|---|
+  | AMI ID를 코드에 고정 | 리전마다 ID가 달라 읽기 어렵고, 같은 효과를 `ignore_changes`로 얻는다 |
+  | 설정 없음, plan을 눈으로 확인 | 다른 변경에 섞인 `1 to destroy`를 놓치면 DB가 사라진다 |
+
+- **한계**: Terraform 명령만 막는다. 콘솔의 "인스턴스 종료"는 막지 못한다. 정말 지울 때는 `prevent_destroy`를 코드에서 먼저 뺀다.
+- **적용 위치**: 02장 2.8 / `infra/main.tf`
