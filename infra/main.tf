@@ -148,6 +148,12 @@ variable "backend_instance_name" {
   type        = string
 }
 
+# IAM role은 관리자가 만든다 (02장 2.9). 그 role의 인스턴스 프로파일 이름만 받는다
+variable "backend_instance_profile" {
+  description = "백엔드 EC2에 붙일 인스턴스 프로파일 이름. 값은 terraform.tfvars에만 둔다"
+  type        = string
+}
+
 # Ubuntu 24.04 LTS (D-144). Canonical 공식 계정의 이미지
 data "aws_ami" "ubuntu" {
   most_recent = true
@@ -165,6 +171,7 @@ resource "aws_instance" "backend" {
   instance_type          = "t3.small"
   key_name               = var.backend_key_name
   vpc_security_group_ids = [aws_security_group.backend.id]
+  iam_instance_profile   = var.backend_instance_profile
 
   tags = {
     Name = var.backend_instance_name
