@@ -187,6 +187,14 @@ uvicorn에 `--host 0.0.0.0`을 붙이지 않는다. 기본값 `127.0.0.1`은 내
   uv run pytest
   ```
   CI는 `ubuntu-24.04` 러너(D-172)에서 `postgres:16` 서비스 컨테이너를 띄우고 `TEST_DATABASE_URL`을 지정한다. `app_test` DB 생성과 마이그레이션은 `tests/conftest.py`가 한다. Secrets·AWS 자격 증명을 쓰지 않고, `GITHUB_TOKEN`은 읽기 권한(`contents: read`)만 갖는다. 프론트·비전 작업은 명령을 받으면 같은 파일에 추가한다.
+- 프론트 검사는 `.github/workflows/ci.yml`의 `frontend` 작업이 `frontend/` 폴더에서 아래 순서로 실행한다. 로컬에서도 같은 명령으로 재현한다.
+  ```
+  flutter pub get --enforce-lockfile
+  flutter analyze
+  flutter test
+  flutter build web --release --dart-define=USE_BACKEND=true
+  ```
+  Flutter는 3.47.8로 고정하고 공식 저장소에서 받는다. 이 작업은 Release를 덮어쓸 수 있는 쓰기 권한(`contents: write`)을 가지므로 외부 액션을 쓰지 않는다. 모두 통과하면 `build/web`을 `web.tar.gz`로 묶어 Release `web-latest`의 파일을 교체한다(D-154). 서버용 빌드이므로 `USE_BACKEND=true`를 넣는다. `--dart-define`에는 비밀값을 넣지 않는다. 결과 파일은 공개 Release로 누구나 받을 수 있다.
 - 테스트는 기능 구현과 함께 추가한다. 현재 문서는 요구사항이며 워크플로·테스트가 구현되거나 통과했다는 뜻이 아니다.
 
 ### 배포와의 관계
