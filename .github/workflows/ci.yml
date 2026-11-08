@@ -37,3 +37,32 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pytest
+
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write # Release 파일 교체 (D-154). 이 작업에만 준다
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      # 쓰기 토큰이 있는 작업이라 외부 액션 대신 공식 저장소에서 받는다
+      - name: Flutter 설치
+        run: |
+          git clone --depth 1 --branch 3.47.8 https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter analyze
+      - run: flutter test
+      # 값이 없으면 예시 데이터 화면이 빌드된다 (lib/core/config.dart)
+      - run: flutter build web --release --dart-define=USE_BACKEND=true
+      - name: Release web-latest 교체
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tar -czf web.tar.gz -C build/web .
+          gh release view web-latest >/dev/null 2>&1 ||
+            gh release create web-latest --prerelease --title web-latest --notes "CI가 main 빌드로 덮어쓴다 (D-154)"
+          gh release upload web-latest web.tar.gz --clobber
