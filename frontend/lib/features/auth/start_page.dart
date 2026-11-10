@@ -28,7 +28,7 @@ class _StartPageState extends ConsumerState<StartPage> {
     } on ApiException {
       loggedIn = false;
     }
-    if (mounted) redirectTo(context, loggedIn ? '/videos' : '/login');
+    if (mounted) redirectTo(context, loggedIn ? '/info' : '/login');
   }
 
   @override

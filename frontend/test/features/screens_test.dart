@@ -58,7 +58,7 @@ Future<void> agreeSupervision(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('로그인하지 않았으면 로그인 화면, 로그인하면 영상 목록 (2.1, 2.2)', (tester) async {
+  testWidgets('로그인하지 않았으면 로그인 화면, 로그인하면 이용 안내 → 영상 목록 (2.1, 2.13, D-235)', (tester) async {
     var loggedIn = false;
     final backend = FakeBackend({
       'GET /api/auth/me': (_) => loggedIn ? json(meJson('admin')) : apiError(401, 'UNAUTHENTICATED'),
@@ -94,6 +94,10 @@ void main() {
 
     await tester.enterText(find.byType(TextField).last, 'pw');
     await tester.tap(find.widgetWithText(FilledButton, '로그인'));
+    await settle(tester);
+    expect(find.text('이용 안내'), findsWidgets);
+    expect(find.text('관리자 계정 사용법'), findsOneWidget);
+    await tester.tap(find.text('영상 목록'));
     await settle(tester);
     expect(find.text('사건 1건'), findsOneWidget);
     expect(find.text('CH01.mp4'), findsOneWidget);
