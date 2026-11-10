@@ -206,6 +206,61 @@ void main() {
     expect(find.text('업로드 중'), findsOneWidget);
   });
 
+  testWidgets('피해자는 알림에서 초대를 수락하면 그 사건 영상이 목록에 보인다 (2.11, D-233)', (tester) async {
+    var accepted = false;
+    final backend = FakeBackend({
+      // 서버가 아직 수락 전 영상을 주더라도 화면이 거르는지 함께 본다
+      'GET /api/videos': (_) => json([video('stage1_done')]),
+      'GET /api/cases': (_) => json({
+        'items': [
+          {...case3(), 'accepted_at': accepted ? '2026-11-10T10:00:00+09:00' : null},
+        ],
+      }),
+      'POST /api/cases/3/accept': (_) {
+        accepted = true;
+        return json(null, 204);
+      },
+    }, role: 'victim');
+    await pumpApp(tester, backend, '/videos');
+    expect(find.text('CH01.mp4'), findsNothing);
+    expect(find.text('1'), findsOneWidget); // [알림] 배지
+
+    await tester.tap(find.text('알림'));
+    await settle(tester);
+    expect(find.text('parking_admin 관리자님이 사건에 초대했습니다'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, '수락'));
+    await settle(tester);
+    expect(backend.count('POST /api/cases/3/accept'), 1);
+    expect(find.text('사건을 수락했습니다. 영상 목록에서 볼 수 있습니다.'), findsOneWidget);
+    expect(find.text('새 알림이 없습니다'), findsOneWidget);
+
+    await tester.tap(find.text('영상 목록'));
+    await settle(tester);
+    expect(find.text('CH01.mp4'), findsOneWidget);
+    expect(find.text('1'), findsNothing);
+  });
+
+  testWidgets('수락 전 사건은 피해자 목록에 없고, 관리자 목록에는 "수락 대기중"이다 (2.2, D-233)', (tester) async {
+    Map<String, http.Response Function(http.Request)> routes() => {
+      'GET /api/videos': (_) => json([video('stage1_done')]),
+      'GET /api/cases': (_) => json({
+        'items': [
+          {...case3(), 'accepted_at': null},
+        ],
+      }),
+    };
+    await pumpApp(tester, FakeBackend(routes(), role: 'victim'), '/videos');
+    expect(find.text('CH01.mp4'), findsNothing);
+    expect(find.text('수락 대기중'), findsNothing);
+    expect(find.text('아직 올라온 영상이 없습니다'), findsOneWidget);
+    await unmount(tester);
+
+    await pumpApp(tester, FakeBackend(routes()), '/videos');
+    expect(find.text('CH01.mp4'), findsOneWidget);
+    expect(find.text('수락 대기중'), findsOneWidget);
+    expect(find.text('사전 입력 필요'), findsNothing);
+  });
+
   testWidgets('피해자 계정 목록은 관리자 칸과 안내 줄, 연결 메뉴 없음 (2.2, D-204)', (tester) async {
     final backend = FakeBackend({
       'GET /api/videos': (_) => json([video('ready')]),
