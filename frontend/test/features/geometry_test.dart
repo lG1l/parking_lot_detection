@@ -38,9 +38,7 @@ void main() {
     });
   });
 
-  test('파손 사각형은 차량 안(경계 포함)', () {
-    expect(boxInside([10, 10, 50, 50], [10, 10, 50, 50]), isTrue);
-    expect(boxInside([9, 10, 50, 50], [10, 10, 50, 50]), isFalse);
+  test('드래그 두 점으로 파손 사각형을 만든다', () {
     expect(boxFromDrag(p(50, 60), p(10, 20)), [10, 20, 50, 60]);
     expect(boxFromDrag(p(10, 20), p(10, 60)), isNull);
   });

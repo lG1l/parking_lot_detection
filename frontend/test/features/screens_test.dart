@@ -826,7 +826,7 @@ void main() {
     await tester.tap(find.widgetWithText(OutlinedButton, '보임')); // ②
     await tester.pump();
     await tapNext();
-    await tester.dragFrom(at(500, 400), Offset(200 * scale, 200 * scale)); // ③ 차량 안에서 드래그
+    await tester.dragFrom(at(300, 400), Offset(300 * scale, 200 * scale)); // ③ 차량 bbox 왼쪽 밖에서 시작 (D-231)
     await tester.pump();
     await tapNext();
     for (final (x, y) in const [(450.0, 600.0), (1150.0, 600.0), (1150.0, 790.0), (450.0, 790.0)]) {
@@ -858,6 +858,7 @@ void main() {
     expect(saved?['schema_version'], 6);
     expect(saved?['damage']['front_edge'], 2);
     expect(saved?['damage']['damage_edges'], [0]);
+    expect((saved?['damage']['damage_bbox'] as List)[0], lessThan(400)); // 차량 밖도 받는다 (D-231)
     expect(saved?['vehicle'], {'det_id': 1}); // polygon은 보내지 않는다 (D-221)
     await unmount(tester);
   });

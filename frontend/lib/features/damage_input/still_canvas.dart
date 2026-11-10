@@ -211,17 +211,18 @@ class _OverlayPainter extends CustomPainter {
         }
       }
     }
-    for (var i = 0; i < o.corners.length; i++) {
-      final c = _off(o.corners[i]);
-      canvas.drawCircle(c, 8, Paint()..color = inkColor);
-      final tp = TextPainter(
-        text: TextSpan(
-          text: '${i + 1}',
-          style: const TextStyle(color: offWhiteColor, fontSize: 9, fontWeight: FontWeight.bold),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(canvas, c - Offset(tp.width / 2, tp.height / 2));
+    // 찍은 점은 번호 없이 점만 그린다 (D-232)
+    for (final corner in o.corners) {
+      final c = _off(corner);
+      canvas.drawCircle(c, 6, Paint()..color = inkColor);
+      canvas.drawCircle(
+        c,
+        6,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5
+          ..color = offWhiteColor,
+      );
     }
   }
 
