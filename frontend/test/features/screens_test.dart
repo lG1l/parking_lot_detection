@@ -301,6 +301,21 @@ void main() {
     );
   });
 
+  testWidgets('이미 로그인한 피해자가 앱을 열면 이용 안내에 사건 관계자 사용법만 보인다 (2.13, D-235)', (tester) async {
+    final backend = FakeBackend({}, role: 'victim');
+    await pumpApp(tester, backend, '/');
+    expect(find.text('사건 관계자 계정 사용법'), findsOneWidget);
+    expect(find.text('[알림]에서 관리자의 사건 초대를 [수락]합니다.'), findsOneWidget);
+    expect(find.text('관리자 계정 사용법'), findsNothing);
+    // 메뉴의 [이용 안내]가 지금 화면으로 굵게 보인다 (22px)
+    expect(
+      tester.widget<TextButton>(find.widgetWithText(TextButton, '이용 안내')).style?.textStyle?.resolve({})?.fontSize,
+      22,
+    );
+    // 서버에는 읽기만 했고, 바꾸는 호출은 없다
+    expect(backend.calls.where((c) => !c.startsWith('GET ')), isEmpty);
+  });
+
   testWidgets('피해자 계정 목록은 관리자 칸과 안내 줄, 연결 메뉴 없음 (2.2, D-204)', (tester) async {
     final backend = FakeBackend({
       'GET /api/videos': (_) => json([video('ready')]),
