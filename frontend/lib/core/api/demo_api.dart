@@ -50,17 +50,23 @@ class DemoApi extends Api {
       };
     }
 
-    void addCase(int id, String victim) => _cases[id] = {
-      'id': id,
-      'admin_name': 'parking_admin',
-      'victim_name': victim,
-      'created_at': _iso(DateTime.now().subtract(Duration(days: id))),
-    };
+    void addCase(int id, String victim, {bool accepted = true}) {
+      final created = DateTime.now().subtract(Duration(days: id));
+      _cases[id] = {
+        'id': id,
+        'admin_name': 'parking_admin',
+        'victim_name': victim,
+        'created_at': _iso(created),
+        'accepted_at': accepted ? _iso(created.add(const Duration(hours: 1))) : null,
+      };
+    }
 
     addCase(1, 'victim01');
     addCase(2, 'victim02');
     // 연결만 하고 영상을 아직 올리지 않은 사건. 관리자 목록에서 누르면 업로드 화면으로 간다
     addCase(3, 'victim03');
+    // 피해자가 아직 수락하지 않은 사건. 피해자 [알림]에 뜨고, 수락하면 영상 12가 목록에 보인다 (D-233)
+    addCase(4, 'victim01', accepted: false);
 
     add(1, 1, '01_입력필요.mp4', VideoStatus.stage1Done);
     add(2, 1, '02_확인가능.mp4', VideoStatus.ready);
@@ -88,6 +94,7 @@ class DemoApi extends Api {
       'raw_deleted': true,
       'view_expires_at': _iso(DateTime.now().subtract(const Duration(days: 1))),
     });
+    add(12, 4, '12_수락대기.mp4', VideoStatus.stage1Done);
 
     _pins[3] = [_pinOf(_clip(3, 1)), _pinOf(_clip(3, 3))];
   }
@@ -112,6 +119,9 @@ class DemoApi extends Api {
     if (v == null) throw ApiException(404, 'VIDEO_NOT_FOUND');
     return v;
   }
+
+  /// 피해자 계정에서 감출 영상인지. 수락 전 사건의 영상은 피해자에게 주지 않는다 (D-233)
+  bool _hiddenFromVictim(Map<String, Object?> v) => !_admin && _cases[v['case_id']]?['accepted_at'] == null;
 
   /// 후보·고정 API는 관리자 계정에서, 안내창 동의 뒤에만 허용한다 (D-204).
   void _checkViewing(int id) {
@@ -196,16 +206,27 @@ class DemoApi extends Api {
       'admin_name': _me?.name ?? 'parking_admin',
       'victim_name': victimLoginId,
       'created_at': _iso(DateTime.now()),
+      'accepted_at': null, // 피해자가 [알림]에서 수락해야 묶인다 (D-233)
     };
     return VideoCase.fromJson(_cases[id]!);
   }
 
+  // 22번은 피해자에게도 수락 전 사건을 준다. [알림] 목록에 필요하다 (D-233)
   @override
   Future<List<VideoCase>> cases() async {
     await _wait();
     final items = _cases.values.toList()
       ..sort((a, b) => (b['created_at'] as String).compareTo(a['created_at'] as String));
     return [for (final c in items) VideoCase.fromJson(c)];
+  }
+
+  @override
+  Future<void> acceptCase(int caseId) async {
+    await _wait();
+    if (_admin) throw ApiException(403, 'ROLE_NOT_ALLOWED');
+    final c = _cases[caseId];
+    if (c == null) throw ApiException(404, 'CASE_NOT_FOUND');
+    c['accepted_at'] ??= _iso(DateTime.now()); // 이미 수락했으면 그대로 성공
   }
 
   @override
@@ -256,7 +277,7 @@ class DemoApi extends Api {
   @override
   Future<List<VideoSummary>> videos() async {
     await _wait();
-    final items = _videos.values.toList()
+    final items = _videos.values.where((v) => !_hiddenFromVictim(v)).toList()
       ..sort((a, b) => (b['created_at'] as String).compareTo(a['created_at'] as String));
     return [for (final v in items) VideoSummary.fromJson(v)];
   }
@@ -264,7 +285,9 @@ class DemoApi extends Api {
   @override
   Future<VideoDetail> video(int id) async {
     await _wait();
-    return VideoDetail.fromJson(_video(id));
+    final v = _video(id);
+    if (_hiddenFromVictim(v)) throw ApiException(404, 'VIDEO_NOT_FOUND');
+    return VideoDetail.fromJson(v);
   }
 
   @override

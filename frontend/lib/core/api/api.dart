@@ -34,6 +34,9 @@ class Api {
     return [for (final e in j['items'] as List) VideoCase.fromJson(e as Map<String, dynamic>)];
   }
 
+  /// 피해자가 사건 초대를 수락한다. 피해자 계정만 부른다 (D-233 초안, 백엔드 미구현)
+  Future<void> acceptCase(int caseId) => _c.post('/api/cases/$caseId/accept'); // 26
+
   Future<void> agreeViewing(int videoId) =>
       _c.post('/api/videos/$videoId/viewing-agreement', {'confirm_supervision': true}); // 23
 
