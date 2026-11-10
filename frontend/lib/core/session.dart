@@ -24,8 +24,18 @@ final caseOfVideoProvider = FutureProvider<Map<int, VideoCase>>((ref) async {
   }
 });
 
+/// 피해자가 아직 수락하지 않은 사건 초대 (22번에서 `pending`인 사건, D-233). 관리자는 빈 목록이다.
+/// 상단 메뉴 [알림] 배지가 쓴다. 주기적으로 다시 읽지 않고 [refreshSession]·메뉴 이동 때만 다시 읽는다.
+final pendingInvitesProvider = FutureProvider<List<VideoCase>>((ref) async {
+  final me = await ref.watch(meProvider.future);
+  if (me.isAdmin) return const [];
+  final cases = await ref.read(apiProvider).cases();
+  return [for (final c in cases) if (c.pending) c];
+});
+
 /// 계정이 바뀌거나 사건·영상이 늘었을 때 다시 읽게 한다.
 void refreshSession(WidgetRef ref, {bool account = false}) {
   if (account) ref.invalidate(meProvider);
   ref.invalidate(caseOfVideoProvider);
+  ref.invalidate(pendingInvitesProvider);
 }

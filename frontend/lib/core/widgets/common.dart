@@ -81,12 +81,12 @@ const narrowWidth = 720.0;
 
 bool isNarrow(BuildContext context) => MediaQuery.sizeOf(context).width < narrowWidth;
 
-/// 상단 바 가운데 메뉴 (D-190, D-211). [link]는 관리자 계정에만 있다.
-enum NavItem { videos, link }
+/// 상단 바 가운데 메뉴 (D-190, D-211). [link]는 관리자 계정에만, [notifications]는 피해자 계정에만 있다 (D-233).
+enum NavItem { videos, link, notifications }
 
 /// 화면 공통 틀. PC 브라우저 기준이라 가운데 최대 폭을 둔다.
 /// 상단 바는 왼쪽 로고 · 가운데 메뉴 · 오른쪽 로그아웃이고, 화면 제목은 본문 맨 위에 둔다 (D-190).
-/// 메뉴는 관리자 계정이 [영상 목록]·[사건 관계자 연결], 피해자 계정이 [영상 목록]이다 (D-211).
+/// 메뉴는 관리자 계정이 [영상 목록]·[사건 관계자 연결], 피해자 계정이 [영상 목록]·[알림]이다 (D-211, D-233).
 class PageFrame extends StatelessWidget {
   const PageFrame({
     super.key,
@@ -257,12 +257,17 @@ class _TopBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final me = ref.watch(meProvider).value;
     final admin = me?.isAdmin ?? false;
-    Widget menu(NavItem item, String label, String path) {
+    // 대기 중인 초대 수. 못 읽으면 배지를 두지 않는다 (D-233)
+    final invites = me == null || admin ? 0 : ref.watch(pendingInvitesProvider).value?.length ?? 0;
+    Widget menu(NavItem item, String label, String path, {int badge = 0}) {
       final selected = item == current;
       return Semantics(
         selected: selected,
         child: TextButton(
-          onPressed: () => _leave(context, () => context.go(path)),
+          onPressed: () => _leave(context, () {
+            ref.invalidate(pendingInvitesProvider); // 화면을 옮길 때 배지 수를 다시 센다 (D-233)
+            context.go(path);
+          }),
           style: TextButton.styleFrom(
             foregroundColor: selected ? pointColor : inkColor,
             textStyle: TextStyle(
@@ -271,7 +276,12 @@ class _TopBar extends ConsumerWidget {
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             ),
           ),
-          child: Text(label),
+          child: Badge.count(
+            count: badge,
+            isLabelVisible: badge > 0,
+            offset: const Offset(12, -6),
+            child: Text(label),
+          ),
         ),
       );
     }
@@ -283,6 +293,7 @@ class _TopBar extends ConsumerWidget {
       children: [
         menu(NavItem.videos, '영상 목록', '/videos'),
         if (admin) menu(NavItem.link, '사건 관계자 연결', '/cases/new'),
+        if (me != null && !admin) menu(NavItem.notifications, '알림', '/notifications', badge: invites),
       ],
     );
     // 관리자 계정이면 로그아웃 왼쪽에 "관리자 계정"을 보인다 (캔버스)
