@@ -10,6 +10,7 @@ import '../features/info/info_page.dart';
 import '../features/my_page/my_page.dart';
 import '../features/notifications/notifications_page.dart';
 import '../features/results/results_page.dart';
+import '../features/settings/settings_page.dart';
 import '../features/video_status/video_status_page.dart';
 import '../features/videos/video_list_page.dart';
 
@@ -29,6 +30,8 @@ GoRouter createRouter({String initialLocation = '/'}) => GoRouter(
     GoRoute(path: '/notifications', builder: (_, _) => const NotificationsPage()),
     // 두 계정: 마이페이지 (D-234)
     GoRoute(path: '/mypage', builder: (_, _) => const MyPage()),
+    // 두 계정: 환경설정, 글자 크기 (D-236)
+    GoRoute(path: '/settings', builder: (_, _) => const SettingsPage()),
     // 관리자 계정: 사건 관계자 연결(21번) → 그 사건의 업로드 (D-204)
     GoRoute(path: '/cases/new', builder: (_, _) => const CaseLinkPage()),
     GoRoute(

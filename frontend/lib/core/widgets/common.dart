@@ -81,8 +81,11 @@ const narrowWidth = 720.0;
 
 bool isNarrow(BuildContext context) => MediaQuery.sizeOf(context).width < narrowWidth;
 
+/// 이 폭보다 좁으면 상단 바 가운데 메뉴가 넘치지 않게 줄여 보인다. 메뉴가 5개라 넓은 배치는 이 폭부터 쓴다 (D-236).
+const topBarWideWidth = 1000.0;
+
 /// 상단 바 가운데 메뉴 (D-190, D-211). [link]는 관리자 계정에만, [notifications]는 피해자 계정에만 있다 (D-233).
-enum NavItem { info, videos, link, notifications, myPage }
+enum NavItem { info, videos, link, notifications, myPage, settings }
 
 /// 화면 공통 틀. PC 브라우저 기준이라 가운데 최대 폭을 둔다.
 /// 상단 바는 왼쪽 로고 · 가운데 메뉴 · 오른쪽 로그아웃이고, 화면 제목은 본문 맨 위에 둔다 (D-190).
@@ -296,6 +299,7 @@ class _TopBar extends ConsumerWidget {
         if (admin) menu(NavItem.link, '사건 관계자 연결', '/cases/new'),
         if (me != null && !admin) menu(NavItem.notifications, '알림', '/notifications', badge: invites),
         if (me != null) menu(NavItem.myPage, '마이페이지', '/mypage'),
+        if (me != null) menu(NavItem.settings, '환경설정', '/settings'),
       ],
     );
     // 관리자 계정이면 로그아웃 왼쪽에 "관리자 계정"을 보인다 (캔버스)
@@ -315,7 +319,7 @@ class _TopBar extends ConsumerWidget {
       ),
       child: const Text('로그아웃'),
     );
-    if (narrow) {
+    if (MediaQuery.sizeOf(context).width < topBarWideWidth) {
       // 좁으면 로고 · 메뉴(넘치면 줄여 보임) · 로그아웃을 차례로 둔다
       return Container(
         height: _barHeight,
