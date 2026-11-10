@@ -35,6 +35,9 @@ class ListRow {
 
   String get name => video?.originalFilename ?? '';
 
+  /// 피해자가 아직 초대를 수락하지 않은 사건의 줄 (D-233). 관리자 목록에서만 "수락 대기중"으로 보인다.
+  bool get pending => videoCase?.pending ?? false;
+
   /// 업로드 날짜. 영상 없는 사건은 연결한 날로 정렬한다.
   String? get uploadedAt => video?.createdAt ?? videoCase?.createdAt;
 }
@@ -44,6 +47,7 @@ class ListRow {
 List<ListRow> sortRows(List<ListRow> rows, ListSort sort, {required bool admin}) {
   // 상태 순위: 업로드 필요·사전 입력 필요 0 → 후보 선택 가능 1 → 문제 2 → 기다림 3 → 완료 4 → 종료됨 5
   int rank(ListRow r) {
+    if (r.pending) return 3; // 수락 대기중은 기다림 (D-233)
     final v = r.video;
     if (v == null) return admin ? 0 : 3; // 관리자는 할 일, 피해자는 기다림 (D-226)
     return switch (v.listGroup(admin: admin)) {
@@ -120,12 +124,14 @@ class _VideoListPageState extends ConsumerState<VideoListPage> {
   List<ListRow> _rows(List<VideoSummary> videos, bool admin) {
     final byId = {for (final c in _cases) c.id: c};
     final withVideo = {for (final v in videos) v.caseId};
-    return [
+    final rows = [
       for (final v in videos) ListRow.video(v, byId[v.caseId]),
       // 연결만 하고 영상이 없는 사건. 관리자는 눌러 업로드 화면으로 가고, 피해자는 "업로드 중"으로 본다 (D-211, D-226)
       for (final c in _cases)
         if (!withVideo.contains(c.id)) ListRow.emptyCase(c),
     ];
+    // 피해자는 수락 전 사건의 줄을 보지 않는다. 서버가 늦게 반영돼도 화면에서 거른다 (D-233)
+    return admin ? rows : [for (final r in rows) if (!r.pending) r];
   }
 
   @override
@@ -344,7 +350,10 @@ class _StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final video = row.video;
-    final group = video?.listGroup(admin: admin) ?? (admin ? StatusGroup.todo : StatusGroup.waiting);
+    final pending = row.pending; // 수락 대기중은 상태와 관계없이 기다림 색이다 (D-233)
+    final group = pending
+        ? StatusGroup.waiting
+        : video?.listGroup(admin: admin) ?? (admin ? StatusGroup.todo : StatusGroup.waiting);
     final ended = group == StatusGroup.ended;
     final (background, foreground) = switch (group) {
       StatusGroup.todo => (pointColor, offWhiteColor),
@@ -353,7 +362,9 @@ class _StatusChip extends StatelessWidget {
       StatusGroup.problem => (failChipColor, offWhiteColor),
       StatusGroup.ended => (lineColor, inkColor),
     };
-    final icon = video == null
+    final icon = pending
+        ? Icons.hourglass_empty
+        : video == null
         ? (admin ? Icons.upload_outlined : Icons.hourglass_empty)
         : ended
         ? Icons.inventory_2_outlined
@@ -376,7 +387,11 @@ class _StatusChip extends StatelessWidget {
           Icon(icon, size: 15, color: foreground),
           const SizedBox(width: 6),
           Text(
-            video == null ? (admin ? '업로드 필요' : '업로드 중') : video.listLabel(admin: admin),
+            pending
+                ? '수락 대기중'
+                : video == null
+                ? (admin ? '업로드 필요' : '업로드 중')
+                : video.listLabel(admin: admin),
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
