@@ -6,6 +6,7 @@ import '../features/auth/start_page.dart';
 import '../features/candidates/candidates_page.dart';
 import '../features/cases/case_link_page.dart';
 import '../features/damage_input/damage_input_page.dart';
+import '../features/my_page/my_page.dart';
 import '../features/notifications/notifications_page.dart';
 import '../features/results/results_page.dart';
 import '../features/video_status/video_status_page.dart';
@@ -23,6 +24,8 @@ GoRouter createRouter({String initialLocation = '/'}) => GoRouter(
     GoRoute(path: '/videos', builder: (_, _) => const VideoListPage()),
     // 피해자 계정: 사건 초대 수락 (D-233)
     GoRoute(path: '/notifications', builder: (_, _) => const NotificationsPage()),
+    // 두 계정: 마이페이지 (D-234)
+    GoRoute(path: '/mypage', builder: (_, _) => const MyPage()),
     // 관리자 계정: 사건 관계자 연결(21번) → 그 사건의 업로드 (D-204)
     GoRoute(path: '/cases/new', builder: (_, _) => const CaseLinkPage()),
     GoRoute(

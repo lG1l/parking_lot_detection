@@ -82,7 +82,7 @@ const narrowWidth = 720.0;
 bool isNarrow(BuildContext context) => MediaQuery.sizeOf(context).width < narrowWidth;
 
 /// 상단 바 가운데 메뉴 (D-190, D-211). [link]는 관리자 계정에만, [notifications]는 피해자 계정에만 있다 (D-233).
-enum NavItem { videos, link, notifications }
+enum NavItem { videos, link, notifications, myPage }
 
 /// 화면 공통 틀. PC 브라우저 기준이라 가운데 최대 폭을 둔다.
 /// 상단 바는 왼쪽 로고 · 가운데 메뉴 · 오른쪽 로그아웃이고, 화면 제목은 본문 맨 위에 둔다 (D-190).
@@ -294,6 +294,7 @@ class _TopBar extends ConsumerWidget {
         menu(NavItem.videos, '영상 목록', '/videos'),
         if (admin) menu(NavItem.link, '사건 관계자 연결', '/cases/new'),
         if (me != null && !admin) menu(NavItem.notifications, '알림', '/notifications', badge: invites),
+        if (me != null) menu(NavItem.myPage, '마이페이지', '/mypage'),
       ],
     );
     // 관리자 계정이면 로그아웃 왼쪽에 "관리자 계정"을 보인다 (캔버스)
