@@ -36,6 +36,12 @@ abstract class Browser {
 
   /// 앱 안에 이전 기록이 있으면 브라우저 뒤로 가기를 하고 true. 없으면 false (D-185).
   bool historyBack();
+
+  /// 브라우저 localStorage에서 [key]의 값을 읽는다. 없거나 막혀 있으면 null (D-236).
+  String? readLocal(String key);
+
+  /// 브라우저 localStorage에 [key]=[value]를 쓴다. 막혀 있으면 조용히 무시한다 (D-236).
+  void writeLocal(String key, String value);
 }
 
 // 백엔드 연결 필요: 데모에서는 S3에 올리지 않고 진행률만 흉내 낸다
@@ -74,4 +80,10 @@ class DemoBrowser implements Browser {
 
   @override
   bool historyBack() => _real.historyBack();
+
+  @override
+  String? readLocal(String key) => _real.readLocal(key);
+
+  @override
+  void writeLocal(String key, String value) => _real.writeLocal(key, value);
 }

@@ -106,4 +106,21 @@ class _WebBrowser implements Browser {
     web.window.history.back();
     return true;
   }
+
+  // localStorage는 사생활 보호 창 등에서 막혀 예외가 날 수 있다. 읽기는 null, 쓰기는 무시한다.
+  @override
+  String? readLocal(String key) {
+    try {
+      return web.window.localStorage.getItem(key);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  void writeLocal(String key, String value) {
+    try {
+      web.window.localStorage.setItem(key, value);
+    } catch (_) {}
+  }
 }
