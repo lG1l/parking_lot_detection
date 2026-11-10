@@ -261,6 +261,42 @@ void main() {
     expect(find.text('사전 입력 필요'), findsNothing);
   });
 
+  testWidgets('피해자 계정 마이페이지는 닉네임과 "사건 관계자"를 보이고, 버튼은 안내 창만 띄운다 (2.12, D-234)', (tester) async {
+    final backend = FakeBackend({
+      'GET /api/videos': (_) => json([video('stage1_done')]),
+    }, role: 'victim');
+    await pumpApp(tester, backend, '/videos');
+    await tester.tap(find.text('마이페이지'));
+    await settle(tester);
+    expect(find.text('victim02'), findsOneWidget);
+    expect(find.text('로그인 아이디와 다릅니다.'), findsOneWidget);
+    expect(find.text('사건 관계자'), findsOneWidget);
+
+    for (final label in ['비밀번호 변경', '계정 삭제', '닉네임 수정']) {
+      await tester.tap(find.widgetWithText(OutlinedButton, label));
+      await settle(tester);
+      expect(find.text('준비 중인 기능입니다'), findsOneWidget);
+      expect(find.text('[$label]은(는) 아직 사용할 수 없습니다.'), findsOneWidget);
+      await tester.tap(find.widgetWithText(TextButton, '확인'));
+      await settle(tester);
+      expect(find.text('준비 중인 기능입니다'), findsNothing);
+    }
+    // 서버에는 읽기만 했고, 바꾸는 호출은 없다
+    expect(backend.calls.where((c) => !c.startsWith('GET ')), isEmpty);
+  });
+
+  testWidgets('관리자 계정 마이페이지는 "관리자"를 보인다 (2.12, D-234)', (tester) async {
+    await pumpApp(tester, FakeBackend({}), '/mypage');
+    expect(find.text('parking_admin'), findsOneWidget);
+    expect(find.text('관리자'), findsOneWidget);
+    expect(find.text('사건 관계자'), findsNothing);
+    // 메뉴의 [마이페이지]가 지금 화면으로 굵게 보인다 (22px)
+    expect(
+      tester.widget<TextButton>(find.widgetWithText(TextButton, '마이페이지')).style?.textStyle?.resolve({})?.fontSize,
+      22,
+    );
+  });
+
   testWidgets('피해자 계정 목록은 관리자 칸과 안내 줄, 연결 메뉴 없음 (2.2, D-204)', (tester) async {
     final backend = FakeBackend({
       'GET /api/videos': (_) => json([video('ready')]),
