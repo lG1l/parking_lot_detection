@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
+import 'package:parking_lot_frontend/core/settings.dart';
 import 'package:parking_lot_frontend/features/damage_input/still_canvas.dart';
 
 import '../fake_backend.dart';
@@ -314,6 +315,46 @@ void main() {
     );
     // 서버에는 읽기만 했고, 바꾸는 호출은 없다
     expect(backend.calls.where((c) => !c.startsWith('GET ')), isEmpty);
+  });
+
+  testWidgets('환경설정에서 [크게]를 고르면 앱 전체 글자가 커지고 브라우저에 저장된다 (2.14, D-236)', (tester) async {
+    final backend = FakeBackend({});
+    final browser = FakeBrowser();
+    await pumpApp(tester, backend, '/settings', browser: browser);
+    // 메뉴의 [환경설정]이 지금 화면으로 굵게 보인다 (22px)
+    expect(
+      tester.widget<TextButton>(find.widgetWithText(TextButton, '환경설정')).style?.textStyle?.resolve({})?.fontSize,
+      22,
+    );
+    double scaleOf() => MediaQuery.textScalerOf(tester.element(find.byType(SegmentedButton<TextSize>))).scale(10) / 10;
+    SegmentedButton<TextSize> picker() => tester.widget(find.byType(SegmentedButton<TextSize>));
+    // 처음은 [보통], 배율 1.0, 저장값 없음
+    expect(picker().selected, {TextSize.normal});
+    expect(scaleOf(), 1.0);
+    expect(browser.local, isEmpty);
+
+    await tester.tap(find.text('크게'));
+    await settle(tester);
+    expect(picker().selected, {TextSize.large});
+    expect(scaleOf(), 1.15);
+    expect(browser.local[textSizeStorageKey], 'large');
+    // 상단 메뉴 5개가 넘치지 않는다 (넘치면 테스트가 예외로 잡는다)
+    expect(tester.takeException(), isNull);
+    // 서버에는 읽기만 했고, 바꾸는 호출은 없다
+    expect(backend.calls.where((c) => !c.startsWith('GET ')), isEmpty);
+  });
+
+  testWidgets('환경설정에서 정해 브라우저에 저장된 글자 크기로 앱이 열리고, 알 수 없는 값이면 보통이다 (2.14, D-236)', (tester) async {
+    final backend = FakeBackend({'GET /api/auth/me': (_) => apiError(401, 'UNAUTHENTICATED')});
+    // 로그인 화면부터 저장된 크기를 따른다
+    await pumpApp(tester, backend, '/', browser: FakeBrowser(local: {textSizeStorageKey: 'small'}));
+    expect(find.text('로그인'), findsWidgets);
+    expect(MediaQuery.textScalerOf(tester.element(find.byType(Scaffold).first)).scale(10) / 10, 0.9);
+
+    // 알 수 없는 값이면 보통이다 (같은 위젯 트리에서 새 앱으로 바꿔 끼운다)
+    await tester.pumpWidget(const SizedBox());
+    await pumpApp(tester, backend, '/', browser: FakeBrowser(local: {textSizeStorageKey: '엉뚱한값'}));
+    expect(MediaQuery.textScalerOf(tester.element(find.byType(Scaffold).first)).scale(10) / 10, 1.0);
   });
 
   testWidgets('피해자 계정 목록은 관리자 칸과 안내 줄, 연결 메뉴 없음 (2.2, D-204)', (tester) async {
