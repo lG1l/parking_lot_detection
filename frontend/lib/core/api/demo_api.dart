@@ -50,10 +50,11 @@ class DemoApi extends Api {
       };
     }
 
-    void addCase(int id, String victim, {bool accepted = true}) {
+    void addCase(int id, String name, String victim, {bool accepted = true}) {
       final created = DateTime.now().subtract(Duration(days: id));
       _cases[id] = {
         'id': id,
+        'case_name': name,
         'admin_name': 'parking_admin',
         'victim_name': victim,
         'created_at': _iso(created),
@@ -61,12 +62,12 @@ class DemoApi extends Api {
       };
     }
 
-    addCase(1, 'victim01');
-    addCase(2, 'victim02');
+    addCase(1, 'B2 기둥 옆 긁힘', 'victim01');
+    addCase(2, '지하 1층 범퍼 파손', 'victim02');
     // 연결만 하고 영상을 아직 올리지 않은 사건. 관리자 목록에서 누르면 업로드 화면으로 간다
-    addCase(3, 'victim03');
+    addCase(3, '입구 쪽 문콕', 'victim03');
     // 피해자가 아직 수락하지 않은 사건. 피해자 [알림]에 뜨고, 수락하면 영상 12가 목록에 보인다 (D-233)
-    addCase(4, 'victim01', accepted: false);
+    addCase(4, '출구 앞 사이드미러', 'victim01', accepted: false);
 
     add(1, 1, '01_입력필요.mp4', VideoStatus.stage1Done);
     add(2, 1, '02_확인가능.mp4', VideoStatus.ready);
@@ -196,13 +197,14 @@ class DemoApi extends Api {
   }
 
   @override
-  Future<VideoCase> createCase(String victimLoginId) async {
+  Future<VideoCase> createCase(String victimLoginId, {required String caseName}) async {
     await _wait();
     // 아이디가 victim으로 시작하지 않으면 없는 피해자 계정으로 본다
     if (!victimLoginId.startsWith('victim')) throw ApiException(422, 'INVITEE_INVALID');
     final id = _cases.keys.fold(0, (a, b) => a > b ? a : b) + 1;
     _cases[id] = {
       'id': id,
+      'case_name': caseName,
       'admin_name': _me?.name ?? 'parking_admin',
       'victim_name': victimLoginId,
       'created_at': _iso(DateTime.now()),
@@ -218,6 +220,30 @@ class DemoApi extends Api {
     final items = _cases.values.toList()
       ..sort((a, b) => (b['created_at'] as String).compareTo(a['created_at'] as String));
     return [for (final c in items) VideoCase.fromJson(c)];
+  }
+
+  Map<String, Object?> _case(int caseId) {
+    final c = _cases[caseId];
+    // 데모 피해자는 모든 사건의 피해자로 친다
+    if (c == null) throw ApiException(404, 'CASE_NOT_FOUND');
+    return c;
+  }
+
+  @override
+  Future<VideoCase> renameCase(int caseId, String caseName) async {
+    await _wait();
+    if (caseName.trim().isEmpty) throw ApiException(422, 'VALIDATION_FAILED');
+    final c = _case(caseId)..['case_name'] = caseName.trim();
+    return VideoCase.fromJson(c);
+  }
+
+  /// 사건과 그 사건의 영상을 함께 지운다. 실제 서버에서 영상·기록을 어떻게 지울지는 팀원 2가 정한다 (D-237)
+  @override
+  Future<void> deleteCase(int caseId) async {
+    await _wait();
+    _case(caseId);
+    _cases.remove(caseId);
+    _videos.removeWhere((_, v) => v['case_id'] == caseId);
   }
 
   @override

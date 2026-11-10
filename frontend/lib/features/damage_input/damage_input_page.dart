@@ -389,6 +389,7 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
       selectedPolygon: _vehicle?.polygon,
       selectedStrong: _step == InputStep.vehicle,
       damageBox: s >= InputStep.damage.index ? (_dragBox ?? _damage) : null,
+      damageCornersOnly: _step == InputStep.damage,
       corners: s >= InputStep.corners.index ? _corners : const [],
       frontEdge: s >= InputStep.front.index ? _frontEdge : null,
       edges: s >= InputStep.edges.index ? _edges : const [],

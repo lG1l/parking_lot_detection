@@ -23,6 +23,7 @@ class Me {
 class VideoCase {
   VideoCase({
     required this.id,
+    this.caseName,
     this.adminName,
     required this.victimName,
     required this.createdAt,
@@ -32,6 +33,7 @@ class VideoCase {
 
   factory VideoCase.fromJson(Map<String, dynamic> j) => VideoCase(
     id: j['id'] as int,
+    caseName: j['case_name'] as String?,
     adminName: j['admin_name'] as String?,
     victimName: j['victim_name'] as String,
     createdAt: j['created_at'] as String,
@@ -41,6 +43,13 @@ class VideoCase {
   );
 
   final int id;
+
+  /// 관리자가 연결할 때 붙인 사건 이름 (D-237 초안, 21·22번 `case_name`). 지금 백엔드는 주지 않아 null이다.
+  final String? caseName;
+
+  /// 화면에 보일 사건 이름. 비었으면 null이다.
+  String? get name => (caseName?.trim().isEmpty ?? true) ? null : caseName!.trim();
+
   final String? adminName;
   final String victimName;
   final String createdAt;

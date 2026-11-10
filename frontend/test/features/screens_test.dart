@@ -59,7 +59,7 @@ Future<void> agreeSupervision(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('로그인하지 않았으면 로그인 화면, 로그인하면 이용 안내 → 영상 목록 (2.1, 2.13, D-235)', (tester) async {
+  testWidgets('로그인하지 않았으면 로그인 화면, 로그인하면 이용 안내 → 사건 목록 (2.1, 2.13, D-235, D-237)', (tester) async {
     var loggedIn = false;
     final backend = FakeBackend({
       'GET /api/auth/me': (_) => loggedIn ? json(meJson('admin')) : apiError(401, 'UNAUTHENTICATED'),
@@ -96,15 +96,16 @@ void main() {
     await tester.enterText(find.byType(TextField).last, 'pw');
     await tester.tap(find.widgetWithText(FilledButton, '로그인'));
     await settle(tester);
-    expect(find.text('이용 안내'), findsWidgets);
+    expect(find.text('Info.'), findsWidgets);
     expect(find.text('관리자 계정 사용법'), findsOneWidget);
-    await tester.tap(find.text('영상 목록'));
+    await tester.tap(find.text('사건 목록'));
     await settle(tester);
     expect(find.text('사건 1건'), findsOneWidget);
-    expect(find.text('CH01.mp4'), findsOneWidget);
+    expect(find.text('CH01.mp4'), findsOneWidget); // 사건 이름이 없으면 파일 이름 (D-237)
     expect(find.text('victim02'), findsOneWidget); // 피해자 칸 (22번)
     expect(find.text('후보 선택 가능'), findsOneWidget);
-    expect(find.text('2026-10-20'), findsOneWidget); // 업로드 날짜 (created_at)
+    expect(find.text('2026-10-20'), findsNothing); // 업로드 날짜 칸은 없앴다 (D-237)
+    expect(find.text('새로고침'), findsNothing);
     expect(find.text('2026-11-19'), findsOneWidget); // 열람기한은 날짜만 (D-190)
     expect(find.text('관리자 계정'), findsOneWidget);
   });
@@ -146,7 +147,7 @@ void main() {
     await settle(tester);
     expect(order(), ['C', 'D', 'E', 'B', 'A', 'F', 'G']);
 
-    await tester.tap(find.text('업로드 날짜'));
+    await tester.tap(find.text('사건 이름'));
     await settle(tester);
     expect(order(), ['A', 'B', 'C', 'D', 'E', 'F', 'G']);
 
@@ -170,7 +171,7 @@ void main() {
       tester.view.physicalSize = Size(width, 1000);
       await settle(tester);
       expect(tester.takeException(), isNull, reason: '폭 $width');
-      expect(find.textContaining('2026-10-20'), findsNWidgets(3), reason: '폭 $width'); // 접어도 업로드 날짜는 보인다
+      expect(find.textContaining('2026-11-19'), findsNWidgets(2), reason: '폭 $width'); // 접어도 열람기한은 보인다
     }
   });
 
@@ -182,7 +183,7 @@ void main() {
       }),
     });
     await pumpApp(tester, backend, '/videos');
-    expect(find.text('아직 올린 영상이 없습니다'), findsOneWidget);
+    expect(find.text('—'), findsOneWidget); // 사건 이름도 영상도 없다 (캔버스, D-237)
     expect(find.text('업로드 필요'), findsOneWidget);
 
     await tester.tap(find.text('업로드 필요'));
@@ -201,7 +202,7 @@ void main() {
     }, role: 'victim');
     await pumpApp(tester, backend, '/videos');
     expect(find.text('아직 올라온 영상이 없습니다'), findsNothing);
-    expect(find.text('영상 1건'), findsOneWidget); // 제목은 줄 수다
+    expect(find.text('사건 1건'), findsOneWidget); // 제목은 줄 수다
     expect(find.text('업로드 중'), findsOneWidget);
     expect(find.text('parking_admin'), findsOneWidget);
 
@@ -232,20 +233,24 @@ void main() {
 
     await tester.tap(find.text('알림'));
     await settle(tester);
-    expect(find.text('parking_admin 관리자님이 사건에 초대했습니다'), findsOneWidget);
+    expect(find.text('parking_admin이 사건 관계자 연결을 요청했습니다.'), findsOneWidget);
+    expect(find.text('거절'), findsNothing); // 거절은 없다 (D-233)
+    expect(find.text('사전 입력 필요'), findsNothing); // 수락 전에는 영상 알림이 없다
     await tester.tap(find.widgetWithText(FilledButton, '수락'));
     await settle(tester);
     expect(backend.count('POST /api/cases/3/accept'), 1);
-    expect(find.text('사건을 수락했습니다. 영상 목록에서 볼 수 있습니다.'), findsOneWidget);
-    expect(find.text('새 알림이 없습니다'), findsOneWidget);
+    expect(find.text('사건을 수락했습니다. 사건 목록에서 볼 수 있습니다.'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '수락'), findsNothing);
+    expect(find.text('수락했습니다.'), findsOneWidget);
+    expect(find.text('사전 입력 필요'), findsOneWidget); // 수락하면 영상 상태 알림이 붙는다 (D-237)
 
-    await tester.tap(find.text('영상 목록'));
+    await tester.tap(find.text('사건 목록'));
     await settle(tester);
     expect(find.text('CH01.mp4'), findsOneWidget);
     expect(find.text('1'), findsNothing);
   });
 
-  testWidgets('수락 전 사건은 피해자 목록에 없고, 관리자 목록에는 "수락 대기중"이다 (2.2, D-233)', (tester) async {
+  testWidgets('수락 전 사건은 피해자 목록에 없고, 관리자 목록에는 "수락 대기 중"이다 (2.2, D-233)', (tester) async {
     Map<String, http.Response Function(http.Request)> routes() => {
       'GET /api/videos': (_) => json([video('stage1_done')]),
       'GET /api/cases': (_) => json({
@@ -256,29 +261,33 @@ void main() {
     };
     await pumpApp(tester, FakeBackend(routes(), role: 'victim'), '/videos');
     expect(find.text('CH01.mp4'), findsNothing);
-    expect(find.text('수락 대기중'), findsNothing);
+    expect(find.text('수락 대기 중'), findsNothing);
     expect(find.text('아직 올라온 영상이 없습니다'), findsOneWidget);
     await unmount(tester);
 
     await pumpApp(tester, FakeBackend(routes()), '/videos');
     expect(find.text('CH01.mp4'), findsOneWidget);
-    expect(find.text('수락 대기중'), findsOneWidget);
+    expect(find.text('수락 대기 중'), findsOneWidget);
     expect(find.text('사전 입력 필요'), findsNothing);
   });
 
-  testWidgets('피해자 계정 마이페이지는 닉네임과 "사건 관계자"를 보이고, 버튼은 안내 창만 띄운다 (2.12, D-234)', (tester) async {
+  testWidgets('피해자 계정 마이페이지는 아이디와 "사건 관계자"를 보이고, 버튼은 안내 창만 띄운다 (2.12, D-234, D-237)', (tester) async {
     final backend = FakeBackend({
       'GET /api/videos': (_) => json([video('stage1_done')]),
     }, role: 'victim');
     await pumpApp(tester, backend, '/videos');
     await tester.tap(find.text('마이페이지'));
     await settle(tester);
+    expect(find.text('아이디'), findsOneWidget);
     expect(find.text('victim02'), findsOneWidget);
-    expect(find.text('로그인 아이디와 다릅니다.'), findsOneWidget);
     expect(find.text('사건 관계자'), findsOneWidget);
 
-    for (final label in ['비밀번호 변경', '계정 삭제', '닉네임 수정']) {
-      await tester.tap(find.widgetWithText(OutlinedButton, label));
+    for (final (label, button) in [
+      ('비밀번호 변경', find.widgetWithText(OutlinedButton, '비밀번호 변경')),
+      ('계정 삭제', find.widgetWithText(OutlinedButton, '계정 삭제')),
+      ('아이디 변경', find.byTooltip('아이디 변경')),
+    ]) {
+      await tester.tap(button);
       await settle(tester);
       expect(find.text('준비 중인 기능입니다'), findsOneWidget);
       expect(find.text('[$label]은(는) 아직 사용할 수 없습니다.'), findsOneWidget);
@@ -308,9 +317,9 @@ void main() {
     expect(find.text('사건 관계자 계정 사용법'), findsOneWidget);
     expect(find.text('[알림]에서 관리자의 사건 초대를 [수락]합니다.'), findsOneWidget);
     expect(find.text('관리자 계정 사용법'), findsNothing);
-    // 메뉴의 [이용 안내]가 지금 화면으로 굵게 보인다 (22px)
+    // 메뉴의 [Info.]가 지금 화면으로 굵게 보인다 (22px)
     expect(
-      tester.widget<TextButton>(find.widgetWithText(TextButton, '이용 안내')).style?.textStyle?.resolve({})?.fontSize,
+      tester.widget<TextButton>(find.widgetWithText(TextButton, 'Info.')).style?.textStyle?.resolve({})?.fontSize,
       22,
     );
     // 서버에는 읽기만 했고, 바꾸는 호출은 없다
@@ -326,16 +335,16 @@ void main() {
       tester.widget<TextButton>(find.widgetWithText(TextButton, '환경설정')).style?.textStyle?.resolve({})?.fontSize,
       22,
     );
-    double scaleOf() => MediaQuery.textScalerOf(tester.element(find.byType(SegmentedButton<TextSize>))).scale(10) / 10;
-    SegmentedButton<TextSize> picker() => tester.widget(find.byType(SegmentedButton<TextSize>));
+    double scaleOf() => MediaQuery.textScalerOf(tester.element(find.byType(RadioGroup<TextSize>))).scale(10) / 10;
+    RadioGroup<TextSize> picker() => tester.widget(find.byType(RadioGroup<TextSize>));
     // 처음은 [보통], 배율 1.0, 저장값 없음
-    expect(picker().selected, {TextSize.normal});
+    expect(picker().groupValue, TextSize.normal);
     expect(scaleOf(), 1.0);
     expect(browser.local, isEmpty);
 
     await tester.tap(find.text('크게'));
     await settle(tester);
-    expect(picker().selected, {TextSize.large});
+    expect(picker().groupValue, TextSize.large);
     expect(scaleOf(), 1.15);
     expect(browser.local[textSizeStorageKey], 'large');
     // 상단 메뉴 5개가 넘치지 않는다 (넘치면 테스트가 예외로 잡는다)
@@ -357,7 +366,7 @@ void main() {
     expect(MediaQuery.textScalerOf(tester.element(find.byType(Scaffold).first)).scale(10) / 10, 1.0);
   });
 
-  testWidgets('피해자 계정 목록은 관리자 칸과 안내 줄, 연결 메뉴 없음 (2.2, D-204)', (tester) async {
+  testWidgets('피해자 계정 목록은 관리자 칸, 연결 메뉴 없음 (2.2, D-204)', (tester) async {
     final backend = FakeBackend({
       'GET /api/videos': (_) => json([video('ready')]),
       'GET /api/cases': (_) => json({
@@ -365,11 +374,11 @@ void main() {
       }),
     }, role: 'victim');
     await pumpApp(tester, backend, '/videos');
-    expect(find.text('영상 1건'), findsOneWidget);
+    expect(find.text('사건 1건'), findsOneWidget);
     expect(find.text('관리자'), findsOneWidget); // 표 머리
     expect(find.text('parking_admin'), findsOneWidget);
     expect(find.text('분석 완료'), findsOneWidget); // 피해자는 후보 선택 단계를 보지 않는다
-    expect(find.textContaining('영상은 주차장 관리자가 올립니다.'), findsOneWidget);
+    expect(find.textContaining('영상은 주차장 관리자가 올립니다.'), findsNothing); // 캔버스에 없다 (D-237)
     expect(find.text('사건 관계자 연결'), findsNothing);
     expect(find.text('관리자 계정'), findsNothing);
   });
@@ -429,7 +438,7 @@ void main() {
         return json({'login_id': 'victim02', 'masked_name': '홍*동'});
       },
       'POST /api/cases': (req) {
-        expect(jsonDecode(req.body), {'victim_login_id': 'victim02'});
+        expect(jsonDecode(req.body), {'victim_login_id': 'victim02', 'case_name': 'B2 기둥 긁힘'});
         return json({'id': 3, 'victim_name': 'victim02', 'created_at': '2026-11-01T14:03:00+09:00'}, 201);
       },
       'GET /api/cases': (_) => json({
@@ -439,7 +448,8 @@ void main() {
     await pumpApp(tester, backend, '/cases/new');
     expect(backend.screenCalls, isEmpty); // 열 때는 부르지 않는다
 
-    await tester.enterText(find.byType(TextField), 'victim02');
+    await tester.enterText(find.byType(TextField).first, '  B2 기둥 긁힘 '); // 앞뒤 공백은 지워 보낸다
+    await tester.enterText(find.byType(TextField).last, 'victim02');
     await tester.tap(find.widgetWithText(FilledButton, '연결'));
     await settle(tester);
     expect(find.text('피해자 계정을 연결할까요?'), findsOneWidget);
@@ -456,11 +466,105 @@ void main() {
   testWidgets('없는 피해자 아이디면 칸 아래에 안내 (2.3)', (tester) async {
     final backend = FakeBackend({'GET /api/users/lookup': (_) => apiError(422, 'INVITEE_INVALID')});
     await pumpApp(tester, backend, '/cases/new');
-    await tester.enterText(find.byType(TextField), 'victim99');
+    await tester.enterText(find.byType(TextField).first, 'B2 기둥 긁힘');
+    await tester.enterText(find.byType(TextField).last, 'victim99');
     await tester.tap(find.widgetWithText(FilledButton, '연결'));
     await settle(tester);
     expect(find.text('피해자 계정을 찾을 수 없습니다. 아이디를 다시 확인해 주세요.'), findsOneWidget);
     expect(find.text('사건 관계자 연결'), findsWidgets); // 화면에 머문다
+  });
+
+  testWidgets('사건 이름을 비우면 서버를 부르지 않고 칸 아래에 안내 (2.3, D-237)', (tester) async {
+    final backend = FakeBackend({});
+    await pumpApp(tester, backend, '/cases/new');
+    await tester.enterText(find.byType(TextField).last, 'victim02');
+    await tester.tap(find.widgetWithText(FilledButton, '연결'));
+    await settle(tester);
+    expect(find.text('사건 이름을 입력해 주세요.'), findsOneWidget);
+    expect(backend.screenCalls, isEmpty);
+  });
+
+  testWidgets('사건 이름으로 검색하면 맞는 줄만 남고, 없으면 검색 결과 없음 안내 (2.2, D-237)', (tester) async {
+    final backend = FakeBackend({
+      'GET /api/videos': (_) => json([
+        video('ready'),
+        {...video('queued'), 'video_id': 8, 'case_id': 4},
+      ]),
+      'GET /api/cases': (_) => json({
+        'items': [
+          {...case3(), 'case_name': 'B2 기둥 긁힘'},
+          {...case3(), 'id': 4, 'case_name': '입구 문콕'},
+        ],
+      }),
+    });
+    await pumpApp(tester, backend, '/videos');
+    expect(find.text('사건 2건'), findsOneWidget);
+    expect(find.text('CH01.mp4'), findsNWidgets(2)); // 사건 이름 아래 파일 이름
+
+    await tester.enterText(find.widgetWithText(TextField, '사건 이름으로 검색'), '기둥');
+    await settle(tester);
+    expect(find.text('검색 결과 1건'), findsOneWidget);
+    expect(find.text('B2 기둥 긁힘'), findsOneWidget);
+    expect(find.text('입구 문콕'), findsNothing);
+
+    await tester.enterText(find.byType(TextField), 'CH09');
+    await settle(tester);
+    expect(find.text('검색 결과 0건'), findsOneWidget);
+    expect(find.text('검색 결과가 없습니다'), findsOneWidget);
+    expect(find.text('‘CH09’와 일치하는 사건 이름이 없습니다.\n이름을 다시 확인해 주세요.'), findsOneWidget);
+    expect(backend.count('GET /api/videos'), 1); // 검색은 화면에서만 한다
+  });
+
+  testWidgets('연필로 사건 이름을 고치면 27번, 휴지통은 확인창 뒤 28번을 부르고 목록을 다시 읽는다 (2.2, D-237)', (tester) async {
+    var name = 'B2 기둥 긁힘';
+    var deleted = false;
+    final backend = FakeBackend({
+      'GET /api/videos': (_) => json(deleted ? [] : [video('ready')]),
+      'GET /api/cases': (_) => json({
+        'items': [
+          if (!deleted) {...case3(), 'case_name': name},
+        ],
+      }),
+      'PATCH /api/cases/3': (req) {
+        name = jsonDecode(req.body)['case_name'] as String;
+        return json({...case3(), 'case_name': name});
+      },
+      'DELETE /api/cases/3': (_) {
+        deleted = true;
+        return json(null, 204);
+      },
+    }, role: 'victim'); // 피해자 계정도 고치고 지울 수 있다
+    await pumpApp(tester, backend, '/videos');
+
+    await tester.tap(find.byTooltip('사건 이름 수정'));
+    await settle(tester);
+    final field = find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField));
+    await tester.enterText(field, ' ');
+    await tester.tap(find.widgetWithText(FilledButton, '저장'));
+    await settle(tester);
+    expect(find.text('사건 이름을 입력해 주세요.'), findsOneWidget); // 비우면 보내지 않는다
+    expect(backend.count('PATCH /api/cases/3'), 0);
+
+    await tester.enterText(field, '지하 1층 긁힘');
+    await tester.tap(find.widgetWithText(FilledButton, '저장'));
+    await settle(tester);
+    expect(backend.count('PATCH /api/cases/3'), 1);
+    expect(find.text('지하 1층 긁힘'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('사건 삭제'));
+    await settle(tester);
+    expect(find.text('사건을 삭제할까요?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(OutlinedButton, '취소'));
+    await settle(tester);
+    expect(backend.count('DELETE /api/cases/3'), 0);
+
+    await tester.tap(find.byTooltip('사건 삭제'));
+    await settle(tester);
+    await tester.tap(find.widgetWithText(FilledButton, '삭제'));
+    await settle(tester);
+    expect(backend.count('DELETE /api/cases/3'), 1);
+    expect(find.text('사건을 삭제했습니다.'), findsOneWidget);
+    expect(find.text('아직 올라온 영상이 없습니다'), findsOneWidget);
   });
 
   testWidgets('피해자 계정은 사건 관계자 연결 화면에 들어가지 못한다 (D-204)', (tester) async {
@@ -478,10 +582,10 @@ void main() {
     expect(backend.screenCalls, isEmpty);
   });
 
-  testWidgets('관리자 상단 바 메뉴로 영상 목록과 사건 관계자 연결을 오간다 (D-211)', (tester) async {
+  testWidgets('관리자 상단 바 메뉴로 사건 목록과 사건 관계자 연결을 오간다 (D-211, D-237)', (tester) async {
     final backend = FakeBackend({'GET /api/videos': (_) => json([])});
     await pumpApp(tester, backend, '/cases/new');
-    await tester.tap(find.widgetWithText(TextButton, '영상 목록'));
+    await tester.tap(find.widgetWithText(TextButton, '사건 목록'));
     await settle(tester);
     expect(find.text('아직 사건이 없습니다'), findsOneWidget);
 

@@ -35,6 +35,14 @@ class ApiClient {
     ),
   );
 
+  Future<dynamic> patch(String path, Object body) => _send(
+    () => _http.patch(
+      _uri(path),
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    ),
+  );
+
   Future<dynamic> delete(String path) => _send(() => _http.delete(_uri(path)));
 
   Future<dynamic> _send(Future<http.Response> Function() request) async {

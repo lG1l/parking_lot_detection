@@ -89,7 +89,7 @@ enum NavItem { info, videos, link, notifications, myPage, settings }
 
 /// 화면 공통 틀. PC 브라우저 기준이라 가운데 최대 폭을 둔다.
 /// 상단 바는 왼쪽 로고 · 가운데 메뉴 · 오른쪽 로그아웃이고, 화면 제목은 본문 맨 위에 둔다 (D-190).
-/// 메뉴는 관리자 계정이 [영상 목록]·[사건 관계자 연결], 피해자 계정이 [영상 목록]·[알림]이다 (D-211, D-233).
+/// 메뉴는 관리자 계정이 [사건 목록]·[사건 관계자 연결], 피해자 계정이 [사건 목록]·[알림]이다 (D-211, D-233, D-237).
 class PageFrame extends StatelessWidget {
   const PageFrame({
     super.key,
@@ -294,8 +294,9 @@ class _TopBar extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       spacing: narrow ? 4 : 32,
       children: [
-        if (me != null) menu(NavItem.info, '이용 안내', '/info'),
-        menu(NavItem.videos, '영상 목록', '/videos'),
+        // 메뉴 이름은 와이어프레임 캔버스를 따른다 (D-237)
+        if (me != null) menu(NavItem.info, 'Info.', '/info'),
+        menu(NavItem.videos, '사건 목록', '/videos'),
         if (admin) menu(NavItem.link, '사건 관계자 연결', '/cases/new'),
         if (me != null && !admin) menu(NavItem.notifications, '알림', '/notifications', badge: invites),
         if (me != null) menu(NavItem.myPage, '마이페이지', '/mypage'),
@@ -507,6 +508,95 @@ class Notice extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 카드 안 "이름 | 값" 한 줄 (캔버스 `.kv`). 줄 사이는 위쪽 1px 선이고 첫 줄은 선이 없다.
+class KeyValueRow extends StatelessWidget {
+  const KeyValueRow({super.key, required this.label, required this.value, this.first = false});
+
+  final String label;
+  final Widget value;
+  final bool first;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    constraints: const BoxConstraints(minHeight: 52),
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    decoration: BoxDecoration(
+      border: first ? null : const Border(top: BorderSide(color: lineColor)),
+    ),
+    child: Row(
+      children: [
+        SizedBox(
+          width: 160,
+          child: Text(label, style: const TextStyle(fontSize: 15, color: subColor)),
+        ),
+        Expanded(child: value),
+      ],
+    ),
+  );
+}
+
+/// 카드 안 "이름 ··· 고르기" 한 줄 (캔버스 `.opt`). 줄 전체를 눌러도 고른다.
+class OptionRow extends StatelessWidget {
+  const OptionRow({super.key, required this.label, required this.trailing, required this.onTap, this.first = false});
+
+  final String label;
+  final Widget trailing;
+  final VoidCallback onTap;
+  final bool first;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    child: Container(
+      constraints: const BoxConstraints(minHeight: 52),
+      decoration: BoxDecoration(
+        border: first ? null : const Border(top: BorderSide(color: lineColor)),
+      ),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 15))),
+          trailing,
+        ],
+      ),
+    ),
+  );
+}
+
+/// 연필 아이콘 버튼 (캔버스: 이름 옆 16px 회색 연필). 이름 수정·아이디 변경에 쓴다.
+class EditIconButton extends StatelessWidget {
+  const EditIconButton({super.key, required this.tooltip, required this.onPressed});
+
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: tooltip,
+    onPressed: onPressed,
+    iconSize: 16,
+    visualDensity: VisualDensity.compact,
+    color: doneChipColor,
+    icon: const Icon(Icons.edit_outlined),
+  );
+}
+
+/// 휴지통 아이콘 버튼 (캔버스: 줄 끝 20px 빨간 휴지통).
+class DeleteIconButton extends StatelessWidget {
+  const DeleteIconButton({super.key, required this.tooltip, required this.onPressed});
+
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: tooltip,
+    onPressed: onPressed,
+    iconSize: 20,
+    color: failChipColor,
+    icon: const Icon(Icons.delete_outline),
+  );
 }
 
 /// 작게 보이는 보조 문구 (열람기한 등).

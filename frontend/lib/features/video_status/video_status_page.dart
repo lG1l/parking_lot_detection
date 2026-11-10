@@ -173,7 +173,7 @@ class _VideoStatusPageState extends ConsumerState<VideoStatusPage> {
   Widget build(BuildContext context) {
     final d = _detail;
     final screen = _screen;
-    // 목록으로는 두 계정 모두 상단 메뉴 [영상 목록]으로 간다 (D-190, D-211)
+    // 목록으로는 두 계정 모두 상단 메뉴 [사건 목록]으로 간다 (D-190, D-211)
     // 모든 화면의 제목 위: "서브제목 | 피해자(관리자) ○○ | 열람기한" (D-211)
     return PageFrame(
       eyebrow: switch (screen) {

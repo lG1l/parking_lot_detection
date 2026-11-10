@@ -342,7 +342,7 @@ class _AdminUploadPageState extends ConsumerState<AdminUploadPage> {
             ],
           ),
           const SizedBox(height: 6),
-          const SmallText('.mp4 .avi .mkv .mov · 최대 5GB'),
+          const SmallText('.mp4 .avi .mkv .mov'), // 5GB 안내는 넘었을 때 오류로만 보인다 (D-237)
           if (_fileError != null) ...[
             const SizedBox(height: 6),
             Text(_fileError!, style: const TextStyle(fontSize: 14, color: failColor)),
