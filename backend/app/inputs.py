@@ -80,16 +80,14 @@ def _segments_meet(p1, p2, p3, p4) -> bool:
     )
 
 
-def _check_geometry(damage: Damage, vehicle_bbox: list[int], width: int, height: int) -> None:
+def _check_geometry(damage: Damage, width: int, height: int) -> None:
     box = damage.damage_bbox
     if len(box) != 4:
         raise _invalid("damage.damage_bbox must have 4 integers")
     x1, y1, x2, y2 = box
+    # 차량 bbox 밖도 받는다. 다른 물체에 가려 bbox가 차를 덜 감쌀 수 있다 (D-231)
     if not (0 <= x1 < x2 <= width and 0 <= y1 < y2 <= height):
         raise _invalid("damage.damage_bbox is outside the video frame")
-    vx1, vy1, vx2, vy2 = vehicle_bbox
-    if not (vx1 <= x1 and vy1 <= y1 and x2 <= vx2 and y2 <= vy2):
-        raise _invalid("damage.damage_bbox is outside the selected vehicle")
 
     corners = damage.floor_corners
     if len(corners) != 4 or any(len(c) != 2 for c in corners):
@@ -163,7 +161,7 @@ def save_input(video_id: int, body: InputBody, user: Annotated[dict, Depends(cur
         ).one()
         if size.width is None or size.height is None:
             raise ApiError(409, "INVALID_STATE", "video size is not known yet")
-        _check_geometry(body.damage, detection["bbox"], size.width, size.height)
+        _check_geometry(body.damage, size.width, size.height)
 
         photo_key = body.damage.photo_key
         if photo_key is not None:

@@ -88,7 +88,6 @@ def set_path(body, path, value):
         (["damage", "damage_bbox"], [150, 150, 300]),
         (["damage", "damage_bbox"], [150, 150, 300.5, 300]),
         (["damage", "damage_bbox"], [150, 150, 2000, 300]),
-        (["damage", "damage_bbox"], [90, 150, 300, 300]),  # 차량 밖
         (["damage", "damage_bbox"], [300, 150, 150, 300]),
         (["damage", "description"], ""),
         (["damage", "description"], "가" * 501),
@@ -121,6 +120,12 @@ def test_invalid_input_is_422(client, ready, path, value):
     assert r.json()["error"]["code"] == "VALIDATION_FAILED"
     assert sql("SELECT count(*) FROM vehicle_selections").scalar_one() == 0
     assert queue_files() == []
+
+
+def test_damage_bbox_may_go_outside_vehicle(client, ready):
+    vid, _, body = ready
+    body["damage"]["damage_bbox"] = [50, 150, 600, 300]  # 차량 bbox 밖으로 나간다 (D-231)
+    assert put(client, vid, body).status_code == 200
 
 
 def test_front_edge_may_overlap_damage_edges(client, ready):
