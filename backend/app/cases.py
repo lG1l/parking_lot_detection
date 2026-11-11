@@ -1,4 +1,4 @@
-"""사건 API 24·21·22 (05장 5.4, D-204·D-206)"""
+"""사건 API 24·21·22·26 (05장 5.4, D-204·D-206·D-233)"""
 
 from typing import Annotated
 
@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from app import access_log
-from app.auth import current_admin, current_user
+from app.auth import current_admin, current_user, current_victim
 from app.db import get_engine
 from app.errors import ApiError
 from app.uploads import _iso
@@ -71,7 +71,7 @@ def list_cases(user: Annotated[dict, Depends(current_user)]):
     with get_engine().connect() as conn:
         rows = conn.execute(
             text(
-                "SELECT c.id, a.name AS admin_name, v.name AS victim_name, c.created_at "
+                "SELECT c.id, a.name AS admin_name, v.name AS victim_name, c.created_at, c.accepted_at "
                 "FROM cases c JOIN users a ON a.id = c.admin_user_id "
                 "JOIN users v ON v.id = c.victim_user_id "
                 "WHERE c.admin_user_id = :u OR c.victim_user_id = :u "
@@ -86,7 +86,24 @@ def list_cases(user: Annotated[dict, Depends(current_user)]):
                 "admin_name": r.admin_name,
                 "victim_name": r.victim_name,
                 "created_at": _iso(r.created_at),
+                "accepted_at": _iso(r.accepted_at) if r.accepted_at else None,
             }
             for r in rows
         ]
     }
+
+
+@router.post("/cases/{case_id}/accept", status_code=204)
+def accept_case(case_id: int, request: Request, user: Annotated[dict, Depends(current_victim)]):
+    """이미 수락했으면 아무것도 바꾸지 않고 204 (D-233)"""
+    with get_engine().begin() as conn:
+        row = conn.execute(
+            text("SELECT accepted_at FROM cases WHERE id = :c AND victim_user_id = :u FOR UPDATE"),
+            {"c": case_id, "u": user["id"]},
+        ).one_or_none()
+        if row is None:
+            raise ApiError(404, "CASE_NOT_FOUND", "case not found")
+        if row.accepted_at is not None:
+            return
+        conn.execute(text("UPDATE cases SET accepted_at = now() WHERE id = :c"), {"c": case_id})
+    access_log.write_access_log(access_log.ACCEPT_CASE, request, user_id=user["id"])

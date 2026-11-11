@@ -98,3 +98,47 @@ def test_empty_values_are_422():
     assert admin.get("/api/users/lookup", params={"login_id": ""}).status_code == 422
     assert admin.get("/api/users/lookup").status_code == 422
     assert admin.post("/api/cases", json={"victim_login_id": ""}).status_code == 422
+
+
+def test_accept_case_shows_videos_to_victim():
+    from tests.test_uploads import new_video
+
+    admin = login("admin1", "admin", "관리자")
+    victim = login("victim1", "victim", "홍길동")
+    case_id = admin.post("/api/cases", json={"victim_login_id": "victim1"}).json()["id"]
+    video_id = new_video(admin, case_id)  # 수락 전에도 관리자는 올릴 수 있다
+
+    # 수락 전: 사건은 22번에 보이고(알림용), 영상은 보이지 않는다
+    assert victim.get("/api/cases").json()["items"][0]["accepted_at"] is None
+    assert victim.get("/api/videos").json() == []
+    r = victim.get(f"/api/videos/{video_id}")
+    assert (r.status_code, r.json()["error"]["code"]) == (404, "VIDEO_NOT_FOUND")
+    assert [i["video_id"] for i in admin.get("/api/videos").json()] == [video_id]
+
+    assert victim.post(f"/api/cases/{case_id}/accept").status_code == 204
+    accepted_at = victim.get("/api/cases").json()["items"][0]["accepted_at"]
+    assert accepted_at is not None
+    assert [i["video_id"] for i in victim.get("/api/videos").json()] == [video_id]
+    assert victim.get(f"/api/videos/{video_id}").status_code == 200
+
+    # 다시 수락해도 204이고 시각·기록은 그대로다
+    assert victim.post(f"/api/cases/{case_id}/accept").status_code == 204
+    assert victim.get("/api/cases").json()["items"][0]["accepted_at"] == accepted_at
+    assert actions().count("accept_case") == 1
+
+
+def test_accept_other_case_is_404_and_admin_is_403():
+    admin = login("admin1", "admin", "관리자")
+    make_user(login_id="victim1", name="홍길동", role="victim")
+    case_id = admin.post("/api/cases", json={"victim_login_id": "victim1"}).json()["id"]
+    other = login("victim2", "victim", "이순")
+    for path in [f"/api/cases/{case_id}/accept", "/api/cases/999999/accept"]:
+        r = other.post(path)
+        assert (r.status_code, r.json()["error"]["code"]) == (404, "CASE_NOT_FOUND")
+    r = admin.post(f"/api/cases/{case_id}/accept")
+    assert (r.status_code, r.json()["error"]["code"]) == (403, "ROLE_NOT_ALLOWED")
+    assert "accept_case" not in actions()
+
+
+def test_accept_requires_login(client):
+    assert client.post("/api/cases/1/accept").status_code == 401

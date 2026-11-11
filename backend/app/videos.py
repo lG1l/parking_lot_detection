@@ -57,7 +57,8 @@ def _masked_gone(row, expires_at: datetime | None) -> bool:
     return row.masked_deleted_at is not None or (expires_at is not None and row.now > expires_at)
 
 
-_MEMBER = "(c.admin_user_id = :u OR c.victim_user_id = :u)"
+# 피해자는 사건 초대를 수락해야 그 영상에 접근한다 (D-233, D-238)
+_MEMBER = "(c.admin_user_id = :u OR (c.victim_user_id = :u AND c.accepted_at IS NOT NULL))"
 
 
 def _case_video(conn, video_id: int, user: dict, role: str | None = None):

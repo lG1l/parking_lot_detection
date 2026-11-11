@@ -18,9 +18,10 @@ def user_id(login_id):
 
 
 def setup_case(admin="admin1", victim="victim1"):
-    """관리자·피해자 계정과 둘을 묶은 사건을 만들고 사건 번호를 준다."""
+    """관리자·피해자 계정과 둘을 묶은(수락까지 한) 사건을 만들고 사건 번호를 준다."""
     return sql(
-        "INSERT INTO cases (admin_user_id, victim_user_id) VALUES (:a, :v) RETURNING id",
+        "INSERT INTO cases (admin_user_id, victim_user_id, accepted_at) "
+        "VALUES (:a, :v, now()) RETURNING id",
         a=make_user(login_id=admin, role="admin"),
         v=make_user(login_id=victim, role="victim"),
     ).scalar_one()
