@@ -25,7 +25,7 @@ void requireAdmin(BuildContext context, WidgetRef ref) {
 }
 
 /// 2.3 사건 관계자 연결 (관리자). 사건 이름과 피해자 아이디를 넣고 [연결]하면 24번으로 가린 이름을 확인하는 창을 띄우고(D-206),
-/// 창에서 [연결]하면 수락 단계 없이 사건이 생기고(21번) 그 사건의 업로드 화면으로 간다 (D-204).
+/// 창에서 [연결]하면 수락 대기 사건이 생기고(21번) 그 사건의 업로드 화면으로 간다 (D-204, D-233).
 class CaseLinkPage extends ConsumerStatefulWidget {
   const CaseLinkPage({super.key});
 
@@ -111,7 +111,7 @@ class _CaseLinkPageState extends ConsumerState<CaseLinkPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Text(
-                  '피해자 계정을 연결하면 수락 단계 없이 바로 사건 하나로 묶입니다.\n연결한 뒤 그 사건에 CCTV 영상을 올립니다.',
+                  '피해자 계정을 연결하면 사건이 만들어지고, 피해자가 [알림]에서 수락하면 묶입니다.\n연결한 뒤 바로 그 사건에 CCTV 영상을 올릴 수 있습니다.',
                   style: TextStyle(fontSize: 15, height: 1.6),
                 ),
                 const SizedBox(height: 16),
