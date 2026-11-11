@@ -94,7 +94,7 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 
 ### cases
 
-관리자 계정 1개와 피해자 계정 1개를 묶은 사건 하나. 관리자가 피해자 아이디로 초대하면 행이 생기고, 수락 단계 없이 바로 묶인다. (D-204)
+관리자 계정 1개와 피해자 계정 1개를 묶은 사건 하나. 관리자가 피해자 아이디로 초대하면 행이 생긴다. 피해자가 [알림]에서 수락해야 묶인다. (D-204, D-233)
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
@@ -102,6 +102,7 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 | `admin_user_id` | bigint FK → users | 초대한 관리자 계정. 업로드·열람을 맡는다 |
 | `victim_user_id` | bigint FK → users | 초대된 피해자 계정. 입력을 맡는다 |
 | `created_at` | timestamptz | 초대 시각 |
+| `accepted_at` | timestamptz, NULL 허용 | 피해자가 초대를 수락한 시각. 수락 전 `NULL`. 한 번 찍으면 바꾸지 않는다 (D-233) |
 
 - 두 칼럼의 역할이 맞는지는 21번 API가 확인한다. 피해자 역할이 아닌 계정은 초대할 수 없다 ([05장 5.4](05-api.md#54-사건업로드-api)).
 - 같은 두 계정이 다른 사건으로 또 묶일 수 있다. 사고가 또 나면 새 사건이기 때문이다.
@@ -420,7 +421,7 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 |---|---|---|
 | `id` | bigserial PK | |
 | `user_id` | bigint FK → users, NULL 허용 | 누가. 시스템이 남기는 `delete_raw`·`delete_masked`는 비어 있다 |
-| `video_id` | bigint FK → videos, NULL 허용 | 어느 영상. `login`·`lookup_invitee`·`create_case`는 비어 있다 |
+| `video_id` | bigint FK → videos, NULL 허용 | 어느 영상. `login`·`lookup_invitee`·`create_case`·`accept_case`는 비어 있다 |
 | `action` | text | 무엇을 했나. 값 목록은 아래 |
 | `requested_ip` | inet | 어디서. 고시 제8조의 접속지 정보 |
 | `created_at` | timestamptz | 언제 |
@@ -432,6 +433,7 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 | `login` | 로그인 성공 (5.3) | 열람 요구자 특정 (표준지침 제44조⑤) |
 | `lookup_invitee` | 초대 전 피해자 확인. 가린 이름을 돌려줌 (5.4, D-206) | 이용 기록 (표준지침 제42조) |
 | `create_case` | 사건 생성·피해자 초대 (5.4) | 수집 경로 기록 |
+| `accept_case` | 피해자의 사건 초대 수락 (5.4, D-233). 이미 수락한 사건을 다시 수락하면 남기지 않는다 | 수집 경로 기록 |
 | `agree_viewing` | 관리·감독 안내 동의 (5.4) | 이용 기록 (표준지침 제42조) |
 | `view_still` | 정지 장면 조회 (5.6) | **열람** |
 | `view_clip` | 후보 클립 재생 URL 발급 (5.8, 5.9의 14·15번) | **열람** |
@@ -721,7 +723,8 @@ CREATE TABLE cases (                         -- D-204
   id             bigserial PRIMARY KEY,
   admin_user_id  bigint      NOT NULL REFERENCES users(id),
   victim_user_id bigint      NOT NULL REFERENCES users(id),
-  created_at     timestamptz NOT NULL DEFAULT now()
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  accepted_at    timestamptz                          -- 수락 전 NULL (D-233)
 );
 
 CREATE TABLE videos (
