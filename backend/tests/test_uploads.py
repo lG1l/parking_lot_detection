@@ -27,7 +27,7 @@ def login(login_id, role):
 
 
 def new_case(admin, victim_login_id="victim1"):
-    r = admin.post("/api/cases", json={"victim_login_id": victim_login_id})
+    r = admin.post("/api/cases", json={"victim_login_id": victim_login_id, "case_name": "사건"})
     assert r.status_code == 201
     return r.json()["id"]
 
