@@ -103,10 +103,16 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 | `victim_user_id` | bigint FK → users | 초대된 피해자 계정. 입력을 맡는다 |
 | `created_at` | timestamptz | 초대 시각 |
 | `accepted_at` | timestamptz, NULL 허용 | 피해자가 초대를 수락한 시각. 수락 전 `NULL`. 한 번 찍으면 바꾸지 않는다 (D-233) |
+| `admin_deleted_at` | timestamptz, NULL 허용 | 관리자가 이 사건을 삭제(숨김)한 시각. 찍히면 관리자 쪽에서만 없는 사건이 된다 (D-239) |
+| `victim_deleted_at` | timestamptz, NULL 허용 | 피해자가 이 사건을 삭제(숨김)한 시각. 찍히면 피해자 쪽에서만 없는 사건이 된다 (D-239) |
+| `admin_case_name` | text, NULL 허용 | 관리자가 붙인 사건 이름. 관리자에게만 보인다. 21번에서 받고 27번으로 바꾼다 (D-237, D-240) |
+| `victim_case_name` | text, NULL 허용 | 피해자가 붙인 사건 이름. 피해자에게만 보인다. 연결할 때 "YYYY-MM-DD 연결"(한국 시간)로 시작한다 (D-240) |
 
 - 두 칼럼의 역할이 맞는지는 21번 API가 확인한다. 피해자 역할이 아닌 계정은 초대할 수 없다 ([05장 5.4](05-api.md#54-사건업로드-api)).
 - 같은 두 계정이 다른 사건으로 또 묶일 수 있다. 사고가 또 나면 새 사건이기 때문이다.
-- 초대를 취소하거나 사건을 지우는 기능은 없다.
+- 이름 칼럼이 생기기 전에 만든 사건은 두 이름 모두 `NULL`이다. 화면은 영상 파일 이름으로 보인다 (D-237).
+- 초대를 취소하는 기능은 없다.
+- 사건 삭제(28번)는 행을 지우지 않고 지운 계정의 `*_deleted_at`만 찍는다. 영상·분석 결과·`viewing_agreements`·`access_logs`·S3 파일은 그대로 두고, 업로드 완료 30일 뒤 파기(D-64)를 그대로 따른다. 되돌리는 기능은 없다 (D-239).
 
 ### viewing_agreements
 
@@ -724,7 +730,11 @@ CREATE TABLE cases (                         -- D-204
   admin_user_id  bigint      NOT NULL REFERENCES users(id),
   victim_user_id bigint      NOT NULL REFERENCES users(id),
   created_at     timestamptz NOT NULL DEFAULT now(),
-  accepted_at    timestamptz                          -- 수락 전 NULL (D-233)
+  accepted_at       timestamptz,                      -- 수락 전 NULL (D-233)
+  admin_deleted_at  timestamptz,                      -- 관리자가 숨김 (D-239)
+  victim_deleted_at timestamptz,                      -- 피해자가 숨김 (D-239)
+  admin_case_name   text,                             -- 관리자 쪽 이름 (D-240)
+  victim_case_name  text                              -- 피해자 쪽 이름 (D-240)
 );
 
 CREATE TABLE videos (
