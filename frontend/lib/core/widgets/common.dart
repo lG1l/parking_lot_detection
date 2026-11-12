@@ -81,7 +81,7 @@ const narrowWidth = 720.0;
 
 bool isNarrow(BuildContext context) => MediaQuery.sizeOf(context).width < narrowWidth;
 
-/// 이 폭보다 좁으면 상단 바 가운데 메뉴가 넘치지 않게 줄여 보인다. 메뉴가 5개라 넓은 배치는 이 폭부터 쓴다 (D-236).
+/// 이 폭보다 좁으면 상단 바 가운데 메뉴가 넘치지 않게 줄여 보인다. 메뉴가 5개(관리자는 6개)라 넓은 배치는 이 폭부터 쓴다 (D-236, D-243).
 const topBarWideWidth = 1000.0;
 
 /// 상단 바 가운데 메뉴 (D-190, D-211). [link]는 관리자 계정에만 있고, [notifications]는 두 계정에 있다 (D-233, D-243).

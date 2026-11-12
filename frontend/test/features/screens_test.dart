@@ -383,7 +383,7 @@ void main() {
     expect(picker().groupValue, TextSize.large);
     expect(scaleOf(), 1.15);
     expect(browser.local[textSizeStorageKey], 'large');
-    // 상단 메뉴 5개가 넘치지 않는다 (넘치면 테스트가 예외로 잡는다)
+    // 상단 메뉴(관리자 6개)가 넘치지 않는다 (넘치면 테스트가 예외로 잡는다)
     expect(tester.takeException(), isNull);
     // 서버에는 읽기만 했고, 바꾸는 호출은 없다
     expect(backend.calls.where((c) => !c.startsWith('GET ')), isEmpty);
