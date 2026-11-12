@@ -48,6 +48,13 @@ class FakeBackend {
       if (c != 'GET /api/auth/me' && c != 'GET /api/cases') c,
   ];
 
+  /// [screenCalls]에서 8번 조회를 뺀 것. 관리자 메뉴 [알림] 배지가 화면마다 8번을 읽으므로 (D-243),
+  /// "이 화면은 서버를 부르지 않는다"를 볼 때는 이것을 쓴다.
+  List<String> get screenCallsWithoutBadge => [
+    for (final c in screenCalls)
+      if (c != 'GET /api/videos') c,
+  ];
+
   int count(String call) => calls.where((c) => c == call).length;
 
   http.Client get client => MockClient((req) async {

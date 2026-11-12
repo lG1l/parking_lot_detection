@@ -148,7 +148,7 @@ void main() {
     expect(order(), ['A', 'B', 'C', 'D', 'E', 'F', 'G']); // 정렬 버튼이 없다
     expect(find.byIcon(Icons.unfold_more), findsNothing);
 
-    expect(backend.count('GET /api/videos'), 1);
+    expect(backend.count('GET /api/videos'), 2); // 목록 1번 + 관리자 [알림] 배지 1번 (D-243)
   });
 
   testWidgets('창 폭을 줄여도 목록 칸이 넘치지 않는다 (2.2)', (tester) async {
@@ -281,7 +281,10 @@ void main() {
         ],
       }),
     });
-    await pumpApp(tester, backend, '/notifications');
+    await pumpApp(tester, backend, '/videos');
+    expect(find.text('2'), findsOneWidget); // [알림] 배지: 후보 선택 가능 1 + 분석 실패 1
+    await tester.tap(find.text('알림'));
+    await settle(tester);
     expect(find.text('victim02님에게 사건 관계자 연결을 요청했습니다.'), findsOneWidget);
     expect(find.text('victim02님이 연결을 수락했습니다.'), findsOneWidget);
     expect(find.text('후보 선택 가능'), findsOneWidget);
@@ -292,6 +295,16 @@ void main() {
     await tester.tap(find.text('후보 선택 가능'));
     await settle(tester);
     expect(backend.count('GET /api/videos/7'), greaterThan(0)); // 그 영상의 상태 화면
+  });
+
+  testWidgets('관리자 메뉴 6개는 글자 [크게]에서도 상단 바가 넘치지 않는다 (3.8, D-236, D-243)', (tester) async {
+    final browser = FakeBrowser()..local[textSizeStorageKey] = 'large';
+    await pumpApp(tester, FakeBackend({}), '/notifications', browser: browser);
+    for (final width in [1000.0, 1200.0, 1400.0, 999.0, 800.0]) {
+      tester.view.physicalSize = Size(width, 1000);
+      await settle(tester);
+      expect(tester.takeException(), isNull, reason: '폭 $width');
+    }
   });
 
   testWidgets('피해자 계정 마이페이지는 아이디와 "사건 관계자"를 보이고, 버튼은 안내 창만 띄운다 (2.12, D-234, D-237)', (tester) async {
@@ -469,7 +482,7 @@ void main() {
       }),
     });
     await pumpApp(tester, backend, '/cases/new');
-    expect(backend.screenCalls, isEmpty); // 열 때는 부르지 않는다
+    expect(backend.screenCallsWithoutBadge, isEmpty); // 열 때는 부르지 않는다
 
     await tester.enterText(find.byType(TextField).first, '  B2 기둥 긁힘 '); // 앞뒤 공백은 지워 보낸다
     await tester.enterText(find.byType(TextField).last, 'victim02');
@@ -504,7 +517,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, '연결'));
     await settle(tester);
     expect(find.text('사건 이름을 입력해 주세요.'), findsOneWidget);
-    expect(backend.screenCalls, isEmpty);
+    expect(backend.screenCallsWithoutBadge, isEmpty);
   });
 
   testWidgets('사건 이름으로 검색하면 맞는 줄만 남고, 없으면 검색 결과 없음 안내 (2.2, D-237)', (tester) async {
@@ -535,7 +548,7 @@ void main() {
     expect(find.text('검색 결과 0건'), findsOneWidget);
     expect(find.text('검색 결과가 없습니다'), findsOneWidget);
     expect(find.text('‘CH09’와 일치하는 사건 이름이 없습니다.\n이름을 다시 확인해 주세요.'), findsOneWidget);
-    expect(backend.count('GET /api/videos'), 1); // 검색은 화면에서만 한다
+    expect(backend.count('GET /api/videos'), 2); // 검색은 화면에서만 한다. 목록 1번 + 관리자 [알림] 배지 1번 (D-243)
   });
 
   testWidgets('연필로 사건 이름을 고치면 27번, 휴지통은 확인창 뒤 28번을 부르고 목록을 다시 읽는다 (2.2, D-237)', (tester) async {
@@ -602,7 +615,7 @@ void main() {
     await tester.tap(find.bySemanticsLabel('서비스 로고'), warnIfMissed: false);
     await settle(tester);
     expect(find.text('피해자 아이디'), findsOneWidget);
-    expect(backend.screenCalls, isEmpty);
+    expect(backend.screenCallsWithoutBadge, isEmpty);
   });
 
   testWidgets('관리자 상단 바 메뉴로 사건 목록과 사건 관계자 연결을 오간다 (D-211, D-237)', (tester) async {
@@ -779,7 +792,7 @@ void main() {
     expect(find.text('파일 선택'), findsOneWidget);
     expect(find.text('위탁계약 동의 완료'), findsOneWidget); // 영상 올리기 | 피해자 | 위탁계약 동의 완료 (D-211)
     expect(find.textContaining('열람기한'), findsNothing); // 업로드 전에는 열람기한을 보이지 않는다
-    expect(backend.screenCalls, isEmpty); // 동의는 따로 저장하지 않는다
+    expect(backend.screenCallsWithoutBadge, isEmpty); // 동의는 따로 저장하지 않는다
   });
 
   testWidgets('녹화 시작 시각은 달력으로 날짜를 고르고 시·분·초를 범위 안에서 치면 형식대로 채워진다 (2.4, D-190, D-242)', (tester) async {

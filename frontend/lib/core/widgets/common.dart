@@ -84,7 +84,7 @@ bool isNarrow(BuildContext context) => MediaQuery.sizeOf(context).width < narrow
 /// 이 폭보다 좁으면 상단 바 가운데 메뉴가 넘치지 않게 줄여 보인다. 메뉴가 5개라 넓은 배치는 이 폭부터 쓴다 (D-236).
 const topBarWideWidth = 1000.0;
 
-/// 상단 바 가운데 메뉴 (D-190, D-211). [link]는 관리자 계정에만, [notifications]는 피해자 계정에만 있다 (D-233).
+/// 상단 바 가운데 메뉴 (D-190, D-211). [link]는 관리자 계정에만 있고, [notifications]는 두 계정에 있다 (D-233, D-243).
 enum NavItem { info, videos, link, notifications, myPage, settings }
 
 /// 화면 공통 틀. PC 브라우저 기준이라 가운데 최대 폭을 둔다.
@@ -260,15 +260,15 @@ class _TopBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final me = ref.watch(meProvider).value;
     final admin = me?.isAdmin ?? false;
-    // 대기 중인 초대 수. 못 읽으면 배지를 두지 않는다 (D-233)
-    final invites = me == null || admin ? 0 : ref.watch(pendingInvitesProvider).value?.length ?? 0;
+    // 피해자는 대기 중인 초대 수, 관리자는 할 일 수. 못 읽으면 배지를 두지 않는다 (D-233, D-243)
+    final badgeCount = me == null ? 0 : ref.watch(notificationBadgeProvider).value ?? 0;
     Widget menu(NavItem item, String label, String path, {int badge = 0}) {
       final selected = item == current;
       return Semantics(
         selected: selected,
         child: TextButton(
           onPressed: () => _leave(context, () {
-            ref.invalidate(pendingInvitesProvider); // 화면을 옮길 때 배지 수를 다시 센다 (D-233)
+            ref.invalidate(notificationBadgeProvider); // 화면을 옮길 때 배지 수를 다시 센다 (D-233, D-243)
             context.go(path);
           }),
           style: TextButton.styleFrom(
@@ -298,7 +298,7 @@ class _TopBar extends ConsumerWidget {
         if (me != null) menu(NavItem.info, 'Info.', '/info'),
         menu(NavItem.videos, '사건 목록', '/videos'),
         if (admin) menu(NavItem.link, '사건 관계자 연결', '/cases/new'),
-        if (me != null && !admin) menu(NavItem.notifications, '알림', '/notifications', badge: invites),
+        if (me != null) menu(NavItem.notifications, '알림', '/notifications', badge: badgeCount),
         if (me != null) menu(NavItem.myPage, '마이페이지', '/mypage'),
         if (me != null) menu(NavItem.settings, '환경설정', '/settings'),
       ],

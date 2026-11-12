@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'api/api.dart';
+import '../features/notifications/notification_rules.dart';
 import 'models/account.dart';
 
 /// 로그인한 계정 (3번). 화면은 `role`로 메뉴와 갈 화면을 나눈다 (D-204).
@@ -24,18 +25,19 @@ final caseOfVideoProvider = FutureProvider<Map<int, VideoCase>>((ref) async {
   }
 });
 
-/// 피해자가 아직 수락하지 않은 사건 초대 (22번에서 `pending`인 사건, D-233). 관리자는 빈 목록이다.
-/// 상단 메뉴 [알림] 배지가 쓴다. 주기적으로 다시 읽지 않고 [refreshSession]·메뉴 이동 때만 다시 읽는다.
-final pendingInvitesProvider = FutureProvider<List<VideoCase>>((ref) async {
+/// 상단 메뉴 [알림] 옆 배지 수. 피해자는 아직 수락하지 않은 사건 초대 수(22번의 `pending`, D-233),
+/// 관리자는 할 일 수(8번에서 후보 선택 가능·분석 실패·업로드 확인 안 됨, D-243)다.
+/// 주기적으로 다시 읽지 않고 [refreshSession]·메뉴 이동 때만 다시 읽는다.
+final notificationBadgeProvider = FutureProvider<int>((ref) async {
   final me = await ref.watch(meProvider.future);
-  if (me.isAdmin) return const [];
-  final cases = await ref.read(apiProvider).cases();
-  return [for (final c in cases) if (c.pending) c];
+  final api = ref.read(apiProvider);
+  if (me.isAdmin) return adminTodoCount(await api.videos());
+  return (await api.cases()).where((c) => c.pending).length;
 });
 
 /// 계정이 바뀌거나 사건·영상이 늘었을 때 다시 읽게 한다.
 void refreshSession(WidgetRef ref, {bool account = false}) {
   if (account) ref.invalidate(meProvider);
   ref.invalidate(caseOfVideoProvider);
-  ref.invalidate(pendingInvitesProvider);
+  ref.invalidate(notificationBadgeProvider);
 }
