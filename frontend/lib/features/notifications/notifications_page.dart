@@ -9,37 +9,7 @@ import '../../core/models/account.dart';
 import '../../core/models/video.dart';
 import '../../core/session.dart';
 import '../../core/widgets/common.dart';
-
-/// 대화 한 칸. 사건 초대이거나, 영상 상태에서 만든 알림이다 (D-237).
-sealed class _Message {
-  const _Message();
-}
-
-class _InviteMessage extends _Message {
-  const _InviteMessage(this.videoCase);
-
-  final VideoCase videoCase;
-}
-
-class _StatusMessage extends _Message {
-  const _StatusMessage(this.video, this.chip, this.text);
-
-  final VideoSummary video;
-  final String chip;
-  final String text;
-}
-
-/// 영상 상태 중 피해자가 알아야 하는 것만 알림으로 만든다. 나머지(업로드·대기·분석 중)는 null.
-_StatusMessage? _statusMessageOf(VideoSummary v) {
-  if (v.maskedDeleted) return null;
-  return switch (v.status) {
-    VideoStatus.stage1Done => _StatusMessage(v, '사전 입력 필요', '${v.originalFilename} 차량과 파손 부위를 입력해 주세요.'),
-    VideoStatus.ready || VideoStatus.batchRunning => _StatusMessage(v, '분석 완료', '결과는 주차장 관리자 화면에서 관리자와 함께 확인합니다.'),
-    VideoStatus.finished || VideoStatus.exhausted => _StatusMessage(v, '확인 완료', '고정한 사건 지점의 시간을 볼 수 있습니다.'),
-    VideoStatus.failed => _StatusMessage(v, '분석 실패', '${v.originalFilename} 영상을 분석하지 못했습니다. 관리자에게 문의해 주세요.'),
-    _ => null,
-  };
-}
+import 'notification_rules.dart';
 
 /// 2.11 알림 (피해자). 왼쪽은 사건, 오른쪽은 고른 사건의 알림 대화다 (캔버스, D-237).
 /// 대기 중인 사건 초대는 [수락]하면 그 사건이 묶인다 (D-233). 거절과 메시지 보내기는 없다.
@@ -120,18 +90,14 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     }
   }
 
-  /// 사건의 알림. 초대가 먼저이고, 수락한 사건만 영상 상태 알림이 붙는다.
-  List<_Message> _messagesOf(VideoCase c) => [
-    _InviteMessage(c),
-    if (!c.pending)
-      for (final v in _videos)
-        if (v.caseId == c.id) ?_statusMessageOf(v),
-  ];
+  /// 사건의 알림 (규칙은 notification_rules.dart). 관리자 화면은 Todo 3에서 연다.
+  List<NoticeMessage> _messagesOf(VideoCase c) => messagesOf(c, _videos, admin: false);
 
   /// 왼쪽 목록 한 줄의 요약. 마지막 알림을 짧게 보인다 (캔버스 "사전 입력 필요 · …").
   String _summaryOf(VideoCase c) => switch (_messagesOf(c).last) {
-    _InviteMessage() => c.pending ? '연결 요청 · 수락이 필요합니다' : '연결 수락 · 수락했습니다.',
-    _StatusMessage(:final chip, :final text) => '$chip · $text',
+    NoticeInvite() => c.pending ? '연결 요청 · 수락이 필요합니다' : '연결 수락 · 수락했습니다.',
+    NoticeAccepted() => '연결 수락 · 수락했습니다.',
+    NoticeStatus(:final chip, :final text) => '$chip · $text',
   };
 
   @override
@@ -249,7 +215,7 @@ class _Conversation extends StatelessWidget {
   });
 
   final VideoCase videoCase;
-  final List<_Message> messages;
+  final List<NoticeMessage> messages;
   final bool accepting;
   final VoidCallback onAccept;
 
@@ -271,7 +237,8 @@ class _Conversation extends StatelessWidget {
         Align(child: SmallText(formatKstDate(c.createdAt))),
         for (final m in messages)
           switch (m) {
-            _InviteMessage() => _Bubble(
+            NoticeAccepted() => const SizedBox.shrink(), // 관리자 화면(Todo 3)에서 그린다
+            NoticeInvite() => _Bubble(
               children: [
                 Text('$admin이 사건 관계자 연결을 요청했습니다.', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                 Text('사건 ${_caseTitle(c)}', style: const TextStyle(fontSize: 14, color: noteColor)),
@@ -292,7 +259,7 @@ class _Conversation extends StatelessWidget {
                 SmallText(formatKstMinute(c.acceptedAt ?? c.createdAt)),
               ],
             ),
-            _StatusMessage(:final video, :final chip, :final text) => _Bubble(
+            NoticeStatus(:final video, :final chip, :final text) => _Bubble(
               onTap: () => context.go('/videos/${video.videoId}'),
               children: [
                 Row(
