@@ -268,6 +268,32 @@ void main() {
     expect(find.text('사전 입력 필요'), findsNothing);
   });
 
+  testWidgets('관리자 알림은 수락·후보 선택 가능·분석 실패를 보이고 [수락] 버튼이 없다 (2.11, D-243)', (tester) async {
+    final backend = FakeBackend({
+      'GET /api/videos': (_) => json([
+        video('ready'),
+        video('failed', extra: {'video_id': 8, 'original_filename': 'CH02.mp4'}),
+      ]),
+      'GET /api/videos/7': (_) => json(video('ready')),
+      'GET /api/cases': (_) => json({
+        'items': [
+          {...case3(), 'accepted_at': '2026-11-10T10:00:00+09:00'},
+        ],
+      }),
+    });
+    await pumpApp(tester, backend, '/notifications');
+    expect(find.text('victim02님에게 사건 관계자 연결을 요청했습니다.'), findsOneWidget);
+    expect(find.text('victim02님이 연결을 수락했습니다.'), findsOneWidget);
+    expect(find.text('후보 선택 가능'), findsOneWidget);
+    expect(find.text('CH01.mp4 분석이 끝났습니다. 후보를 확인해 주세요.'), findsOneWidget);
+    expect(find.text('분석 실패'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '수락'), findsNothing);
+
+    await tester.tap(find.text('후보 선택 가능'));
+    await settle(tester);
+    expect(backend.count('GET /api/videos/7'), greaterThan(0)); // 그 영상의 상태 화면
+  });
+
   testWidgets('피해자 계정 마이페이지는 아이디와 "사건 관계자"를 보이고, 버튼은 안내 창만 띄운다 (2.12, D-234, D-237)', (tester) async {
     final backend = FakeBackend({
       'GET /api/videos': (_) => json([video('stage1_done')]),

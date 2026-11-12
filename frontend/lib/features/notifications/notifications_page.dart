@@ -11,8 +11,9 @@ import '../../core/session.dart';
 import '../../core/widgets/common.dart';
 import 'notification_rules.dart';
 
-/// 2.11 알림 (피해자). 왼쪽은 사건, 오른쪽은 고른 사건의 알림 대화다 (캔버스, D-237).
-/// 대기 중인 사건 초대는 [수락]하면 그 사건이 묶인다 (D-233). 거절과 메시지 보내기는 없다.
+/// 2.11 알림 (두 계정). 왼쪽은 사건, 오른쪽은 고른 사건의 알림 대화다 (캔버스, D-237).
+/// 대기 중인 사건 초대는 피해자가 [수락]하면 그 사건이 묶인다 (D-233). 관리자는 [수락]이 없고 할 일을 본다 (D-243).
+/// 거절과 메시지 보내기는 없다.
 /// 22번·8번은 열 때와 [수락] 뒤에만 부른다. 주기적으로 부르지 않는다.
 class NotificationsPage extends ConsumerStatefulWidget {
   const NotificationsPage({super.key});
@@ -24,29 +25,20 @@ class NotificationsPage extends ConsumerStatefulWidget {
 class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   List<VideoCase>? _cases;
   List<VideoSummary> _videos = [];
+  bool _admin = false;
   int? _selected;
   final _accepting = <int>{}; // [수락]을 누른 사건. 다시 누르지 못하게 막는다
 
   @override
   void initState() {
     super.initState();
-    // 관리자 계정은 알림이 없다. 피해자가 연결 화면을 열 때와 같이 목록으로 보낸다
-    ref
-        .read(meProvider.future)
-        .then(
-          (me) {
-            if (me.isAdmin && mounted) redirectTo(context, '/videos');
-          },
-          onError: (Object e) {
-            if (mounted) handleCommonError(context, e);
-          },
-        );
     _load();
   }
 
   Future<void> _load() async {
     final api = ref.read(apiProvider);
     try {
+      final admin = (await ref.read(meProvider.future)).isAdmin;
       final cases = await api.cases(); // 22
       var videos = <VideoSummary>[];
       try {
@@ -55,11 +47,12 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       refreshSession(ref); // 메뉴 배지 수도 다시 센다
       if (!mounted) return;
       setState(() {
-        _cases = _ordered(cases);
+        _admin = admin;
         _videos = videos;
-        // 처음은 수락할 초대가 있는 사건, 없으면 맨 위 사건을 고른다
+        _cases = _ordered(cases);
+        // 처음은 맨 위 사건이다(피해자는 수락할 초대가 있는 사건이 맨 위에 온다)
         if (_selected == null || !cases.any((c) => c.id == _selected)) {
-          _selected = (cases.where((c) => c.pending).firstOrNull ?? _cases!.firstOrNull)?.id;
+          _selected = _cases!.firstOrNull?.id;
         }
       });
     } catch (e) {
@@ -67,12 +60,14 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     }
   }
 
-  /// 수락할 초대가 먼저, 그다음 최근에 연결한 사건 순이다.
-  List<VideoCase> _ordered(List<VideoCase> cases) => [...cases]
-    ..sort((a, b) {
-      if (a.pending != b.pending) return a.pending ? -1 : 1;
+  /// 피해자는 수락할 초대가, 관리자는 할 일이 있는 사건이 먼저이고, 그다음 최근에 연결한 사건 순이다.
+  List<VideoCase> _ordered(List<VideoCase> cases) {
+    bool first(VideoCase c) => _admin ? adminTodoCount(_videos.where((v) => v.caseId == c.id).toList()) > 0 : c.pending;
+    return [...cases]..sort((a, b) {
+      if (first(a) != first(b)) return first(a) ? -1 : 1;
       return b.createdAt.compareTo(a.createdAt);
     });
+  }
 
   Future<void> _accept(VideoCase c) async {
     setState(() => _accepting.add(c.id));
@@ -90,12 +85,12 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     }
   }
 
-  /// 사건의 알림 (규칙은 notification_rules.dart). 관리자 화면은 Todo 3에서 연다.
-  List<NoticeMessage> _messagesOf(VideoCase c) => messagesOf(c, _videos, admin: false);
+  /// 사건의 알림 (규칙은 notification_rules.dart).
+  List<NoticeMessage> _messagesOf(VideoCase c) => messagesOf(c, _videos, admin: _admin);
 
   /// 왼쪽 목록 한 줄의 요약. 마지막 알림을 짧게 보인다 (캔버스 "사전 입력 필요 · …").
   String _summaryOf(VideoCase c) => switch (_messagesOf(c).last) {
-    NoticeInvite() => c.pending ? '연결 요청 · 수락이 필요합니다' : '연결 수락 · 수락했습니다.',
+    NoticeInvite() => c.pending ? (_admin ? '연결 요청 · 수락을 기다립니다' : '연결 요청 · 수락이 필요합니다') : '연결 수락 · 수락했습니다.',
     NoticeAccepted() => '연결 수락 · 수락했습니다.',
     NoticeStatus(:final chip, :final text) => '$chip · $text',
   };
@@ -123,11 +118,13 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     final list = _CaseList(
       cases: cases,
       selectedId: selected.id,
+      caseTitleOf: (c) => _caseTitle(c, admin: _admin),
       summaryOf: _summaryOf,
       onSelect: (c) => setState(() => _selected = c.id),
     );
     final talk = _Conversation(
       videoCase: selected,
+      admin: _admin,
       messages: _messagesOf(selected),
       accepting: _accepting.contains(selected.id),
       onAccept: () => _accept(selected),
@@ -148,14 +145,21 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   }
 }
 
-/// 사건 이름. 이름이 없는 사건(지금 백엔드)은 관리자 이름으로 부른다.
-String _caseTitle(VideoCase c) => c.name ?? '${c.adminName ?? '관리자'}의 사건';
+/// 사건 이름. 이름이 없는 사건(지금 백엔드)은 상대 이름으로 부른다.
+String _caseTitle(VideoCase c, {required bool admin}) => c.name ?? '${admin ? c.victimName : c.adminName ?? '관리자'}의 사건';
 
 class _CaseList extends StatelessWidget {
-  const _CaseList({required this.cases, required this.selectedId, required this.summaryOf, required this.onSelect});
+  const _CaseList({
+    required this.cases,
+    required this.selectedId,
+    required this.caseTitleOf,
+    required this.summaryOf,
+    required this.onSelect,
+  });
 
   final List<VideoCase> cases;
   final int selectedId;
+  final String Function(VideoCase) caseTitleOf;
   final String Function(VideoCase) summaryOf;
   final ValueChanged<VideoCase> onSelect;
 
@@ -190,7 +194,10 @@ class _CaseList extends StatelessWidget {
                       spacing: 8,
                       children: [
                         Expanded(
-                          child: Text(_caseTitle(c), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                          child: Text(
+                            caseTitleOf(c),
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                          ),
                         ),
                         SmallText(formatKstMinute(c.createdAt).substring(5)), // "MM-DD HH:mm"
                       ],
@@ -209,12 +216,14 @@ class _CaseList extends StatelessWidget {
 class _Conversation extends StatelessWidget {
   const _Conversation({
     required this.videoCase,
+    required this.admin,
     required this.messages,
     required this.accepting,
     required this.onAccept,
   });
 
   final VideoCase videoCase;
+  final bool admin;
   final List<NoticeMessage> messages;
   final bool accepting;
   final VoidCallback onAccept;
@@ -222,7 +231,9 @@ class _Conversation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = videoCase;
-    final admin = c.adminName ?? '관리자';
+    final adminName = c.adminName ?? '관리자';
+    final title = _caseTitle(c, admin: admin);
+    final state = c.pending ? '수락 대기 중' : '연결됨';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: 12,
@@ -230,19 +241,32 @@ class _Conversation extends StatelessWidget {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(_caseTitle(c), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
-            SmallText('$admin · ${c.pending ? '수락 대기 중' : '연결됨'}'),
+            Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
+            SmallText(admin ? '피해자 ${c.victimName} · $state' : '$adminName · $state'),
           ],
         ),
         Align(child: SmallText(formatKstDate(c.createdAt))),
         for (final m in messages)
           switch (m) {
-            NoticeAccepted() => const SizedBox.shrink(), // 관리자 화면(Todo 3)에서 그린다
+            NoticeAccepted() => _Bubble(
+              children: [
+                Text(
+                  '${c.victimName}님이 연결을 수락했습니다.',
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
+                SmallText(formatKstMinute(c.acceptedAt ?? c.createdAt)),
+              ],
+            ),
             NoticeInvite() => _Bubble(
               children: [
-                Text('$admin이 사건 관계자 연결을 요청했습니다.', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-                Text('사건 ${_caseTitle(c)}', style: const TextStyle(fontSize: 14, color: noteColor)),
-                if (c.pending)
+                Text(
+                  admin ? '${c.victimName}님에게 사건 관계자 연결을 요청했습니다.' : '$adminName이 사건 관계자 연결을 요청했습니다.',
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
+                Text('사건 $title', style: const TextStyle(fontSize: 14, color: noteColor)),
+                if (admin)
+                  const SizedBox.shrink()
+                else if (c.pending)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
                     child: FilledButton(
@@ -256,10 +280,10 @@ class _Conversation extends StatelessWidget {
                   )
                 else
                   const Text('수락했습니다.', style: TextStyle(fontSize: 14, color: subColor)),
-                SmallText(formatKstMinute(c.acceptedAt ?? c.createdAt)),
+                SmallText(formatKstMinute(admin ? c.createdAt : c.acceptedAt ?? c.createdAt)),
               ],
             ),
-            NoticeStatus(:final video, :final chip, :final text) => _Bubble(
+            NoticeStatus(:final video, :final chip, :final text, :final problem) => _Bubble(
               onTap: () => context.go('/videos/${video.videoId}'),
               children: [
                 Row(
@@ -268,7 +292,10 @@ class _Conversation extends StatelessWidget {
                     Container(
                       height: 28,
                       padding: const EdgeInsets.symmetric(horizontal: 10),
-                      decoration: BoxDecoration(color: pointColor, borderRadius: BorderRadius.circular(14)),
+                      decoration: BoxDecoration(
+                        color: problem ? failChipColor : pointColor,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                       alignment: Alignment.center,
                       child: Text(
                         chip,
