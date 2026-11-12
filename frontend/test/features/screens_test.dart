@@ -110,7 +110,7 @@ void main() {
     expect(find.text('관리자 계정'), findsOneWidget);
   });
 
-  testWidgets('표 머리를 누르면 서버를 다시 부르지 않고 그 칸으로 정렬한다 (2.2, D-211)', (tester) async {
+  testWidgets('목록은 업로드 날짜 최신순이고 표 머리를 눌러도 정렬되지 않는다 (2.2, D-241)', (tester) async {
     Map<String, Object?> item(int id, String name, String status, {bool expired = false}) => {
       'video_id': id,
       'case_id': 3,
@@ -139,17 +139,14 @@ void main() {
       return (names..sort((a, b) => top(a).compareTo(top(b)))).map((n) => n[0]).toList();
     }
 
-    expect(order(), ['A', 'B', 'C', 'D', 'E', 'F', 'G']); // 처음은 업로드 날짜 최신순
+    expect(order(), ['A', 'B', 'C', 'D', 'E', 'F', 'G']); // 업로드 날짜 최신순
     expect(find.text('확인 완료'), findsNWidgets(2)); // finished·exhausted 같은 이름
     expect(find.text('종료됨'), findsOneWidget);
 
-    await tester.tap(find.text('상태'));
+    await tester.tap(find.text('상태'), warnIfMissed: false);
     await settle(tester);
-    expect(order(), ['C', 'D', 'E', 'B', 'A', 'F', 'G']);
-
-    await tester.tap(find.text('사건 이름'));
-    await settle(tester);
-    expect(order(), ['A', 'B', 'C', 'D', 'E', 'F', 'G']);
+    expect(order(), ['A', 'B', 'C', 'D', 'E', 'F', 'G']); // 정렬 버튼이 없다
+    expect(find.byIcon(Icons.unfold_more), findsNothing);
 
     expect(backend.count('GET /api/videos'), 1);
   });
@@ -499,7 +496,7 @@ void main() {
     });
     await pumpApp(tester, backend, '/videos');
     expect(find.text('사건 2건'), findsOneWidget);
-    expect(find.text('CH01.mp4'), findsNWidgets(2)); // 사건 이름 아래 파일 이름
+    expect(find.text('CH01.mp4'), findsNothing); // 사건 이름만 보이고 파일 이름은 없다 (D-241)
 
     await tester.enterText(find.widgetWithText(TextField, '사건 이름으로 검색'), '기둥');
     await settle(tester);
@@ -759,7 +756,7 @@ void main() {
     expect(backend.screenCalls, isEmpty); // 동의는 따로 저장하지 않는다
   });
 
-  testWidgets('녹화 시작 시각은 달력·시계로 고르면 형식대로 채워진다 (2.4, D-190)', (tester) async {
+  testWidgets('녹화 시작 시각은 달력으로 날짜를 고르고 시·분·초를 범위 안에서 치면 형식대로 채워진다 (2.4, D-190, D-242)', (tester) async {
     final backend = FakeBackend({});
     await pumpApp(tester, backend, '/cases/3/upload');
     await agreeUpload(tester);
@@ -772,18 +769,33 @@ void main() {
     await tester.tap(find.text('확인')); // 달력: 오늘
     await settle(tester);
 
-    // 시각: 오전 12시 00분 00초에서 오후 9시 05분 03초로 (펼친 목록에 보이는 값만 고른다)
-    Future<void> choose(Finder current, String next) async {
-      await tester.tap(current);
-      await settle(tester);
-      await tester.tap(find.text(next).last);
-      await settle(tester);
-    }
+    // 시각: 오전/오후는 고르고, 시·분·초는 친다 (D-242)
+    await tester.tap(find.text('오전'));
+    await settle(tester);
+    await tester.tap(find.text('오후').last);
+    await settle(tester);
+    final dialog = find.byType(AlertDialog);
+    Finder box(int i) => find.descendant(of: dialog, matching: find.byType(TextField)).at(i);
+    String text(int i) => tester.widget<TextField>(box(i)).controller!.text;
+    FilledButton ok() => tester.widget(find.widgetWithText(FilledButton, '확인'));
 
-    await choose(find.text('오전'), '오후');
-    await choose(find.text('12'), '9');
-    await choose(find.text('00').first, '05'); // 분
-    await choose(find.text('00').first, '03'); // 초
+    // 범위를 넘는 숫자는 들어가지 않는다
+    await tester.enterText(box(0), '13');
+    await tester.enterText(box(1), '60');
+    await settle(tester);
+    expect(text(0), '12');
+    expect(text(1), '00');
+    // 시 0은 [확인]을 막고 안내를 보인다
+    await tester.enterText(box(0), '0');
+    await settle(tester);
+    expect(ok().onPressed, isNull);
+    expect(find.text('시는 1~12, 분과 초는 00~59 사이로 입력해 주세요.'), findsOneWidget);
+
+    await tester.enterText(box(0), '9');
+    await tester.enterText(box(1), '5');
+    await tester.enterText(box(2), '03');
+    await settle(tester);
+    expect(ok().onPressed, isNotNull);
     await tester.tap(find.text('확인'));
     await settle(tester);
 

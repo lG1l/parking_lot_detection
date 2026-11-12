@@ -26,16 +26,16 @@ class Api {
     return (loginId: j['login_id'] as String, maskedName: j['masked_name'] as String);
   }
 
-  /// `case_name`은 D-237 초안이다. 지금 백엔드는 이 키를 읽지 않는다.
+  /// `case_name`은 관리자 쪽 사건 이름이 된다 (D-237, D-240).
   Future<VideoCase> createCase(String victimLoginId, {required String caseName}) async => VideoCase.fromJson(
     await _c.post('/api/cases', {'victim_login_id': victimLoginId, 'case_name': caseName}),
   ); // 21
 
-  /// 사건 이름 바꾸기. 두 계정이 부른다 (D-237 초안, 백엔드 미구현)
+  /// 사건 이름 바꾸기. 두 계정이 부르고, 부른 계정 쪽 이름만 바뀐다 (D-237, D-240)
   Future<VideoCase> renameCase(int caseId, String caseName) async =>
       VideoCase.fromJson(await _c.patch('/api/cases/$caseId', {'case_name': caseName})); // 27
 
-  /// 사건 삭제. 두 계정이 부른다 (D-237 초안, 백엔드 미구현)
+  /// 사건 삭제. 두 계정이 부르고, 부른 계정에서만 숨긴다 (D-237, D-239)
   Future<void> deleteCase(int caseId) => _c.delete('/api/cases/$caseId'); // 28
 
   Future<List<VideoCase>> cases() async {

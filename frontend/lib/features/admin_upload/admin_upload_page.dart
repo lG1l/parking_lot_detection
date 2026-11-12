@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme.dart';
@@ -75,7 +76,7 @@ class _AdminUploadPageState extends ConsumerState<AdminUploadPage> {
     }
   }
 
-  /// 녹화 시작 시각을 달력 → 시각 선택창 순서로 고른다. 직접 치는 칸은 없다.
+  /// 녹화 시작 시각을 달력 → 시각 선택창 순서로 고른다. 칸에 직접 치지 않고, 시각 창에서 시·분·초만 친다 (D-242).
   /// 고르면 "YYYY-MM-DD HH:mm:ss"로 칸을 채우고, 6번에 보낼 값은 지금처럼 [parseRecordingStart]가 만든다 (D-85, D-190).
   Future<void> _pickRecording() async {
     final now = DateTime.now();
@@ -429,7 +430,8 @@ class _Message extends StatelessWidget {
   );
 }
 
-/// 녹화 시작 시각 선택창. 오전/오후 · 시(1~12) · 분 · 초를 각각 고른다 (D-190).
+/// 녹화 시작 시각 선택창. 오전/오후는 고르고, 시(1~12) · 분(00~59) · 초(00~59)는 직접 친다 (D-190, D-242).
+/// 범위를 넘는 숫자는 칸에 들어가지 않는다. 칸이 비었거나 시가 0이면 [확인]을 막는다.
 /// 돌려주는 값은 그날 0시부터 지난 시간이다.
 class _TimeDialog extends StatefulWidget {
   const _TimeDialog({required this.initial});
@@ -441,52 +443,127 @@ class _TimeDialog extends StatefulWidget {
 }
 
 class _TimeDialogState extends State<_TimeDialog> {
+  static String _two(int n) => n.toString().padLeft(2, '0');
+
   late bool _pm = widget.initial.inHours >= 12;
-  late int _hour12 = widget.initial.inHours % 12 == 0 ? 12 : widget.initial.inHours % 12; // 1~12
-  late int _minute = widget.initial.inMinutes % 60;
-  late int _second = widget.initial.inSeconds % 60;
+  late final _hour = TextEditingController(
+    text: '${widget.initial.inHours % 12 == 0 ? 12 : widget.initial.inHours % 12}',
+  );
+  late final _minute = TextEditingController(text: _two(widget.initial.inMinutes % 60));
+  late final _second = TextEditingController(text: _two(widget.initial.inSeconds % 60));
 
-  Duration get _value => Duration(hours: _hour12 % 12 + (_pm ? 12 : 0), minutes: _minute, seconds: _second);
+  @override
+  void dispose() {
+    _hour.dispose();
+    _minute.dispose();
+    _second.dispose();
+    super.dispose();
+  }
 
-  Widget _pick<T>(String label, T value, List<(T, String)> items, ValueChanged<T> onChanged) => Column(
+  /// 칸 값. 비었거나 범위 밖이면 null.
+  int? _read(TextEditingController c, int min, int max) {
+    final v = int.tryParse(c.text);
+    return v == null || v < min || v > max ? null : v;
+  }
+
+  Duration? get _value {
+    final h = _read(_hour, 1, 12);
+    final m = _read(_minute, 0, 59);
+    final sec = _read(_second, 0, 59);
+    if (h == null || m == null || sec == null) return null;
+    return Duration(hours: h % 12 + (_pm ? 12 : 0), minutes: m, seconds: sec);
+  }
+
+  Widget _label(String text) =>
+      Text(text, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: subColor));
+
+  Widget _number(String label, TextEditingController c, int max, {required String hint}) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     mainAxisSize: MainAxisSize.min,
     children: [
-      Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: subColor)),
+      _label(label),
       const SizedBox(height: 4),
-      DropdownButton<T>(
-        value: value,
-        menuMaxHeight: 320,
-        items: [for (final (v, text) in items) DropdownMenuItem(value: v, child: Text(text))],
-        onChanged: (v) {
-          if (v != null) setState(() => onChanged(v));
-        },
+      SizedBox(
+        width: 64,
+        child: TextField(
+          controller: c,
+          keyboardType: TextInputType.number,
+          textAlign: TextAlign.center,
+          inputFormatters: [_MaxNumberFormatter(max)],
+          decoration: InputDecoration(hintText: hint),
+          onChanged: (_) => setState(() {}),
+          onTap: () => c.selection = TextSelection(baseOffset: 0, extentOffset: c.text.length),
+        ),
       ),
     ],
   );
 
   @override
   Widget build(BuildContext context) {
-    String two(int n) => n.toString().padLeft(2, '0');
-    final sixty = [for (var i = 0; i < 60; i++) (i, two(i))];
+    final value = _value;
     return AlertDialog(
       title: const Text('녹화 시작 시각'),
-      // 네 칸을 한 줄로 (줄바꿈하지 않는다)
-      content: Row(
+      content: Column(
         mainAxisSize: MainAxisSize.min,
-        spacing: 20,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: 12,
         children: [
-          _pick('오전/오후', _pm, const [(false, '오전'), (true, '오후')], (v) => _pm = v),
-          _pick('시', _hour12, [for (var h = 1; h <= 12; h++) (h, '$h')], (v) => _hour12 = v),
-          _pick('분', _minute, sixty, (v) => _minute = v),
-          _pick('초', _second, sixty, (v) => _second = v),
+          // 네 칸을 한 줄로 (줄바꿈하지 않는다)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            spacing: 20,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _label('오전/오후'),
+                  const SizedBox(height: 4),
+                  DropdownButton<bool>(
+                    value: _pm,
+                    items: const [
+                      DropdownMenuItem(value: false, child: Text('오전')),
+                      DropdownMenuItem(value: true, child: Text('오후')),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) setState(() => _pm = v);
+                    },
+                  ),
+                ],
+              ),
+              _number('시', _hour, 12, hint: '1~12'),
+              _number('분', _minute, 59, hint: '00'),
+              _number('초', _second, 59, hint: '00'),
+            ],
+          ),
+          if (value == null)
+            const Text(
+              '시는 1~12, 분과 초는 00~59 사이로 입력해 주세요.',
+              style: TextStyle(fontSize: 13, color: failColor),
+            ),
         ],
       ),
       actions: [
         OutlinedButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
-        FilledButton(onPressed: () => Navigator.pop(context, _value), child: const Text('확인')),
+        FilledButton(onPressed: value == null ? null : () => Navigator.pop(context, value), child: const Text('확인')),
       ],
     );
+  }
+}
+
+/// 숫자만, 두 자리까지, [max]를 넘지 않게 받는다. 넘는 입력은 칸에 들어가지 않는다 (D-242).
+class _MaxNumberFormatter extends TextInputFormatter {
+  _MaxNumberFormatter(this.max);
+
+  final int max;
+
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    final text = newValue.text;
+    if (text.isEmpty) return newValue;
+    if (text.length > 2 || !RegExp(r'^\d+$').hasMatch(text) || int.parse(text) > max) return oldValue;
+    return newValue;
   }
 }
 

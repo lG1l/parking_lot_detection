@@ -44,7 +44,8 @@ class VideoCase {
 
   final int id;
 
-  /// 관리자가 연결할 때 붙인 사건 이름 (D-237 초안, 21·22번 `case_name`). 지금 백엔드는 주지 않아 null이다.
+  /// 지금 계정 쪽 사건 이름 (21·22번 `case_name`, D-237). 이름은 계정마다 따로이고, 피해자 쪽은 "YYYY-MM-DD 연결"로 시작한다.
+  /// 이름 칼럼이 생기기 전에 만든 사건은 null이다 (D-240).
   final String? caseName;
 
   /// 화면에 보일 사건 이름. 비었으면 null이다.
