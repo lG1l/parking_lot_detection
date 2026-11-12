@@ -8,7 +8,9 @@
 
 > **D-221(2026-11-03, 팀장): 10번 `detections`에 `polygon`을 더한다. 11번은 바뀌지 않는다.**
 
-> 마지막 수정: 2026-11-03
+> **D-232·D-233(2026-11-12): 12번 SQL 예시에서 `judged_at_sec`를 뺐다. 응답에 쓰지 않던 값이고, `candidates`에서 없어질 칸이다. 응답 형식은 바뀌지 않는다. `start_sec`·`end_sec`를 어느 테이블에서 읽을지는 👤 담당자 결정 필요(팀원 2, `docs/변경.md` B1).**
+
+> 마지막 수정: 2026-11-12
 > 표시: 🚧 미정 · ⚠️ 확인 필요 · 🔐 멘토 승인 필요
 >
 > 5.2의 엔드포인트 21개를 모두 썼다. 근거가 되는 결정은 **모두 확정**이다(2026-10-09, D-135). **D-36은 D-65로, D-49의 수정 허용 구간은 D-66으로, D-34는 D-98로 대체됐다.** 14·15번과 새 17번은 D-80(여러 장면 고정, [확인 끝내기])에 맞춰 바뀌었다. 이 장을 전제로 백엔드·프론트 구현을 시작한다. 남은 항목은 [5.10](#510-이-장에서-미정으로-남는-것)에 모아 두었다. 프론트에서 화면·기능 요구사항을 뽑을 때는 [5.11](#511-전체-그림)의 요약부터 본다.
@@ -921,7 +923,7 @@ DB는 `payload`의 내용을 검사하지 않는다. 아래를 백엔드(Pydanti
 
 ```sql
 SELECT DISTINCT ON (d.id)
-       d.rank, d.judged_at_sec, c.id AS clip_id, c.start_sec, c.end_sec, c.masked_s3_key
+       d.rank, c.id AS clip_id, c.start_sec, c.end_sec, c.masked_s3_key
   FROM candidates d
   JOIN candidate_clips c ON c.candidate_id = d.id AND c.status = 'done'
  WHERE d.analysis_job_id = :job_id
