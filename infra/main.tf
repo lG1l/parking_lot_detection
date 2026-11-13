@@ -189,3 +189,48 @@ resource "aws_instance" "backend" {
     ignore_changes  = [ami]
   }
 }
+
+# GPU EC2: 영상 분석 워커 (D-10, D-14). user data 없이 만들고 첫 설치는 SSH로 한다 (D-125)
+variable "gpu_ami_id" {
+  description = "GPU용 DLAMI ID. most_recent로 찾으면 새 AMI가 나올 때마다 교체되므로 고정한다 (D-21)"
+  type        = string
+}
+
+variable "gpu_key_name" {
+  description = "콘솔에서 만든 GPU 접속용 키 페어 이름 (D-133)"
+  type        = string
+}
+
+variable "gpu_instance_name" {
+  description = "콘솔 이름 칸에 보일 GPU EC2 이름(Name 태그). 값은 terraform.tfvars에만 둔다"
+  type        = string
+}
+
+resource "aws_instance" "gpu" {
+  ami                    = var.gpu_ami_id
+  instance_type          = "g4dn.xlarge"
+  key_name               = var.gpu_key_name
+  vpc_security_group_ids = [aws_security_group.gpu.id]
+
+  # 워커가 OS를 종료하면 삭제가 아니라 "중지"된다 (D-15)
+  instance_initiated_shutdown_behavior = "stop"
+
+  tags = {
+    Name = var.gpu_instance_name
+  }
+
+  # 인스턴스 메타데이터는 토큰 방식(IMDSv2)만 허용한다
+  metadata_options {
+    http_tokens = "required"
+  }
+
+  # 교체되면 설치가 사라지고 ARN이 바뀌어 백엔드 role이 GPU를 켜지 못한다 (D-125)
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# 백엔드 role의 ec2:StartInstances 대상으로 관리자에게 전달한다 (02장 2.9)
+output "gpu_instance_arn" {
+  value = aws_instance.gpu.arn
+}
