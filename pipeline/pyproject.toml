@@ -5,6 +5,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "opencv-python",
     "numpy",
+    "ultralytics>=8.4.213",
 ]
 
 [dependency-groups]
