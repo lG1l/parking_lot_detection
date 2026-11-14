@@ -10,8 +10,9 @@ import sys
 import cv2
 import numpy as np
 
-from pipeline.candidates.crop import Crop, CropError, analysis_crop
+from pipeline.candidates.crop import Crop, CropError, analysis_crop, to_original
 from pipeline.candidates.inputs import AnalysisInput, InputError, load_input
+from pipeline.candidates.roi import RoiError, RoiNotImplementedError, build_roi, camera_side_edges
 from pipeline.candidates.video import SAMPLING_FPS, iter_analysis_frames
 
 # 그림 색 (BGR)
@@ -19,6 +20,7 @@ YELLOW = (0, 255, 255)
 WHITE = (255, 255, 255)
 BLUE = (255, 128, 0)
 RED = (0, 0, 255)
+GREEN = (0, 200, 0)
 
 _LINE = 2
 _BOLD = 5
@@ -64,6 +66,26 @@ def draw_inputs(image: np.ndarray, crop: Crop, data: AnalysisInput) -> None:
     cv2.rectangle(image, (dx1, dy1), (dx2, dy2), RED, _LINE)
 
 
+def roi_contours(mask: np.ndarray, crop: Crop) -> list[np.ndarray]:
+    """줄인 프레임 크기 ROI 마스크의 테두리를 원본 픽셀 좌표로 돌려준다."""
+    found, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    return [
+        np.array([to_original((float(x), float(y)), crop) for x, y in c.reshape(-1, 2)])
+        .round()
+        .astype(np.int32)
+        for c in found
+    ]
+
+
+def draw_roi(image: np.ndarray, contours: list[np.ndarray]) -> np.ndarray:
+    """ROI를 초록 반투명 + 테두리로 그린 새 그림을 돌려준다."""
+    layer = image.copy()
+    cv2.fillPoly(layer, contours, GREEN)
+    out = cv2.addWeighted(layer, 0.3, image, 0.7, 0)
+    cv2.polylines(out, contours, True, GREEN, _LINE)
+    return out
+
+
 def _draw_label(image: np.ndarray, index: int, time_sec: float) -> None:
     text = f"{_format_time(time_sec)}  #{index}"
     # 어두운 영상에서도 읽히게 검은 테두리를 먼저 쓴다
@@ -75,9 +97,13 @@ def make_preview(video_path: str, input_path: str, out_dir: str) -> None:
     width, height = video_size(video_path)
     data = load_input(input_path, width, height)
     crop = analysis_crop(data.vehicle_bbox, (width, height))
+    crop, roi_mask = build_roi(data, (width, height), crop)
+    contours = roi_contours(roi_mask, crop)
 
     print(f"분석 크롭 (원본 픽셀): {crop.rect}  크기 {crop.width}×{crop.height}")
     print(f"줄인 프레임 크기: {crop.reduced_size[0]}×{crop.reduced_size[1]}")
+    print(f"카메라 쪽 변: {camera_side_edges(data.floor_corners)}  파손 변: {data.damage_edges}")
+    print(f"ROI 넓이 비율 (분석 크롭 대비): {np.count_nonzero(roi_mask) / roi_mask.size:.1%}")
 
     os.makedirs(out_dir, exist_ok=True)
     out_video = os.path.join(out_dir, "preview.mp4")
@@ -86,7 +112,7 @@ def make_preview(video_path: str, input_path: str, out_dir: str) -> None:
     )
     count = 0
     for frame in iter_analysis_frames(video_path):
-        image = frame.image.copy()
+        image = draw_roi(frame.image, contours)
         draw_inputs(image, crop, data)
         _draw_label(image, frame.index, frame.time_sec)
         if frame.index == 0:
@@ -103,6 +129,6 @@ if __name__ == "__main__":
         sys.exit(2)
     try:
         make_preview(sys.argv[1], sys.argv[2], sys.argv[3])
-    except (InputError, CropError, FileNotFoundError) as e:
+    except (InputError, CropError, RoiNotImplementedError, RoiError, FileNotFoundError) as e:
         print(f"오류: {e}")
         sys.exit(1)
