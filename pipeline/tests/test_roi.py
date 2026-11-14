@@ -4,9 +4,11 @@ import numpy as np
 from pipeline.candidates.crop import analysis_crop, to_original, to_reduced
 from pipeline.candidates.inputs import AnalysisInput
 from pipeline.candidates.roi import (
+    END_FLARE_DEG,
     STRIP_OUT_M,
     _floor_strip,
     _lifts,
+    _to_screen,
     build_roi,
     camera_side_edges,
     floor_points,
@@ -36,6 +38,10 @@ def _roi(damage_edges):
     return build_roi(data, frame, analysis_crop(data.vehicle_bbox, frame))
 
 
+def _to_screen_matrix(data):
+    return cv2.getPerspectiveTransform(np.float32(floor_points(0)), np.float32(data.floor_corners))
+
+
 def _covered(roi, original):
     x, y = to_reduced(original, roi.crop)
     return roi.mask[round(y), round(x)] == 255
@@ -59,47 +65,55 @@ def test_카메라_쪽_옆면만_파손이면_차_높이만큼_올린다():
 
 def test_먼_꼭짓점은_원근만큼_덜_올린다():
     data = _input([1])
-    floor_poly = _floor_strip(data)
-    to_screen = cv2.getPerspectiveTransform(
-        np.float32(floor_points(0)), np.float32(data.floor_corners)
-    )
-    lifts = _lifts(floor_poly, to_screen, 0, 280)
-    # 기준 꼭짓점 0 (962,746)은 그대로, 먼 끝 꼭짓점 1 (1284,636)은 덜 올린다
+    to_screen = _to_screen_matrix(data)
+    near, far = np.array(floor_points(0)[1]), np.array(floor_points(0)[2])
+    outside = near + [STRIP_OUT_M, 0]
+    lifts = _lifts(np.array([near, far, outside]), to_screen, near, 280)
+    # 기준점 (962,746)은 그대로, 먼 끝 (1284,636)은 덜, 더 가까운 바깥 점은 더 올린다
     assert np.isclose(lifts[0], 280)
     assert lifts[1] < lifts[0] * 0.9
-    assert lifts[3] > lifts[0]  # 더 가까운 바깥 꼭짓점은 더 올린다
+    assert lifts[2] > lifts[0]
 
 
-def test_파손_변_1개는_양_끝이_바깥으로_15도_벌어진다():
+def test_파손_변_1개는_양_끝이_바깥으로_벌어진다():
     data = _input([1])
-    polygon = _floor_strip(data)
-    a, b = np.array(floor_points(0)[1]), np.array(floor_points(0)[2])
-    # 차에 붙은 변은 그대로, 바깥 끝은 변 방향으로 0.8 × tan15° 더 나간다
-    assert np.allclose(polygon[0], a) and np.allclose(polygon[1], b)
-    flare = STRIP_OUT_M * np.tan(np.radians(15))
-    assert np.allclose(polygon[3], a + [STRIP_OUT_M, -flare])
+    polygon = _floor_strip(data, _to_screen_matrix(data))
+    b = np.array(floor_points(0)[2])
+    # 차에 붙은 선의 먼 끝은 그대로, 바깥 끝은 변 방향으로 0.8 × tan30° 더 나간다
+    flare = STRIP_OUT_M * np.tan(np.radians(END_FLARE_DEG))
+    assert np.allclose(polygon[1], b)
     assert np.allclose(polygon[2], b + [STRIP_OUT_M, flare])
+    assert np.allclose(polygon[3], polygon[0] + [STRIP_OUT_M, -flare])
+
+
+def test_파손_변이_파손_사각형에_못_미치면_변을_그만큼_늘린다():
+    data = _input([1])
+    to_screen = _to_screen_matrix(data)
+    polygon = _floor_strip(data, to_screen)
+    # 파손 사각형 왼쪽 732 - 폭 118 × 1/6 = 712.3. 변 1의 가까운 끝(962,746)을 변 방향으로 늘린다
+    assert np.isclose(polygon[0][0], floor_points(0)[1][0])  # 변 1 직선 위
+    assert np.isclose(_to_screen(polygon[:1], to_screen)[0][0], 712.3, atol=0.1)
 
 
 def test_파손_변_2개는_만나는_모서리에서_2_3까지만_쓰고_바깥_꼭짓점을_잇는다():
     data = _input([0, 1])
-    polygon = _floor_strip(data)
+    polygon = _floor_strip(data, _to_screen_matrix(data))
     floor = np.array(floor_points(0))
     corner = floor[1]  # 변 0의 끝 = 변 1의 시작
     assert np.allclose(polygon[1], corner)
-    assert np.allclose(polygon[0], corner + (floor[0] - corner) * 2 / 3)
     assert np.allclose(polygon[2], corner + (floor[2] - corner) * 2 / 3)
     # 바깥 꼭짓점은 모서리에서 두 바깥 방향으로 0.8m씩
     assert any(np.allclose(p, corner + [STRIP_OUT_M, -STRIP_OUT_M]) for p in polygon)
-    # 만나지 않는 끝은 15도 벌어진다: 변 1의 2/3 끝 바깥은 변 방향(+y)으로 더 나간다
-    flare = STRIP_OUT_M * np.tan(np.radians(15))
+    # 만나지 않는 끝은 벌어진다: 변 1의 2/3 끝 바깥은 변 방향(+y)으로 더 나간다
+    flare = STRIP_OUT_M * np.tan(np.radians(END_FLARE_DEG))
     assert np.allclose(polygon[3], polygon[2] + [STRIP_OUT_M, flare])
 
 
-def test_파손_사각형_주변은_ROI에_들어간다():
+def test_파손_사각형_좌우_여백은_자기_폭의_6분의_1이다():
     roi = _roi([1])
-    # 파손 사각형 (732,583)-(850,638)을 자기 폭 118의 0.5배 넓힌 왼쪽 끝 근처
-    assert _covered(roi, (680, 610))
+    # 왼쪽 끝 732 - 118/6 ≈ 712
+    assert _covered(roi, (716, 610))
+    assert not _covered(roi, (700, 610))
 
 
 def test_보여줄_크롭은_ROI를_담고_분석_크롭은_보여줄_크롭을_담는다():
