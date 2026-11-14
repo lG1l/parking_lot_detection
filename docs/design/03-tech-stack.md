@@ -46,7 +46,7 @@
 ### VLM (학교 대체 LLM API)
 
 - 학교는 Bedrock 직접 권한 대신 별도 LLM API(NxtCloud LLM Gateway)를 준다. VLM 호출을 구현할 때는 사용 가이드 <https://bedrock.nxtcloud.kr/guide/>를 따른다. 가이드 요약은 [02장 2.9](02-architecture.md#29-aws-서비스와-권한)의 「학교 대체 LLM API: 사용 가이드」에 있다. (D-276)
-- **호출 방식**: OpenAI 호환 HTTP API로 부른다(`POST /v1/chat/completions`). boto3·Bedrock Converse API는 쓰지 않는다. 키는 `Authorization: Bearer` 헤더로 보내고, 코드·문서에 쓰지 않고 환경변수로 받는다. 어떤 SDK를 쓸지와 환경변수 이름은 구현할 때 정한다 (`pipeline/`, 팀장).
+- **호출 방식**: OpenAI 호환 HTTP API로 부른다(`POST /v1/chat/completions`). boto3·Bedrock Converse API는 쓰지 않는다. 키는 `Authorization: Bearer` 헤더로 보내고, 코드·문서에 쓰지 않고 환경변수로 받는다. GPU `pipeline/.env`의 키 값은 팀장이 직접 넣는다(D-277). 어떤 SDK를 쓸지와 환경변수 이름은 구현할 때 정한다 (`pipeline/`, 팀장).
 - **오류 처리**: 아래와 같이 한다. 재시도 횟수와 대기 시간은 구현할 때 시작값으로 정한다 (가이드에 없다).
 
   | 응답 | 뜻 (가이드) | 처리 |
