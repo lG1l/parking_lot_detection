@@ -12,7 +12,7 @@ import numpy as np
 
 from pipeline.candidates.crop import Crop, CropError, analysis_crop, to_original
 from pipeline.candidates.inputs import AnalysisInput, InputError, load_input
-from pipeline.candidates.roi import RoiError, RoiNotImplementedError, build_roi, camera_side_edges
+from pipeline.candidates.roi import RoiError, build_roi, camera_side_edges
 from pipeline.candidates.video import SAMPLING_FPS, iter_analysis_frames
 
 # 그림 색 (BGR)
@@ -129,6 +129,6 @@ if __name__ == "__main__":
         sys.exit(2)
     try:
         make_preview(sys.argv[1], sys.argv[2], sys.argv[3])
-    except (InputError, CropError, RoiNotImplementedError, RoiError, FileNotFoundError) as e:
+    except (InputError, CropError, RoiError, FileNotFoundError) as e:
         print(f"오류: {e}")
         sys.exit(1)
