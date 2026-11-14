@@ -20,8 +20,8 @@ CAR_LENGTH_M = 4.7
 STRIP_OUT_M = 0.8  # 파손 변 바깥 띠 폭 (m). 손이 닿는 구역과 같다
 TWO_EDGE_KEEP_RATIO = 2 / 3  # 파손 변 2개: 각 변을 만나는 모서리에서 이 비율만큼만 쓴다
 # 띠를 위로 옮기는 높이 = 파손 변에서 차량 bbox 위 변까지 높이 × 이 값
-VISIBLE_HEIGHT_RATIO = 1.15  # 파손 변이 모두 카메라 쪽
-HIDDEN_HEIGHT_RATIO = 1.35  # 그 밖: 차 너머 사람·물체가 지붕 위로 보이는 만큼 더 높인다
+VISIBLE_HEIGHT_RATIO = 1.0  # 파손 변이 모두 카메라 쪽
+HIDDEN_HEIGHT_RATIO = 1.1  # 그 밖: 차 너머 사람·물체가 지붕 위로 보이는 만큼 더 높인다
 DAMAGE_PAD_RATIO = 0.5  # 파손 사각형을 자기 폭·높이의 이 배씩 넓힌 자리는 꼭 ROI에 넣는다
 DISPLAY_MARGIN_RATIO = 0.15  # 보여줄 크롭: ROI를 담는 사각형에 폭·높이의 이 배씩 여백
 
