@@ -100,21 +100,16 @@ def expand_to_contain(crop: Crop, region: Rect, frame: tuple[int, int]) -> Crop:
     return Crop(rect, reduced_size_for(width, height))
 
 
-def display_crop(region: Rect, analysis: Crop, margin_ratio: float) -> Crop:
-    """region(ROI를 담는 사각형)에 여백을 더해 가운데 맞춘 16:9 보여줄 크롭 (D-95: ROI ⊂ 보여줄 ⊂ 분석).
+def display_crop(region: Rect, frame: tuple[int, int], margin_ratio: float) -> Crop:
+    """region(ROI를 담는 사각형)에 폭·높이의 margin_ratio씩 여백을 더한 16:9 보여줄 크롭 (D-284).
 
-    분석 크롭 밖으로 나가면 크기를 유지한 채 안쪽으로 밀고, 분석 크롭보다 크면 분석 크롭 자체를 쓴다.
+    차량이 아니라 ROI가 기준이다. 화면 밖으로 나가면 크기를 유지한 채 안쪽으로 민다.
     """
     rx1, ry1, rx2, ry2 = region
     pad_x, pad_y = round((rx2 - rx1) * margin_ratio), round((ry2 - ry1) * margin_ratio)
-    ux1, uy1, ux2, uy2 = rx1 - pad_x, ry1 - pad_y, rx2 + pad_x, ry2 + pad_y
-    width, height = _fit_16x9(ux2 - ux1, uy2 - uy1)
-    if width >= analysis.width or height >= analysis.height:
-        return analysis
-    ax1, ay1 = analysis.rect[:2]
-    cx, cy = (ux1 + ux2) / 2 - ax1, (uy1 + uy2) / 2 - ay1
-    x1, y1, x2, y2 = _place(cx, cy, width, height, (analysis.width, analysis.height))
-    return Crop((x1 + ax1, y1 + ay1, x2 + ax1, y2 + ay1), reduced_size_for(width, height))
+    width, height = _fit_16x9(rx2 - rx1 + 2 * pad_x, ry2 - ry1 + 2 * pad_y)
+    rect = _place((rx1 + rx2) / 2, (ry1 + ry2) / 2, width, height, frame)
+    return Crop(rect, reduced_size_for(width, height))
 
 
 def _scales(crop: Crop) -> tuple[float, float]:

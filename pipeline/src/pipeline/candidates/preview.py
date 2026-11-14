@@ -78,12 +78,12 @@ def draw_display_crop(image: np.ndarray, display: Crop) -> None:
     cv2.rectangle(image, (x1, y1), (x2 - 1, y2 - 1), CYAN, _LINE)
 
 
-def draw_strips(image: np.ndarray, strips: list[FloorStrip]) -> np.ndarray:
+def draw_strip(image: np.ndarray, strip: FloorStrip) -> np.ndarray:
     """바닥 띠를 빨강 반투명으로 그린 새 그림을 돌려준다."""
     layer = image.copy()
-    cv2.fillPoly(layer, [s.polygon for s in strips], RED)
+    cv2.fillPoly(layer, [strip.polygon], RED)
     out = cv2.addWeighted(layer, _STRIP_ALPHA, image, 1 - _STRIP_ALPHA, 0)
-    cv2.polylines(out, [s.polygon for s in strips], True, RED, _LINE)
+    cv2.polylines(out, [strip.polygon], True, RED, _LINE)
     return out
 
 
@@ -104,21 +104,19 @@ def draw_labels(
 def _label_list(
     roi: Roi, contours: list[np.ndarray]
 ) -> list[tuple[str, tuple[int, int], tuple[int, int, int]]]:
-    """띠·ROI·보여줄 영역·분석 영역 이름표와 놓을 자리. 서로 안 겹치게 위에서부터 쌓는다."""
+    """띠·ROI·보여줄 영역·분석 영역 이름표와 놓을 자리."""
     gap = _FONT_SIZE + 10
     ax, ay = roi.crop.rect[:2]
-    dx, dy = roi.display.rect[:2]
-    if (dx, dy) == (ax, ay):
-        dy += gap  # 같은 구석이면 아래로 민다
+    # 분석 영역과 왼쪽 위 구석이 가까울 수 있어, 보여줄 영역 이름표는 왼쪽 아래에 둔다
+    dx, dy = roi.display.rect[0], roi.display.rect[3] - gap
     all_pts = np.concatenate(contours)
     labels = [
         ("분석 영역 (차 폭 2배, 16:9)", (ax + 6, ay + 6), ORANGE),
-        ("보여줄 영역", (dx + 6, dy + 6), CYAN),
+        ("보여줄 영역", (dx + 6, dy), CYAN),
         ("ROI", (int(all_pts[:, 0].min()) + 6, int(all_pts[:, 1].min()) + 6), GREEN),
     ]
-    for strip in roi.strips:
-        cx, cy = strip.polygon.mean(axis=0)
-        labels.append((f"바닥띠 (파손 변 바깥 {strip.out_m:g}m)", (int(cx) - 80, int(cy)), RED))
+    cx, cy = roi.strip.polygon.mean(axis=0)
+    labels.append((f"바닥띠 (파손 변 바깥 {roi.strip.out_m:g}m)", (int(cx) - 80, int(cy)), RED))
     return labels
 
 
@@ -163,8 +161,7 @@ def make_preview(video_path: str, input_path: str, out_dir: str) -> None:
     print(
         f"보여줄 크롭 (원본 픽셀): {roi.display.rect}  크기 {roi.display.width}×{roi.display.height}"
     )
-    for strip in roi.strips:
-        print(f"바닥띠: 파손 변 바깥 {strip.out_m:g}m, 꼭짓점 {strip.polygon.tolist()}")
+    print(f"바닥띠: 파손 변 바깥 {roi.strip.out_m:g}m, 꼭짓점 {roi.strip.polygon.tolist()}")
     print(f"카메라 쪽 변: {camera_side_edges(data.floor_corners)}  파손 변: {data.damage_edges}")
     print(f"ROI 넓이 비율 (분석 크롭 대비): {np.count_nonzero(roi_mask) / roi_mask.size:.1%}")
 
@@ -176,7 +173,7 @@ def make_preview(video_path: str, input_path: str, out_dir: str) -> None:
     count = 0
     for frame in iter_analysis_frames(video_path):
         image = draw_roi(frame.image, contours)
-        image = draw_strips(image, roi.strips)  # 초록 위에 그려야 빨강이 살아 있다
+        image = draw_strip(image, roi.strip)  # 초록 위에 그려야 빨강이 살아 있다
         draw_inputs(image, crop, data)
         draw_display_crop(image, roi.display)
         image = draw_labels(image, labels)

@@ -1,7 +1,7 @@
-"""바닥 지도, 카메라 쪽 변 판정, ROI 마스크 (D-194, D-244).
+"""바닥 지도, 카메라 쪽 변 판정, ROI 마스크 (D-194, D-244, D-284).
 
 ROI는 "파손 변 주변에서 접근하는 물체가 화면에 나타나는 자리"다.
-파손 변이 모두 카메라 쪽 옆면이면 D-244 결정 2, 그 밖의 경우는 D-283의 합집합이다.
+파손 변 바깥 바닥 띠를 화면 위로 그대로 옮겨 쓸고 지나간 자리에, 파손 사각형 주변을 더한다 (D-284).
 """
 
 from dataclasses import dataclass
@@ -16,21 +16,14 @@ from pipeline.candidates.inputs import AnalysisInput, Point
 CAR_WIDTH_M = 1.8
 CAR_LENGTH_M = 4.7
 
-# D-244 결정 2 (시작값)
-STRIP_OUT_M = 1.0  # 파손 변 바깥 띠 폭 (m)
-STRIP_END_M = 0.5  # 띠를 양 끝으로 늘리는 길이 (m)
-ENTRY_BOX_RATIO = 0.12  # 양 끝 출입 상자: 차량 bbox 폭·높이의 ±이 배
-DAMAGE_PAD_RATIO = 0.15  # 파손 사각형을 차량 bbox 폭·높이의 이 배씩 넓힘
-
-# 보여줄 크롭: ROI를 담는 사각형에 더하는 여백 (ROI 폭·높이의 이 배씩). 🚧 U-30 시작값
-DISPLAY_MARGIN_RATIO = 0.1
-
-# D-283 "그 밖의 경우" (시작값). 파손 사각형 넓힘은 위와 같다
-ROOF_MARGIN_RATIO = 0.5  # 지붕 위 여유: 차량 bbox 높이의 이 배
-OTHER_STRIP_SIDE_RATIO = 0.5  # 옆면 변 바깥 띠 폭: 차 폭의 이 배
-OTHER_STRIP_END_RATIO = 0.25  # 앞·뒤 끝 변 바깥 띠 폭: 차 길이의 이 배
-OTHER_STRIP_EXTEND_RATIO = 0.2  # 띠를 양 끝으로 늘리는 길이: 그 변 길이의 이 배
-OTHER_ENTRY_BOX_RATIO = 0.25  # 양 끝 출입 상자: 차량 bbox 폭·높이의 ±이 배
+# D-284 (시작값)
+STRIP_OUT_M = 0.8  # 파손 변 바깥 띠 폭 (m). 손이 닿는 구역과 같다
+TWO_EDGE_KEEP_RATIO = 2 / 3  # 파손 변 2개: 각 변을 만나는 모서리에서 이 비율만큼만 쓴다
+# 띠를 위로 옮기는 높이 = 파손 변에서 차량 bbox 위 변까지 높이 × 이 값
+VISIBLE_HEIGHT_RATIO = 1.15  # 파손 변이 모두 카메라 쪽
+HIDDEN_HEIGHT_RATIO = 1.35  # 그 밖: 차 너머 사람·물체가 지붕 위로 보이는 만큼 더 높인다
+DAMAGE_PAD_RATIO = 0.5  # 파손 사각형을 자기 폭·높이의 이 배씩 넓힌 자리는 꼭 ROI에 넣는다
+DISPLAY_MARGIN_RATIO = 0.15  # 보여줄 크롭: ROI를 담는 사각형에 폭·높이의 이 배씩 여백
 
 
 class RoiError(Exception):
@@ -39,7 +32,7 @@ class RoiError(Exception):
 
 @dataclass(frozen=True)
 class FloorStrip:
-    """파손 변 바깥 바닥 띠 하나. 위로 채우기 전의 모양이다."""
+    """파손 변 바깥 바닥 띠. 위로 옮기기 전의 모양이다."""
 
     polygon: np.ndarray  # 원본 픽셀 (N, 2) int32
     out_m: float  # 파손 변 바깥으로 얼마나 나가는 띠인가 (m)
@@ -47,9 +40,9 @@ class FloorStrip:
 
 @dataclass(frozen=True)
 class Roi:
-    crop: Crop  # 분석 크롭 (ROI를 못 담으면 넓힌 것)
+    crop: Crop  # 분석 크롭 (보여줄 크롭을 못 담으면 넓힌 것)
     mask: np.ndarray  # 분석 크롭을 줄인 프레임 크기로 만든 ROI (안쪽 255)
-    strips: list[FloorStrip]  # 파손 변마다 하나
+    strip: FloorStrip
     display: Crop  # 보여줄 크롭 (ROI 기준)
 
 
@@ -80,118 +73,110 @@ def floor_points(front_edge: int) -> list[tuple[float, float]]:
     return [layout[(j - front_edge) % 4] for j in range(4)]
 
 
-def _is_end_edge(data: AnalysisInput, edge: int) -> bool:
-    """앞쪽 변이거나 그 맞은편 변이면 True (D-194: 이 두 변이 폭이다)."""
-    return (edge - data.front_edge) % 2 == 0
-
-
-def _is_camera_case(data: AnalysisInput) -> bool:
-    """파손 변이 모두 카메라 쪽 옆면인가 (D-244 결정 2의 경우)."""
+def _is_visible_case(data: AnalysisInput) -> bool:
+    """파손 변이 모두 카메라 쪽인가. 앞·뒤 끝 변이어도 카메라 쪽이면 파손이 보인다 (D-284)."""
     camera = camera_side_edges(data.floor_corners)
-    return all(e in camera and not _is_end_edge(data, e) for e in data.damage_edges)
+    return all(e in camera for e in data.damage_edges)
 
 
-def _strip_polygon(
-    data: AnalysisInput, edge: int, to_screen: np.ndarray, out_m: float, end_m: float
-) -> np.ndarray:
-    """파손 변 바깥 띠(바깥 out_m, 양 끝 end_m 늘림)를 화면 좌표 다각형으로 만든다."""
-    floor = np.array(floor_points(data.front_edge), dtype=np.float64)
+def _outward(floor: np.ndarray, edge: int) -> np.ndarray:
+    """바닥 지도에서 변 edge의 바깥 방향 단위 벡터. 바닥 지도는 직사각형이라 변 가운데 → 바깥이다."""
     a, b = floor[edge], floor[(edge + 1) % 4]
-    center = floor.mean(axis=0)
-    u = (b - a) / np.linalg.norm(b - a)
-    out = (a + b) / 2 - center
-    out = out / np.linalg.norm(out)
-    start = a - end_m * u
-    end = b + end_m * u
-    quad = np.array([start, end, end + out_m * out, start + out_m * out])
-    screen = cv2.perspectiveTransform(quad.reshape(-1, 1, 2).astype(np.float32), to_screen)
-    return screen.reshape(-1, 2)
+    out = (a + b) / 2 - floor.mean(axis=0)
+    return out / np.linalg.norm(out)
 
 
-def _fill_upward(mask: np.ndarray, top_y: int) -> None:
-    """mask의 각 열을, 가장 위 1인 칸부터 top_y 줄까지 위로 채운다."""
-    filled = mask > 0
-    has_any = filled.any(axis=0)
-    first_row = filled.argmax(axis=0)
-    rows = np.arange(mask.shape[0])[:, None]
-    mask[(rows >= top_y) & (rows <= first_row[None, :]) & has_any[None, :]] = 255
+def _floor_strip(data: AnalysisInput) -> tuple[np.ndarray, np.ndarray]:
+    """바닥 지도(m)의 띠 다각형과, 그중 차에 붙은 파손 변 부분의 점들.
+
+    변 1개: 변 전체 × 바깥 STRIP_OUT_M. 양 옆으로는 늘리지 않는다.
+    변 2개: 만나는 모서리에서 각 변의 2/3까지만 쓰고, 바깥 꼭짓점을 이어 L자 하나로 만든다.
+    """
+    floor = np.array(floor_points(data.front_edge), dtype=np.float64)
+    edges = data.damage_edges
+    if len(edges) == 1:
+        e = edges[0]
+        a, b = floor[e], floor[(e + 1) % 4]
+        out = STRIP_OUT_M * _outward(floor, e)
+        return np.array([a, b, b + out, a + out]), np.array([a, b])
+
+    # 이웃한 두 변 e1 → e2 (e2의 시작점 = e1의 끝점 = 만나는 모서리)
+    e1, e2 = edges if (edges[0] + 1) % 4 == edges[1] else edges[::-1]
+    corner = floor[e2]
+    p = corner + (floor[e1] - corner) * TWO_EDGE_KEEP_RATIO
+    q = corner + (floor[(e2 + 1) % 4] - corner) * TWO_EDGE_KEEP_RATIO
+    out1 = STRIP_OUT_M * _outward(floor, e1)
+    out2 = STRIP_OUT_M * _outward(floor, e2)
+    polygon = np.array([p, corner, q, q + out2, corner + out1 + out2, p + out1])
+    return polygon, np.array([p, corner, q])
 
 
-def _strip_sizes(data: AnalysisInput, edge: int, camera_case: bool) -> tuple[float, float]:
-    """파손 변 하나의 띠 (바깥 폭, 양 끝 늘림)을 m로 돌려준다."""
-    if camera_case:
-        return STRIP_OUT_M, STRIP_END_M
-    if _is_end_edge(data, edge):  # 길이가 차 폭인 변
-        return OTHER_STRIP_END_RATIO * CAR_LENGTH_M, OTHER_STRIP_EXTEND_RATIO * CAR_WIDTH_M
-    return OTHER_STRIP_SIDE_RATIO * CAR_WIDTH_M, OTHER_STRIP_EXTEND_RATIO * CAR_LENGTH_M
+def _to_screen(points: np.ndarray, to_screen: np.ndarray) -> np.ndarray:
+    moved = cv2.perspectiveTransform(points.reshape(-1, 1, 2).astype(np.float32), to_screen)
+    return moved.reshape(-1, 2)
+
+
+def _sweep_up(mask: np.ndarray, polygon: np.ndarray, lift: int) -> None:
+    """polygon을 화면 위로 lift px 옮기며 지나간 자리 전체를 mask에 채운다.
+
+    위쪽 경계가 파손 변과 평행한 대각선이 된다. 다각형, 옮긴 다각형, 각 변이 지나간 사각형의 합집합이다.
+    """
+    up = polygon - np.array([0, lift], dtype=np.int32)
+    parts = [polygon, up]
+    for i in range(len(polygon)):
+        j = (i + 1) % len(polygon)
+        parts.append(np.array([polygon[i], polygon[j], up[j], up[i]]))
+    for part in parts:
+        cv2.fillPoly(mask, [part], 255)
 
 
 def _roi_mask_original(
     data: AnalysisInput, frame: tuple[int, int]
-) -> tuple[np.ndarray, list[FloorStrip]]:
-    """원본 화면 크기의 ROI 마스크 (안쪽 255)와 바닥 띠들. 화면 밖으로 나간 부분은 버려진다."""
+) -> tuple[np.ndarray, FloorStrip]:
+    """원본 화면 크기의 ROI 마스크 (안쪽 255)와 바닥 띠. 화면 밖으로 나간 부분은 버려진다."""
     width, height = frame
-    bx1, by1, bx2, by2 = data.vehicle_bbox
-    bw, bh = bx2 - bx1, by2 - by1
-    camera_case = _is_camera_case(data)
-    # 그 밖의 경우는 띠를 지붕 위 선까지 올린다. 카메라 쪽 옆면은 차량 bbox 위 변까지다
-    roof_y = by1 - round(ROOF_MARGIN_RATIO * bh)
-    top_y = by1 if camera_case else roof_y
-    box_ratio = ENTRY_BOX_RATIO if camera_case else OTHER_ENTRY_BOX_RATIO
-
     src = np.array(data.floor_corners, dtype=np.float32)
     dst = np.array(floor_points(data.front_edge), dtype=np.float32)
     to_screen = cv2.getPerspectiveTransform(dst, src)
 
-    strip = np.zeros((height, width), np.uint8)
-    entries = np.zeros((height, width), np.uint8)
-    strips: list[FloorStrip] = []
-    for edge in data.damage_edges:
-        out_m, end_m = _strip_sizes(data, edge, camera_case)
-        poly = _strip_polygon(data, edge, to_screen, out_m, end_m)
-        int_poly = np.round(poly).astype(np.int32)
-        cv2.fillPoly(strip, [int_poly], 255)
-        strips.append(FloorStrip(int_poly, out_m))
-        # 파손 변 양 끝점 중심 상자
-        for p in (data.floor_corners[edge], data.floor_corners[(edge + 1) % 4]):
-            x1, x2 = round(p[0] - box_ratio * bw), round(p[0] + box_ratio * bw)
-            y1, y2 = round(p[1] - box_ratio * bh), round(p[1] + box_ratio * bh)
-            cv2.rectangle(entries, (x1, y1), (x2, y2), 255, -1)
+    floor_poly, damage_line = _floor_strip(data)
+    polygon = np.round(_to_screen(floor_poly, to_screen)).astype(np.int32)
+    # 파손 변 위에 선 차의 화면 높이를 기준으로 올린다. 차가 화면에서 크든 작든 같은 규칙이 된다
+    base_y = float(_to_screen(damage_line, to_screen)[:, 1].mean())
+    car_height = max(base_y - data.vehicle_bbox[1], 0.0)
+    ratio = VISIBLE_HEIGHT_RATIO if _is_visible_case(data) else HIDDEN_HEIGHT_RATIO
 
-    if camera_case:
-        _fill_upward(strip, top_y)  # 출입 상자는 위로 채우지 않는다
-        mask = cv2.bitwise_or(strip, entries)
-    else:
-        mask = cv2.bitwise_or(strip, entries)
-        _fill_upward(mask, top_y)
-        cv2.rectangle(mask, (bx1, roof_y), (bx2, by2), 255, -1)  # 차체 + 지붕 위 여유
+    mask = np.zeros((height, width), np.uint8)
+    _sweep_up(mask, polygon, round(car_height * ratio))
 
+    # 파손 사각형 주변이 빠져 있으면 그 자리를 더한다 (합집합이라 이미 덮인 곳은 그대로다)
     dx1, dy1, dx2, dy2 = data.damage_bbox
+    pad_x, pad_y = DAMAGE_PAD_RATIO * (dx2 - dx1), DAMAGE_PAD_RATIO * (dy2 - dy1)
     cv2.rectangle(
         mask,
-        (round(dx1 - DAMAGE_PAD_RATIO * bw), round(dy1 - DAMAGE_PAD_RATIO * bh)),
-        (round(dx2 + DAMAGE_PAD_RATIO * bw), round(dy2 + DAMAGE_PAD_RATIO * bh)),
+        (round(dx1 - pad_x), round(dy1 - pad_y)),
+        (round(dx2 + pad_x), round(dy2 + pad_y)),
         255,
         -1,
     )
-    return mask, strips
+    return mask, FloorStrip(polygon, STRIP_OUT_M)
 
 
 def build_roi(data: AnalysisInput, frame: tuple[int, int], crop: Crop) -> Roi:
-    """ROI, 바닥 띠, 보여줄 크롭을 만든다. 분석 크롭이 ROI를 담지 못하면 크롭을 넓혀 함께 돌려준다.
+    """ROI, 바닥 띠, 보여줄 크롭을 만든다.
 
-    마스크는 (넓힌) 분석 크롭을 줄인 프레임 크기로 만든 것이다 (안쪽 255, D-201).
+    보여줄 크롭은 ROI 기준이고, 분석 크롭이 보여줄 크롭을 못 담으면 분석 크롭을 넓힌다
+    (D-95 ROI ⊂ 보여줄 ⊂ 분석). 마스크는 (넓힌) 분석 크롭을 줄인 프레임 크기다 (안쪽 255, D-201).
     """
-    full, strips = _roi_mask_original(data, frame)
+    full, strip = _roi_mask_original(data, frame)
     ys, xs = np.nonzero(full)
     if len(xs) == 0:
         raise RoiError("ROI가 화면 밖에 있어 비어 있습니다. 바닥 네 모서리를 확인해 주세요.")
-    # 화면 안에 남은 ROI를 담는 가장 작은 사각형까지 크롭을 넓힌다 (D-201 포함 관계)
     roi_rect = (int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1)
-    crop = expand_to_contain(crop, roi_rect, frame)
+    display = display_crop(roi_rect, frame, DISPLAY_MARGIN_RATIO)
+    crop = expand_to_contain(crop, display.rect, frame)
 
     x1, y1, x2, y2 = crop.rect
     small = cv2.resize(full[y1:y2, x1:x2], crop.reduced_size, interpolation=cv2.INTER_AREA)
     mask = np.where(small >= 128, 255, 0).astype(np.uint8)
-    display = display_crop(roi_rect, crop, DISPLAY_MARGIN_RATIO)
-    return Roi(crop, mask, strips, display)
+    return Roi(crop, mask, strip, display)
