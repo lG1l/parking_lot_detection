@@ -19,7 +19,8 @@ CAR_LENGTH_M = 4.7
 # D-284 (시작값)
 STRIP_OUT_M = 0.8  # 파손 변 바깥 띠 폭 (m). 손이 닿는 구역과 같다
 TWO_EDGE_KEEP_RATIO = 2 / 3  # 파손 변 2개: 각 변을 만나는 모서리에서 이 비율만큼만 쓴다
-# 띠를 위로 옮기는 높이: 띠에서 화면 가장 아래(카메라에 가장 가까운) 꼭짓점은 차량 bbox 세로 × 이 값.
+END_FLARE_DEG = 15  # 띠의 차에 붙지 않은 끝을 변의 수직선에서 바깥으로 이 각도만큼 벌린다
+# 띠를 위로 옮기는 높이: 파손 변의 화면에서 낮은 끝(카메라에 가까운 끝)은 차량 bbox 세로 × 이 값.
 # 다른 꼭짓점은 그 자리의 원근 배율만큼 줄이거나 늘린다
 VISIBLE_HEIGHT_RATIO = 1.0  # 파손 변이 모두 카메라 쪽
 HIDDEN_HEIGHT_RATIO = 1.1  # 그 밖: 차 너머 사람·물체가 지붕 위로 보이는 만큼 더 높인다
@@ -87,19 +88,27 @@ def _outward(floor: np.ndarray, edge: int) -> np.ndarray:
     return out / np.linalg.norm(out)
 
 
-def _floor_strip(data: AnalysisInput) -> np.ndarray:
-    """바닥 지도(m)의 띠 다각형.
+def _unit(v: np.ndarray) -> np.ndarray:
+    return v / np.linalg.norm(v)
 
-    변 1개: 변 전체 × 바깥 STRIP_OUT_M. 양 옆으로는 늘리지 않는다.
+
+def _floor_strip(data: AnalysisInput) -> np.ndarray:
+    """바닥 지도(m)의 띠 다각형. 앞쪽 꼭짓점들(파손 변 개수 + 1개)은 차에 붙은 파손 변 위의 점이다.
+
+    변 1개: 변 전체 × 바깥 STRIP_OUT_M. 양 끝은 바깥으로 갈수록 15도 벌어진다.
     변 2개: 만나는 모서리에서 각 변의 2/3까지만 쓰고, 바깥 꼭짓점을 이어 L자 하나로 만든다.
+    만나지 않는 두 끝만 15도 벌어진다 (만나는 모서리는 두 띠가 이어져 있어 벌릴 끝이 없다).
     """
+    # 바깥 끝이 변 방향으로 더 나가는 거리. 비스듬히 다가오는 사람도 띠 끝에서 잡는다
+    flare = STRIP_OUT_M * np.tan(np.radians(END_FLARE_DEG))
     floor = np.array(floor_points(data.front_edge), dtype=np.float64)
     edges = data.damage_edges
     if len(edges) == 1:
         e = edges[0]
         a, b = floor[e], floor[(e + 1) % 4]
         out = STRIP_OUT_M * _outward(floor, e)
-        return np.array([a, b, b + out, a + out])
+        along = flare * _unit(b - a)
+        return np.array([a, b, b + out + along, a + out - along])
 
     # 이웃한 두 변 e1 → e2 (e2의 시작점 = e1의 끝점 = 만나는 모서리)
     e1, e2 = edges if (edges[0] + 1) % 4 == edges[1] else edges[::-1]
@@ -108,8 +117,9 @@ def _floor_strip(data: AnalysisInput) -> np.ndarray:
     q = corner + (floor[(e2 + 1) % 4] - corner) * TWO_EDGE_KEEP_RATIO
     out1 = STRIP_OUT_M * _outward(floor, e1)
     out2 = STRIP_OUT_M * _outward(floor, e2)
-    polygon = np.array([p, corner, q, q + out2, corner + out1 + out2, p + out1])
-    return polygon
+    p_out = p + out1 + flare * _unit(p - corner)
+    q_out = q + out2 + flare * _unit(q - corner)
+    return np.array([p, corner, q, q_out, corner + out1 + out2, p_out])
 
 
 def _to_screen(points: np.ndarray, to_screen: np.ndarray) -> np.ndarray:
@@ -128,13 +138,13 @@ def _local_scale(point: np.ndarray, to_screen: np.ndarray) -> float:
     return float(np.sqrt(abs(ax * by - ay * bx)))
 
 
-def _lifts(
-    floor_poly: np.ndarray, screen_poly: np.ndarray, to_screen: np.ndarray, base: float
-) -> np.ndarray:
-    """꼭짓점마다 위로 옮길 높이 (px). 멀리 있는 꼭짓점은 작게 보이므로 덜 올린다 (원근 반영)."""
+def _lifts(floor_poly: np.ndarray, to_screen: np.ndarray, ref: int, base: float) -> np.ndarray:
+    """꼭짓점마다 위로 옮길 높이 (px). 꼭짓점 ref는 base만큼 올리고, 나머지는 원근 배율로 맞춘다.
+
+    멀리 있는 꼭짓점은 작게 보이므로 덜 올리고, 가까운 꼭짓점은 더 올린다.
+    """
     scales = np.array([_local_scale(p, to_screen) for p in floor_poly])
-    nearest = int(np.argmax(screen_poly[:, 1]))  # 화면 가장 아래 = 카메라에 가장 가깝다
-    return base * scales / scales[nearest]
+    return base * scales / scales[ref]
 
 
 def _sweep_up(mask: np.ndarray, polygon: np.ndarray, lifts: np.ndarray) -> None:
@@ -163,12 +173,15 @@ def _roi_mask_original(
     floor_poly = _floor_strip(data)
     screen_poly = _to_screen(floor_poly, to_screen)
     polygon = np.round(screen_poly).astype(np.int32)
-    # 화면 속 차 높이(bbox 세로)를 기준으로 올린다. 차가 화면에서 크든 작든 같은 규칙이 된다
+    # 파손 변의 화면에서 낮은 끝을 화면 속 차 높이(bbox 세로)만큼 올린다.
+    # 차가 화면에서 크든 작든 같은 규칙이 된다
+    line_count = len(data.damage_edges) + 1
+    ref = int(np.argmax(screen_poly[:line_count, 1]))
     ratio = VISIBLE_HEIGHT_RATIO if _is_visible_case(data) else HIDDEN_HEIGHT_RATIO
     base = (data.vehicle_bbox[3] - data.vehicle_bbox[1]) * ratio
 
     mask = np.zeros((height, width), np.uint8)
-    _sweep_up(mask, polygon, _lifts(floor_poly, screen_poly, to_screen, base))
+    _sweep_up(mask, polygon, _lifts(floor_poly, to_screen, ref, base))
 
     # 파손 사각형 주변이 빠져 있으면 그 자리를 더한다 (합집합이라 이미 덮인 곳은 그대로다)
     dx1, dy1, dx2, dy2 = data.damage_bbox
