@@ -19,7 +19,8 @@ CAR_LENGTH_M = 4.7
 # D-284 (시작값)
 STRIP_OUT_M = 0.8  # 파손 변 바깥 띠 폭 (m). 손이 닿는 구역과 같다
 TWO_EDGE_KEEP_RATIO = 2 / 3  # 파손 변 2개: 각 변을 만나는 모서리에서 이 비율만큼만 쓴다
-# 띠를 위로 옮기는 높이 = 파손 변에서 차량 bbox 위 변까지 높이 × 이 값
+# 띠를 위로 옮기는 높이: 띠에서 화면 가장 아래(카메라에 가장 가까운) 꼭짓점은 차량 bbox 세로 × 이 값.
+# 다른 꼭짓점은 그 자리의 원근 배율만큼 줄이거나 늘린다
 VISIBLE_HEIGHT_RATIO = 1.0  # 파손 변이 모두 카메라 쪽
 HIDDEN_HEIGHT_RATIO = 1.1  # 그 밖: 차 너머 사람·물체가 지붕 위로 보이는 만큼 더 높인다
 DAMAGE_PAD_RATIO = 0.5  # 파손 사각형을 자기 폭·높이의 이 배씩 넓힌 자리는 꼭 ROI에 넣는다
@@ -86,8 +87,8 @@ def _outward(floor: np.ndarray, edge: int) -> np.ndarray:
     return out / np.linalg.norm(out)
 
 
-def _floor_strip(data: AnalysisInput) -> tuple[np.ndarray, np.ndarray]:
-    """바닥 지도(m)의 띠 다각형과, 그중 차에 붙은 파손 변 부분의 점들.
+def _floor_strip(data: AnalysisInput) -> np.ndarray:
+    """바닥 지도(m)의 띠 다각형.
 
     변 1개: 변 전체 × 바깥 STRIP_OUT_M. 양 옆으로는 늘리지 않는다.
     변 2개: 만나는 모서리에서 각 변의 2/3까지만 쓰고, 바깥 꼭짓점을 이어 L자 하나로 만든다.
@@ -98,7 +99,7 @@ def _floor_strip(data: AnalysisInput) -> tuple[np.ndarray, np.ndarray]:
         e = edges[0]
         a, b = floor[e], floor[(e + 1) % 4]
         out = STRIP_OUT_M * _outward(floor, e)
-        return np.array([a, b, b + out, a + out]), np.array([a, b])
+        return np.array([a, b, b + out, a + out])
 
     # 이웃한 두 변 e1 → e2 (e2의 시작점 = e1의 끝점 = 만나는 모서리)
     e1, e2 = edges if (edges[0] + 1) % 4 == edges[1] else edges[::-1]
@@ -108,7 +109,7 @@ def _floor_strip(data: AnalysisInput) -> tuple[np.ndarray, np.ndarray]:
     out1 = STRIP_OUT_M * _outward(floor, e1)
     out2 = STRIP_OUT_M * _outward(floor, e2)
     polygon = np.array([p, corner, q, q + out2, corner + out1 + out2, p + out1])
-    return polygon, np.array([p, corner, q])
+    return polygon
 
 
 def _to_screen(points: np.ndarray, to_screen: np.ndarray) -> np.ndarray:
@@ -116,12 +117,32 @@ def _to_screen(points: np.ndarray, to_screen: np.ndarray) -> np.ndarray:
     return moved.reshape(-1, 2)
 
 
-def _sweep_up(mask: np.ndarray, polygon: np.ndarray, lift: int) -> None:
-    """polygon을 화면 위로 lift px 옮기며 지나간 자리 전체를 mask에 채운다.
+def _local_scale(point: np.ndarray, to_screen: np.ndarray) -> float:
+    """바닥 지도 point(m) 자리에서 바닥 1m가 화면에서 몇 px로 보이는가 (넓이 배율의 제곱근).
 
-    위쪽 경계가 파손 변과 평행한 대각선이 된다. 다각형, 옮긴 다각형, 각 변이 지나간 사각형의 합집합이다.
+    방향에 따라 조금 다르므로 가로·세로 1m 사각형이 화면에서 차지하는 넓이로 평균을 낸다.
     """
-    up = polygon - np.array([0, lift], dtype=np.int32)
+    pts = np.array([point, point + [1.0, 0.0], point + [0.0, 1.0]])
+    o, ex, ey = _to_screen(pts, to_screen)
+    (ax, ay), (bx, by) = ex - o, ey - o
+    return float(np.sqrt(abs(ax * by - ay * bx)))
+
+
+def _lifts(
+    floor_poly: np.ndarray, screen_poly: np.ndarray, to_screen: np.ndarray, base: float
+) -> np.ndarray:
+    """꼭짓점마다 위로 옮길 높이 (px). 멀리 있는 꼭짓점은 작게 보이므로 덜 올린다 (원근 반영)."""
+    scales = np.array([_local_scale(p, to_screen) for p in floor_poly])
+    nearest = int(np.argmax(screen_poly[:, 1]))  # 화면 가장 아래 = 카메라에 가장 가깝다
+    return base * scales / scales[nearest]
+
+
+def _sweep_up(mask: np.ndarray, polygon: np.ndarray, lifts: np.ndarray) -> None:
+    """polygon의 꼭짓점을 각자 lifts만큼 화면 위로 옮기며 지나간 자리 전체를 mask에 채운다.
+
+    다각형, 옮긴 다각형, 각 변이 지나간 사각형의 합집합이다.
+    """
+    up = polygon - np.stack([np.zeros(len(lifts)), lifts], axis=1).round().astype(np.int32)
     parts = [polygon, up]
     for i in range(len(polygon)):
         j = (i + 1) % len(polygon)
@@ -139,15 +160,15 @@ def _roi_mask_original(
     dst = np.array(floor_points(data.front_edge), dtype=np.float32)
     to_screen = cv2.getPerspectiveTransform(dst, src)
 
-    floor_poly, damage_line = _floor_strip(data)
-    polygon = np.round(_to_screen(floor_poly, to_screen)).astype(np.int32)
-    # 파손 변 위에 선 차의 화면 높이를 기준으로 올린다. 차가 화면에서 크든 작든 같은 규칙이 된다
-    base_y = float(_to_screen(damage_line, to_screen)[:, 1].mean())
-    car_height = max(base_y - data.vehicle_bbox[1], 0.0)
+    floor_poly = _floor_strip(data)
+    screen_poly = _to_screen(floor_poly, to_screen)
+    polygon = np.round(screen_poly).astype(np.int32)
+    # 화면 속 차 높이(bbox 세로)를 기준으로 올린다. 차가 화면에서 크든 작든 같은 규칙이 된다
     ratio = VISIBLE_HEIGHT_RATIO if _is_visible_case(data) else HIDDEN_HEIGHT_RATIO
+    base = (data.vehicle_bbox[3] - data.vehicle_bbox[1]) * ratio
 
     mask = np.zeros((height, width), np.uint8)
-    _sweep_up(mask, polygon, round(car_height * ratio))
+    _sweep_up(mask, polygon, _lifts(floor_poly, screen_poly, to_screen, base))
 
     # 파손 사각형 주변이 빠져 있으면 그 자리를 더한다 (합집합이라 이미 덮인 곳은 그대로다)
     dx1, dy1, dx2, dy2 = data.damage_bbox
