@@ -39,6 +39,17 @@ def _height_for(width: int) -> int:
     return (width * 9 + 8) // 16
 
 
+def _fit_16x9(width: int, height: int) -> tuple[int, int]:
+    """폭×높이를 모두 담는 가장 작은 16:9 (폭, 높이)."""
+    w = max(width, -(-height * 16 // 9))
+    h = _height_for(w)
+    # 반올림으로 높이가 모자라면 한 칸씩 키운다
+    while h < height:
+        w += 1
+        h = _height_for(w)
+    return w, h
+
+
 def _place(
     center_x: float, center_y: float, width: int, height: int, frame: tuple[int, int]
 ) -> Rect:
@@ -84,15 +95,26 @@ def expand_to_contain(crop: Crop, region: Rect, frame: tuple[int, int]) -> Crop:
         return crop
 
     ux1, uy1, ux2, uy2 = min(cx1, rx1), min(cy1, ry1), max(cx2, rx2), max(cy2, ry2)
-    # 합친 사각형의 폭과, 높이를 16:9 폭으로 바꾼 값 가운데 큰 쪽이 필요한 폭이다
-    width = max(ux2 - ux1, -(-(uy2 - uy1) * 16 // 9))
-    height = _height_for(width)
-    # 반올림으로 높이가 모자라면 한 칸씩 키운다
-    while height < uy2 - uy1:
-        width += 1
-        height = _height_for(width)
+    width, height = _fit_16x9(ux2 - ux1, uy2 - uy1)
     rect = _place((ux1 + ux2) / 2, (uy1 + uy2) / 2, width, height, frame)
     return Crop(rect, reduced_size_for(width, height))
+
+
+def display_crop(region: Rect, analysis: Crop, margin_ratio: float) -> Crop:
+    """region(ROI를 담는 사각형)에 여백을 더해 가운데 맞춘 16:9 보여줄 크롭 (D-95: ROI ⊂ 보여줄 ⊂ 분석).
+
+    분석 크롭 밖으로 나가면 크기를 유지한 채 안쪽으로 밀고, 분석 크롭보다 크면 분석 크롭 자체를 쓴다.
+    """
+    rx1, ry1, rx2, ry2 = region
+    pad_x, pad_y = round((rx2 - rx1) * margin_ratio), round((ry2 - ry1) * margin_ratio)
+    ux1, uy1, ux2, uy2 = rx1 - pad_x, ry1 - pad_y, rx2 + pad_x, ry2 + pad_y
+    width, height = _fit_16x9(ux2 - ux1, uy2 - uy1)
+    if width >= analysis.width or height >= analysis.height:
+        return analysis
+    ax1, ay1 = analysis.rect[:2]
+    cx, cy = (ux1 + ux2) / 2 - ax1, (uy1 + uy2) / 2 - ay1
+    x1, y1, x2, y2 = _place(cx, cy, width, height, (analysis.width, analysis.height))
+    return Crop((x1 + ax1, y1 + ay1, x2 + ax1, y2 + ay1), reduced_size_for(width, height))
 
 
 def _scales(crop: Crop) -> tuple[float, float]:

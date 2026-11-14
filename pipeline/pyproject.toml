@@ -6,6 +6,7 @@ dependencies = [
     "opencv-python",
     "numpy",
     "ultralytics>=8.4.213",
+    "pillow>=13.0.0",
 ]
 
 [dependency-groups]

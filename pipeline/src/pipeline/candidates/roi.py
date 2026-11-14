@@ -4,10 +4,12 @@ ROI는 "파손 변 주변에서 접근하는 물체가 화면에 나타나는 �
 파손 변이 모두 카메라 쪽 옆면이면 D-244 결정 2, 그 밖의 경우는 D-283의 합집합이다.
 """
 
+from dataclasses import dataclass
+
 import cv2
 import numpy as np
 
-from pipeline.candidates.crop import Crop, expand_to_contain
+from pipeline.candidates.crop import Crop, display_crop, expand_to_contain
 from pipeline.candidates.inputs import AnalysisInput, Point
 
 # 바닥 지도가 가정하는 일반 승용차 크기 (m). D-194, D-244 한계
@@ -20,6 +22,9 @@ STRIP_END_M = 0.5  # 띠를 양 끝으로 늘리는 길이 (m)
 ENTRY_BOX_RATIO = 0.12  # 양 끝 출입 상자: 차량 bbox 폭·높이의 ±이 배
 DAMAGE_PAD_RATIO = 0.15  # 파손 사각형을 차량 bbox 폭·높이의 이 배씩 넓힘
 
+# 보여줄 크롭: ROI를 담는 사각형에 더하는 여백 (ROI 폭·높이의 이 배씩). 🚧 U-30 시작값
+DISPLAY_MARGIN_RATIO = 0.1
+
 # D-283 "그 밖의 경우" (시작값). 파손 사각형 넓힘은 위와 같다
 ROOF_MARGIN_RATIO = 0.5  # 지붕 위 여유: 차량 bbox 높이의 이 배
 OTHER_STRIP_SIDE_RATIO = 0.5  # 옆면 변 바깥 띠 폭: 차 폭의 이 배
@@ -30,6 +35,22 @@ OTHER_ENTRY_BOX_RATIO = 0.25  # 양 끝 출입 상자: 차량 bbox 폭·높이�
 
 class RoiError(Exception):
     """ROI를 만들 수 없을 때. 메시지는 사용자에게 그대로 보여 준다."""
+
+
+@dataclass(frozen=True)
+class FloorStrip:
+    """파손 변 바깥 바닥 띠 하나. 위로 채우기 전의 모양이다."""
+
+    polygon: np.ndarray  # 원본 픽셀 (N, 2) int32
+    out_m: float  # 파손 변 바깥으로 얼마나 나가는 띠인가 (m)
+
+
+@dataclass(frozen=True)
+class Roi:
+    crop: Crop  # 분석 크롭 (ROI를 못 담으면 넓힌 것)
+    mask: np.ndarray  # 분석 크롭을 줄인 프레임 크기로 만든 ROI (안쪽 255)
+    strips: list[FloorStrip]  # 파손 변마다 하나
+    display: Crop  # 보여줄 크롭 (ROI 기준)
 
 
 def camera_side_edges(corners: list[Point]) -> list[int]:
@@ -105,8 +126,10 @@ def _strip_sizes(data: AnalysisInput, edge: int, camera_case: bool) -> tuple[flo
     return OTHER_STRIP_SIDE_RATIO * CAR_WIDTH_M, OTHER_STRIP_EXTEND_RATIO * CAR_LENGTH_M
 
 
-def _roi_mask_original(data: AnalysisInput, frame: tuple[int, int]) -> np.ndarray:
-    """원본 화면 크기의 ROI 마스크 (안쪽 255). 화면 밖으로 나간 부분은 버려진다."""
+def _roi_mask_original(
+    data: AnalysisInput, frame: tuple[int, int]
+) -> tuple[np.ndarray, list[FloorStrip]]:
+    """원본 화면 크기의 ROI 마스크 (안쪽 255)와 바닥 띠들. 화면 밖으로 나간 부분은 버려진다."""
     width, height = frame
     bx1, by1, bx2, by2 = data.vehicle_bbox
     bw, bh = bx2 - bx1, by2 - by1
@@ -122,10 +145,13 @@ def _roi_mask_original(data: AnalysisInput, frame: tuple[int, int]) -> np.ndarra
 
     strip = np.zeros((height, width), np.uint8)
     entries = np.zeros((height, width), np.uint8)
+    strips: list[FloorStrip] = []
     for edge in data.damage_edges:
         out_m, end_m = _strip_sizes(data, edge, camera_case)
         poly = _strip_polygon(data, edge, to_screen, out_m, end_m)
-        cv2.fillPoly(strip, [np.round(poly).astype(np.int32)], 255)
+        int_poly = np.round(poly).astype(np.int32)
+        cv2.fillPoly(strip, [int_poly], 255)
+        strips.append(FloorStrip(int_poly, out_m))
         # 파손 변 양 끝점 중심 상자
         for p in (data.floor_corners[edge], data.floor_corners[(edge + 1) % 4]):
             x1, x2 = round(p[0] - box_ratio * bw), round(p[0] + box_ratio * bw)
@@ -148,15 +174,15 @@ def _roi_mask_original(data: AnalysisInput, frame: tuple[int, int]) -> np.ndarra
         255,
         -1,
     )
-    return mask
+    return mask, strips
 
 
-def build_roi(data: AnalysisInput, frame: tuple[int, int], crop: Crop) -> tuple[Crop, np.ndarray]:
-    """ROI 마스크를 만든다. 분석 크롭이 ROI를 담지 못하면 크롭을 넓혀 함께 돌려준다.
+def build_roi(data: AnalysisInput, frame: tuple[int, int], crop: Crop) -> Roi:
+    """ROI, 바닥 띠, 보여줄 크롭을 만든다. 분석 크롭이 ROI를 담지 못하면 크롭을 넓혀 함께 돌려준다.
 
     마스크는 (넓힌) 분석 크롭을 줄인 프레임 크기로 만든 것이다 (안쪽 255, D-201).
     """
-    full = _roi_mask_original(data, frame)
+    full, strips = _roi_mask_original(data, frame)
     ys, xs = np.nonzero(full)
     if len(xs) == 0:
         raise RoiError("ROI가 화면 밖에 있어 비어 있습니다. 바닥 네 모서리를 확인해 주세요.")
@@ -167,4 +193,5 @@ def build_roi(data: AnalysisInput, frame: tuple[int, int], crop: Crop) -> tuple[
     x1, y1, x2, y2 = crop.rect
     small = cv2.resize(full[y1:y2, x1:x2], crop.reduced_size, interpolation=cv2.INTER_AREA)
     mask = np.where(small >= 128, 255, 0).astype(np.uint8)
-    return crop, mask
+    display = display_crop(roi_rect, crop, DISPLAY_MARGIN_RATIO)
+    return Roi(crop, mask, strips, display)

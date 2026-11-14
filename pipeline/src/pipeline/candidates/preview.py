@@ -9,18 +9,25 @@ import sys
 
 import cv2
 import numpy as np
+from PIL import Image, ImageDraw, ImageFont
 
 from pipeline.candidates.crop import Crop, CropError, analysis_crop, to_original
 from pipeline.candidates.inputs import AnalysisInput, InputError, load_input
-from pipeline.candidates.roi import RoiError, build_roi, camera_side_edges
+from pipeline.candidates.roi import FloorStrip, Roi, RoiError, build_roi, camera_side_edges
 from pipeline.candidates.video import SAMPLING_FPS, iter_analysis_frames
 
 # 그림 색 (BGR)
-YELLOW = (0, 255, 255)
+ORANGE = (0, 140, 255)  # 분석 크롭
+CYAN = (255, 255, 0)  # 보여줄 크롭
 WHITE = (255, 255, 255)
 BLUE = (255, 128, 0)
 RED = (0, 0, 255)
 GREEN = (0, 200, 0)
+
+# OpenCV putText는 한글을 못 쓴다. macOS 기본 한글 글꼴을 Pillow로 쓴다
+_FONT_PATH = "/System/Library/Fonts/AppleSDGothicNeo.ttc"
+_FONT_SIZE = 22
+_STRIP_ALPHA = 0.35
 
 _LINE = 2
 _BOLD = 5
@@ -43,7 +50,7 @@ def _format_time(sec: float) -> str:
 def draw_inputs(image: np.ndarray, crop: Crop, data: AnalysisInput) -> None:
     """분석 크롭과 사용자 입력을 image 위에 그린다 (image를 직접 고친다)."""
     x1, y1, x2, y2 = crop.rect
-    cv2.rectangle(image, (x1, y1), (x2 - 1, y2 - 1), YELLOW, _LINE)
+    cv2.rectangle(image, (x1, y1), (x2 - 1, y2 - 1), ORANGE, _LINE)
 
     vx1, vy1, vx2, vy2 = data.vehicle_bbox
     cv2.rectangle(image, (vx1, vy1), (vx2, vy2), WHITE, _LINE)
@@ -64,6 +71,55 @@ def draw_inputs(image: np.ndarray, crop: Crop, data: AnalysisInput) -> None:
 
     dx1, dy1, dx2, dy2 = data.damage_bbox
     cv2.rectangle(image, (dx1, dy1), (dx2, dy2), RED, _LINE)
+
+
+def draw_display_crop(image: np.ndarray, display: Crop) -> None:
+    x1, y1, x2, y2 = display.rect
+    cv2.rectangle(image, (x1, y1), (x2 - 1, y2 - 1), CYAN, _LINE)
+
+
+def draw_strips(image: np.ndarray, strips: list[FloorStrip]) -> np.ndarray:
+    """바닥 띠를 빨강 반투명으로 그린 새 그림을 돌려준다."""
+    layer = image.copy()
+    cv2.fillPoly(layer, [s.polygon for s in strips], RED)
+    out = cv2.addWeighted(layer, _STRIP_ALPHA, image, 1 - _STRIP_ALPHA, 0)
+    cv2.polylines(out, [s.polygon for s in strips], True, RED, _LINE)
+    return out
+
+
+def draw_labels(
+    image: np.ndarray, labels: list[tuple[str, tuple[int, int], tuple[int, int, int]]]
+) -> np.ndarray:
+    """(글, 왼쪽 위 좌표, BGR 색) 목록을 색 배경 위에 흰 글씨로 쓴 새 그림을 돌려준다."""
+    font = ImageFont.truetype(_FONT_PATH, _FONT_SIZE)
+    pil = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+    draw = ImageDraw.Draw(pil)
+    for text, (x, y), bgr in labels:
+        left, top, right, bottom = draw.textbbox((x, y), text, font=font)
+        draw.rectangle((left - 4, top - 2, right + 4, bottom + 2), fill=bgr[::-1])
+        draw.text((x, y), text, font=font, fill=(255, 255, 255))
+    return cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
+
+
+def _label_list(
+    roi: Roi, contours: list[np.ndarray]
+) -> list[tuple[str, tuple[int, int], tuple[int, int, int]]]:
+    """띠·ROI·보여줄 영역·분석 영역 이름표와 놓을 자리. 서로 안 겹치게 위에서부터 쌓는다."""
+    gap = _FONT_SIZE + 10
+    ax, ay = roi.crop.rect[:2]
+    dx, dy = roi.display.rect[:2]
+    if (dx, dy) == (ax, ay):
+        dy += gap  # 같은 구석이면 아래로 민다
+    all_pts = np.concatenate(contours)
+    labels = [
+        ("분석 영역 (차 폭 2배, 16:9)", (ax + 6, ay + 6), ORANGE),
+        ("보여줄 영역", (dx + 6, dy + 6), CYAN),
+        ("ROI", (int(all_pts[:, 0].min()) + 6, int(all_pts[:, 1].min()) + 6), GREEN),
+    ]
+    for strip in roi.strips:
+        cx, cy = strip.polygon.mean(axis=0)
+        labels.append((f"바닥띠 (파손 변 바깥 {strip.out_m:g}m)", (int(cx) - 80, int(cy)), RED))
+    return labels
 
 
 def roi_contours(mask: np.ndarray, crop: Crop) -> list[np.ndarray]:
@@ -97,11 +153,18 @@ def make_preview(video_path: str, input_path: str, out_dir: str) -> None:
     width, height = video_size(video_path)
     data = load_input(input_path, width, height)
     crop = analysis_crop(data.vehicle_bbox, (width, height))
-    crop, roi_mask = build_roi(data, (width, height), crop)
+    roi = build_roi(data, (width, height), crop)
+    crop, roi_mask = roi.crop, roi.mask
     contours = roi_contours(roi_mask, crop)
+    labels = _label_list(roi, contours)
 
     print(f"분석 크롭 (원본 픽셀): {crop.rect}  크기 {crop.width}×{crop.height}")
     print(f"줄인 프레임 크기: {crop.reduced_size[0]}×{crop.reduced_size[1]}")
+    print(
+        f"보여줄 크롭 (원본 픽셀): {roi.display.rect}  크기 {roi.display.width}×{roi.display.height}"
+    )
+    for strip in roi.strips:
+        print(f"바닥띠: 파손 변 바깥 {strip.out_m:g}m, 꼭짓점 {strip.polygon.tolist()}")
     print(f"카메라 쪽 변: {camera_side_edges(data.floor_corners)}  파손 변: {data.damage_edges}")
     print(f"ROI 넓이 비율 (분석 크롭 대비): {np.count_nonzero(roi_mask) / roi_mask.size:.1%}")
 
@@ -113,7 +176,10 @@ def make_preview(video_path: str, input_path: str, out_dir: str) -> None:
     count = 0
     for frame in iter_analysis_frames(video_path):
         image = draw_roi(frame.image, contours)
+        image = draw_strips(image, roi.strips)  # 초록 위에 그려야 빨강이 살아 있다
         draw_inputs(image, crop, data)
+        draw_display_crop(image, roi.display)
+        image = draw_labels(image, labels)
         _draw_label(image, frame.index, frame.time_sec)
         if frame.index == 0:
             cv2.imwrite(os.path.join(out_dir, "preview_first.png"), image)
