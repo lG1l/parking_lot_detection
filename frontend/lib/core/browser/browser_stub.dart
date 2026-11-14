@@ -25,4 +25,10 @@ class _UnsupportedBrowser implements Browser {
 
   @override
   bool historyBack() => false;
+
+  @override
+  String? readLocal(String key) => null;
+
+  @override
+  void writeLocal(String key, String value) {}
 }

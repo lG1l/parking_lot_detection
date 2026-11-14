@@ -42,7 +42,7 @@ def _admin_video(conn, video_id: int, user_id: int) -> None:
     found = conn.execute(
         text(
             "SELECT 1 FROM videos v JOIN cases c ON c.id = v.case_id "
-            "WHERE v.id = :v AND c.admin_user_id = :u"
+            "WHERE v.id = :v AND c.admin_user_id = :u AND c.admin_deleted_at IS NULL"
         ),
         {"v": video_id, "u": user_id},
     ).first()
@@ -76,7 +76,10 @@ def presign(
 
     with get_engine().begin() as conn:
         found = conn.execute(
-            text("SELECT 1 FROM cases WHERE id = :c AND admin_user_id = :u"),
+            text(
+                "SELECT 1 FROM cases WHERE id = :c AND admin_user_id = :u "
+                "AND admin_deleted_at IS NULL"
+            ),
             {"c": case_id, "u": user["id"]},
         ).first()
         if not found:

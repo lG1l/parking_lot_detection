@@ -47,6 +47,14 @@ def current_admin(request: Request) -> dict:
     return user
 
 
+def current_victim(request: Request) -> dict:
+    """피해자 계정만 통과시킨다. 관리자 계정이면 403 (D-233)."""
+    user = current_user(request)
+    if user["role"] != "victim":
+        raise ApiError(403, "ROLE_NOT_ALLOWED", "victim account required")
+    return user
+
+
 @router.post("/login")
 def login(body: LoginBody, request: Request, response: Response):
     with get_engine().connect() as conn:

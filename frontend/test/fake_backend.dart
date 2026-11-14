@@ -48,6 +48,13 @@ class FakeBackend {
       if (c != 'GET /api/auth/me' && c != 'GET /api/cases') c,
   ];
 
+  /// [screenCalls]에서 8번 조회를 뺀 것. 관리자 메뉴 [알림] 배지가 화면마다 8번을 읽으므로 (D-243),
+  /// "이 화면은 서버를 부르지 않는다"를 볼 때는 이것을 쓴다.
+  List<String> get screenCallsWithoutBadge => [
+    for (final c in screenCalls)
+      if (c != 'GET /api/videos') c,
+  ];
+
   int count(String call) => calls.where((c) => c == call).length;
 
   http.Client get client => MockClient((req) async {
@@ -71,13 +78,16 @@ class FakeFile implements PickedFile {
 }
 
 class FakeBrowser implements Browser {
-  FakeBrowser({this.file, this.putStatus = 200});
+  FakeBrowser({this.file, this.putStatus = 200, Map<String, String>? local}) : local = local ?? {};
 
   /// 파일 고르기 창에서 고를 파일. null이면 취소한 것이다.
   final PickedFile? file;
 
   /// S3 PUT 결과. 0이면 네트워크가 끊긴 것이다.
   final int putStatus;
+
+  /// localStorage 흉내. 테스트가 값을 미리 넣고, 저장된 값을 확인한다 (D-236).
+  final Map<String, String> local;
 
   @override
   Future<PickedFile?> pickFile(List<String> extensions) async => file;
@@ -98,6 +108,12 @@ class FakeBrowser implements Browser {
 
   @override
   bool historyBack() => false;
+
+  @override
+  String? readLocal(String key) => local[key];
+
+  @override
+  void writeLocal(String key, String value) => local[key] = value;
 }
 
 /// 넓은 PC 화면으로 앱을 띄운다.

@@ -16,6 +16,7 @@ class StillOverlay {
     this.selectedPolygon,
     this.selectedStrong = false,
     this.damageBox,
+    this.damageCornersOnly = false,
     this.corners = const [],
     this.frontEdge,
     this.edges = const [],
@@ -29,6 +30,9 @@ class StillOverlay {
   /// 고르는 단계(①)에서는 진하게, 뒤 단계에서는 옅게 칠한다 (D-221, D-222).
   final bool selectedStrong;
   final Box? damageBox;
+
+  /// 파손 부위를 그리는 단계(③)에서는 사각형 대신 빨간 네 모서리만 그린다 (캔버스, D-237).
+  final bool damageCornersOnly;
   final List<Pt> corners;
   final int? frontEdge;
   final List<int> edges;
@@ -167,7 +171,7 @@ class _OverlayPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     // 사각형과 윤곽선은 그리지 않는다. 마우스를 올린 차는 옅게, 고른 차는 ①에서 진하게, 뒤 단계에서 옅게 칠한다 (D-221, D-222).
-    // 고른 차량은 노랑, 파손 부위는 주황, 바닥 변은 흰색, 고른 파손 변은 빨강 (D-190)
+    // 고른 차량은 노랑, 파손 부위는 주황(그리는 단계는 빨간 네 모서리), 바닥 변은 파랑, 고른 파손 변은 빨강 (D-190, D-237)
     for (final d in o.detections) {
       if (d.detId == o.hoveredDetId) _fill(canvas, d.polygon, _lightAlpha);
     }
@@ -176,24 +180,49 @@ class _OverlayPainter extends CustomPainter {
     final damage = o.damageBox;
     if (damage != null) {
       final r = _rect(damage);
-      canvas.drawRect(r, Paint()..color = damageColor.withValues(alpha: 0.15));
-      canvas.drawRect(
-        r,
+      if (o.damageCornersOnly) {
+        _cornerMarks(canvas, r);
+      } else {
+        canvas.drawRect(r, Paint()..color = damageColor.withValues(alpha: 0.15));
+        canvas.drawRect(
+          r,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 3
+            ..color = damageColor,
+        );
+      }
+    }
+    // 바닥 변: 찍은 점을 차례로 잇고, 네 점이면 닫는다. 파랑 선 아래에 옅은 빛 번짐을 깐다 (캔버스, D-237)
+    final n = o.corners.length;
+    for (var i = 0; i < (n == 4 ? 4 : n - 1); i++) {
+      final a = _off(o.corners[i]);
+      final b = _off(o.corners[(i + 1) % n]);
+      canvas.drawLine(
+        a,
+        b,
         Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3
-          ..color = damageColor,
+          ..strokeWidth = 10
+          ..strokeCap = StrokeCap.round
+          ..color = cornerColor.withValues(alpha: _glowAlpha),
+      );
+      canvas.drawLine(
+        a,
+        b,
+        Paint()
+          ..strokeWidth = o.edgesClickable ? 4 : 3
+          ..strokeCap = StrokeCap.round
+          ..color = cornerColor,
       );
     }
-    if (o.corners.length == 4) {
-      for (var i = 0; i < 4; i++) {
-        final chosen = o.edges.contains(i);
+    if (n == 4) {
+      for (final i in o.edges) {
         canvas.drawLine(
           _off(o.corners[i]),
           _off(o.corners[(i + 1) % 4]),
           Paint()
-            ..strokeWidth = chosen ? 7 : (o.edgesClickable ? 4 : 2)
-            ..color = chosen ? chosenEdgeColor : floorEdgeColor,
+            ..strokeWidth = 7
+            ..color = chosenEdgeColor,
         );
       }
       // 앞쪽 변은 파랑. 파손 변과 같은 변이면 빨강 위에 점선으로 겹쳐 둘 다 보이게 한다 (D-212)
@@ -211,17 +240,45 @@ class _OverlayPainter extends CustomPainter {
         }
       }
     }
-    for (var i = 0; i < o.corners.length; i++) {
-      final c = _off(o.corners[i]);
-      canvas.drawCircle(c, 8, Paint()..color = inkColor);
-      final tp = TextPainter(
-        text: TextSpan(
-          text: '${i + 1}',
-          style: const TextStyle(color: offWhiteColor, fontSize: 9, fontWeight: FontWeight.bold),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(canvas, c - Offset(tp.width / 2, tp.height / 2));
+    // 찍은 점은 번호 없이 점만 그린다 (D-232). 파랑 점에 흰 테두리, 둘레에 옅은 빛 번짐 (캔버스, D-237)
+    for (final corner in o.corners) {
+      final c = _off(corner);
+      canvas.drawCircle(c, 16, Paint()..color = cornerColor.withValues(alpha: _glowAlpha));
+      canvas.drawCircle(c, 8, Paint()..color = cornerColor);
+      canvas.drawCircle(
+        c,
+        8,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..color = floorEdgeColor,
+      );
+    }
+  }
+
+  static const _glowAlpha = 0.25;
+
+  /// 사각형의 네 모서리에 ㄱ자 표시만 그린다. 팔 길이는 10px, 작은 사각형이면 변의 1/3까지 줄인다.
+  void _cornerMarks(Canvas canvas, Rect r) {
+    final arm = math.min(10.0, math.min(r.width, r.height) / 3);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.square
+      ..color = damageDragColor;
+    for (final (corner, dx, dy) in [
+      (r.topLeft, 1.0, 1.0),
+      (r.topRight, -1.0, 1.0),
+      (r.bottomLeft, 1.0, -1.0),
+      (r.bottomRight, -1.0, -1.0),
+    ]) {
+      canvas.drawPath(
+        Path()
+          ..moveTo(corner.dx, corner.dy + dy * arm)
+          ..lineTo(corner.dx, corner.dy)
+          ..lineTo(corner.dx + dx * arm, corner.dy),
+        paint,
+      );
     }
   }
 

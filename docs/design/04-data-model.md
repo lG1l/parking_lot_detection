@@ -106,7 +106,7 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 
 ### cases
 
-관리자 계정 1개와 피해자 계정 1개를 묶은 사건 하나. 관리자가 피해자 아이디로 초대하면 행이 생기고, 수락 단계 없이 바로 묶인다. (D-204)
+관리자 계정 1개와 피해자 계정 1개를 묶은 사건 하나. 관리자가 피해자 아이디로 초대하면 행이 생긴다. 피해자가 [알림]에서 수락해야 묶인다. (D-204, D-233)
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
@@ -114,10 +114,17 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 | `admin_user_id` | bigint FK → users | 초대한 관리자 계정. 업로드·열람을 맡는다 |
 | `victim_user_id` | bigint FK → users | 초대된 피해자 계정. 입력을 맡는다 |
 | `created_at` | timestamptz | 초대 시각 |
+| `accepted_at` | timestamptz, NULL 허용 | 피해자가 초대를 수락한 시각. 수락 전 `NULL`. 한 번 찍으면 바꾸지 않는다 (D-233) |
+| `admin_deleted_at` | timestamptz, NULL 허용 | 관리자가 이 사건을 삭제(숨김)한 시각. 찍히면 관리자 쪽에서만 없는 사건이 된다 (D-239) |
+| `victim_deleted_at` | timestamptz, NULL 허용 | 피해자가 이 사건을 삭제(숨김)한 시각. 찍히면 피해자 쪽에서만 없는 사건이 된다 (D-239) |
+| `admin_case_name` | text, NULL 허용 | 관리자가 붙인 사건 이름. 관리자에게만 보인다. 21번에서 받고 27번으로 바꾼다 (D-237, D-240) |
+| `victim_case_name` | text, NULL 허용 | 피해자가 붙인 사건 이름. 피해자에게만 보인다. 연결할 때 "YYYY-MM-DD 연결"(한국 시간)로 시작한다 (D-240) |
 
 - 두 칼럼의 역할이 맞는지는 21번 API가 확인한다. 피해자 역할이 아닌 계정은 초대할 수 없다 ([05장 5.4](05-api.md#54-사건업로드-api)).
 - 같은 두 계정이 다른 사건으로 또 묶일 수 있다. 사고가 또 나면 새 사건이기 때문이다.
-- 초대를 취소하거나 사건을 지우는 기능은 없다.
+- 이름 칼럼이 생기기 전에 만든 사건은 두 이름 모두 `NULL`이다. 화면은 영상 파일 이름으로 보인다 (D-237).
+- 초대를 취소하는 기능은 없다.
+- 사건 삭제(28번)는 행을 지우지 않고 지운 계정의 `*_deleted_at`만 찍는다. 영상·분석 결과·`viewing_agreements`·`access_logs`·S3 파일은 그대로 두고, 업로드 완료 30일 뒤 파기(D-64)를 그대로 따른다. 되돌리는 기능은 없다 (D-239).
 
 ### viewing_agreements
 
@@ -295,7 +302,7 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 | `payload` | jsonb | 입력 내용 |
 | `created_at`, `updated_at` | timestamptz | |
 
-사용자가 입력 화면에서 **탐지 상황**(파손이 CCTV에 보이는지)을 고르고, 보이면 고른 본인 차량 영역 **안에서 파손 부위를 드래그해** 지정한다. 이어서 **내 차가 바닥에 닿는 네 모서리**를 찍고, 그 사각형의 **차 앞쪽 변**과 **파손이 있는 변**을 고른다 (D-98, D-194). **파손 사진**과 **텍스트 설명**은 선택으로 더한다 (D-65, D-72). 차량 선택과 파손 부위는 **한 요청으로 함께 저장한다** (D-29, D-36). 두 행을 한 트랜잭션에서 쓴다.
+사용자가 입력 화면에서 **탐지 상황**(파손이 CCTV에 보이는지)을 고르고, 보이면 **파손 부위를 드래그해** 지정한다. 고른 차량 영역 밖으로 나가도 된다 (D-231). 이어서 **내 차가 바닥에 닿는 네 모서리**를 찍고, 그 사각형의 **차 앞쪽 변**과 **파손이 있는 변**을 고른다 (D-98, D-194). **파손 사진**과 **텍스트 설명**은 선택으로 더한다 (D-65, D-72). 차량 선택과 파손 부위는 **한 요청으로 함께 저장한다** (D-29, D-36). 두 행을 한 트랜잭션에서 쓴다.
 
 `schema_version` 6 (D-99, D-208):
 
@@ -314,7 +321,7 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 | 키 | 필수 | 뜻 |
 |---|---|---|
 | `visible` | 필수 | 파손이 CCTV에 보이는지. `true` 보임, `false` 안 보임 (D-72) |
-| `damage_bbox` | 항상 필수 | 정수 4개 `[x1,y1,x2,y2]`, 원본 화면 절대 픽셀 좌표. 보임은 차량 내부의 실제 파손 부위, 안 보임은 사용자가 지정한 파손 위치의 작은 사각형이며 보임과 같이 차량 내부로 제한한다 |
+| `damage_bbox` | 항상 필수 | 정수 4개 `[x1,y1,x2,y2]`, 원본 화면 절대 픽셀 좌표. 보임은 실제 파손 부위, 안 보임은 사용자가 지정한 파손 위치의 작은 사각형이다. 두 경우 모두 차량 `bbox` 밖으로 나가도 된다 (D-231) |
 | `floor_corners` | 항상 필수 | 내 차가 바닥에 닿는 네 모서리. 정수 점 `[x,y]` 4개, 원본 화면 절대 픽셀 좌표. 사용자가 찍은 순서대로 저장한다. 화면에 안 보이는 모서리는 사용자가 짐작한 점이다 (D-98) |
 | `front_edge` | 항상 필수 | 차의 앞쪽 변 번호. 0~3의 정수 하나. 변 번호는 `damage_edges`와 같은 규칙이다. 뒤쪽 변을 골라도 바닥 지도 결과는 같다. `damage_edges`와 같은 변이어도 된다 (D-194, D-208) |
 | `damage_edges` | 항상 필수 | 파손이 있는 변의 번호. 변 i는 `floor_corners[i]`에서 `floor_corners[(i+1) % 4]`까지다. 1개, 또는 모서리 파손이면 이웃한 2개(예: `[0, 1]`, `[3, 0]`) (D-98) |
@@ -322,7 +329,7 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 | `photo_key` | 선택 | 파손 사진의 원본 버킷 키. 05장 18번이 준 값을 그대로 저장한다 (4.9) |
 
 - 선택 키는 값이 없으면 **키를 뺀다.** 빈 문자열이나 `null`로 두지 않는다. 워커가 키가 있는지만 보고 VLM 입력에 넣을지 정한다 (06장 6.6).
-- `damage_bbox`는 `visible` 값과 함께 해석한다. 두 경우 모두 `0 <= x1 < x2 <= width`, `0 <= y1 < y2 <= height`를 만족해야 한다. `damage_bbox`는 두 경우 모두 본인 차량 영역 안(경계 포함)에 있어야 한다. 안 보임 좌표는 2D 화면상의 사용자 지정 위치이며 실제 가려진 표면이나 3D 위치의 측정값이 아니다 (D-92).
+- `damage_bbox`는 `visible` 값과 함께 해석한다. 두 경우 모두 `0 <= x1 < x2 <= width`, `0 <= y1 < y2 <= height`를 만족해야 한다. 본인 차량 영역(`bbox`) 안에 있을 필요는 없다. 다른 물체에 가려 `bbox`가 차를 덜 감쌀 수 있기 때문이다 (D-231). 안 보임 좌표는 2D 화면상의 사용자 지정 위치이며 실제 가려진 표면이나 3D 위치의 측정값이 아니다 (D-92).
 - `schema_version` 2(`{"damage_bbox": [...]}` 하나)는 D-72 이전 형식이며, 버전 3은 안 보임 위치 입력이 확정되기 전 형식, 버전 4는 바닥 네 모서리·파손 변이 없는 형식, 버전 5는 앞쪽 변이 없는 형식이다. 저장된 옛 데이터는 버린다 (D-25).
 - **파손이 차의 어느 쪽인지는 사용자가 고른 `damage_edges`를 쓴다.** 워커가 bbox로 계산하지 않는다 (D-98, D-34 대체). 네 모서리와 파손 변은 2단계에서 바닥점 필터의 기준과 ROI·크롭 크기를 정하는 데 쓴다 (06장 6.5).
   - 차량 선택(`vehicle_selections`)과 다른 테이블에 있지만, 입력은 한 요청으로 한 번만 받으므로(D-36, D-66) 한쪽만 바뀔 일이 없다.
@@ -432,7 +439,7 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 |---|---|---|
 | `id` | bigserial PK | |
 | `user_id` | bigint FK → users, NULL 허용 | 누가. 시스템이 남기는 `delete_raw`·`delete_masked`는 비어 있다 |
-| `video_id` | bigint FK → videos, NULL 허용 | 어느 영상. `login`·`lookup_invitee`·`create_case`는 비어 있다 |
+| `video_id` | bigint FK → videos, NULL 허용 | 어느 영상. `login`·`lookup_invitee`·`create_case`·`accept_case`는 비어 있다 |
 | `action` | text | 무엇을 했나. 값 목록은 아래 |
 | `requested_ip` | inet | 어디서. 고시 제8조의 접속지 정보 |
 | `created_at` | timestamptz | 언제 |
@@ -444,6 +451,7 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 | `login` | 로그인 성공 (5.3) | 열람 요구자 특정 (표준지침 제44조⑤) |
 | `lookup_invitee` | 초대 전 피해자 확인. 가린 이름을 돌려줌 (5.4, D-206) | 이용 기록 (표준지침 제42조) |
 | `create_case` | 사건 생성·피해자 초대 (5.4) | 수집 경로 기록 |
+| `accept_case` | 피해자의 사건 초대 수락 (5.4, D-233). 이미 수락한 사건을 다시 수락하면 남기지 않는다 | 수집 경로 기록 |
 | `agree_viewing` | 관리·감독 안내 동의 (5.4) | 이용 기록 (표준지침 제42조) |
 | `view_still` | 정지 장면 조회 (5.6) | **열람** |
 | `view_clip` | 후보 클립 재생 URL 발급 (5.8, 5.9의 14·15번) | **열람** |
@@ -760,7 +768,12 @@ CREATE TABLE cases (                         -- D-204
   id             bigserial PRIMARY KEY,
   admin_user_id  bigint      NOT NULL REFERENCES users(id),
   victim_user_id bigint      NOT NULL REFERENCES users(id),
-  created_at     timestamptz NOT NULL DEFAULT now()
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  accepted_at       timestamptz,                      -- 수락 전 NULL (D-233)
+  admin_deleted_at  timestamptz,                      -- 관리자가 숨김 (D-239)
+  victim_deleted_at timestamptz,                      -- 피해자가 숨김 (D-239)
+  admin_case_name   text,                             -- 관리자 쪽 이름 (D-240)
+  victim_case_name  text                              -- 피해자 쪽 이름 (D-240)
 );
 
 CREATE TABLE videos (

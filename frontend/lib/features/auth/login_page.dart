@@ -60,7 +60,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     try {
       await ref.read(apiProvider).login(_id.text, _password.text);
       refreshSession(ref, account: true); // 역할(관리자·피해자)로 메뉴와 화면을 나눈다 (D-204)
-      if (mounted) redirectTo(context, '/videos');
+      if (mounted) redirectTo(context, '/info');
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _loginError = errorMessage(e.code));

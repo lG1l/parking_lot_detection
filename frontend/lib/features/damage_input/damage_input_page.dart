@@ -111,8 +111,6 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
     return still.detections.firstWhere((d) => d.detId == _detId);
   }
 
-  Box? get _vehicleBox => _vehicle?.bbox;
-
   bool get _entered =>
       _detId != null || _visible != null || _corners.isNotEmpty || _photo != null || _description.text.isNotEmpty;
 
@@ -173,13 +171,9 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
   void _tapVehicle(double x, double y) {
     final picked = pickDetection(_still!.detections, x, y, _detId);
     setState(() {
-      _detId = picked; // 빈 곳을 누르면 null이라 선택이 풀린다 (D-221)
-      final box = _vehicleBox;
-      if (box == null) {
-        _damage = null;
-      } else if (_damage != null && !boxInside(_damage!, box)) {
-        _damage = null;
-      }
+      // 빈 곳을 누르면 null이라 선택이 풀린다 (D-221). 차를 바꾸거나 풀면 그려 둔 파손 사각형을 지운다 (D-231)
+      if (picked != _detId) _damage = null;
+      _detId = picked;
     });
   }
 
@@ -197,11 +191,7 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
       _dragBox = null;
     });
     if (box == null) return;
-    if (!boxInside(box, _vehicleBox!)) {
-      setState(() => _damage = null);
-      _setError(_visible == true ? '파손 부위가 차량을 벗어났습니다. 다시 그려주세요.' : '파손 위치가 차량을 벗어났습니다. 다시 그려주세요.');
-      return;
-    }
+    // 차량 bbox 밖도 받는다. 다른 물체에 가려 bbox가 차를 덜 감쌀 수 있다 (D-231)
     setState(() => _damage = box);
     _setError(null);
   }
@@ -381,7 +371,9 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
     InputStep.vehicle => ('본인 차량을 눌러 선택해주세요', null),
     InputStep.visibility => ('파손 부위가 이 장면에 보이나요?', null),
     InputStep.damage =>
-      _visible == true ? ('고른 차량 안에서 파손 부위를 드래그해 주세요', null) : ('보이지 않는 파손이 있을 위치를 작은 사각형으로 드래그해주세요', null),
+      _visible == true
+          ? ('파손 부위를 드래그해 주세요', '가려진 부위는 짐작해서 그려도 됩니다.')
+          : ('보이지 않는 파손이 있을 위치를 작은 사각형으로 드래그해주세요', '가려진 부위는 짐작해서 그려도 됩니다.'),
     InputStep.corners => ('차가 바닥에 닿는 네 모서리를 차례로 눌러주세요', '가려진 모서리는 짐작해서 찍어도 됩니다.'),
     InputStep.front => ('차의 앞쪽 변을 눌러주세요', '앞쪽이 잘 안 보이면 뒤쪽 변을 눌러도 됩니다.'),
     InputStep.edges => ('파손이 있는 쪽 변을 눌러주세요', '모서리 파손이면 이웃한 두 변을 누르세요.'),
@@ -397,6 +389,7 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
       selectedPolygon: _vehicle?.polygon,
       selectedStrong: _step == InputStep.vehicle,
       damageBox: s >= InputStep.damage.index ? (_dragBox ?? _damage) : null,
+      damageCornersOnly: _step == InputStep.damage,
       corners: s >= InputStep.corners.index ? _corners : const [],
       frontEdge: s >= InputStep.front.index ? _frontEdge : null,
       edges: s >= InputStep.edges.index ? _edges : const [],
@@ -559,7 +552,7 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
       InputStep.damage => [
         card([
           const SectionTitle('파손 부위'),
-          status(_damage == null ? '고른 차량 안을 드래그해 사각형을 그려 주세요.' : '빨간 사각형 1개를 그렸습니다.'),
+          status(_damage == null ? '파손 부위를 드래그해 사각형을 그려 주세요.' : '빨간 사각형 1개를 그렸습니다.'),
           OutlinedButton(
             onPressed: _damage == null ? null : () => setState(() => _damage = null),
             child: const Text('다시 그리기'),

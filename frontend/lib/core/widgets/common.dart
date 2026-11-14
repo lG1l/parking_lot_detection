@@ -81,12 +81,15 @@ const narrowWidth = 720.0;
 
 bool isNarrow(BuildContext context) => MediaQuery.sizeOf(context).width < narrowWidth;
 
-/// 상단 바 가운데 메뉴 (D-190, D-211). [link]는 관리자 계정에만 있다.
-enum NavItem { videos, link }
+/// 이 폭보다 좁으면 상단 바 가운데 메뉴가 넘치지 않게 줄여 보인다. 메뉴가 5개(관리자는 6개)라 넓은 배치는 이 폭부터 쓴다 (D-236, D-243).
+const topBarWideWidth = 1000.0;
+
+/// 상단 바 가운데 메뉴 (D-190, D-211). [link]는 관리자 계정에만 있고, [notifications]는 두 계정에 있다 (D-233, D-243).
+enum NavItem { info, videos, link, notifications, myPage, settings }
 
 /// 화면 공통 틀. PC 브라우저 기준이라 가운데 최대 폭을 둔다.
 /// 상단 바는 왼쪽 로고 · 가운데 메뉴 · 오른쪽 로그아웃이고, 화면 제목은 본문 맨 위에 둔다 (D-190).
-/// 메뉴는 관리자 계정이 [영상 목록]·[사건 관계자 연결], 피해자 계정이 [영상 목록]이다 (D-211).
+/// 메뉴는 관리자 계정이 [사건 목록]·[사건 관계자 연결], 피해자 계정이 [사건 목록]·[알림]이다 (D-211, D-233, D-237).
 class PageFrame extends StatelessWidget {
   const PageFrame({
     super.key,
@@ -257,12 +260,17 @@ class _TopBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final me = ref.watch(meProvider).value;
     final admin = me?.isAdmin ?? false;
-    Widget menu(NavItem item, String label, String path) {
+    // 피해자는 대기 중인 초대 수, 관리자는 할 일 수. 못 읽으면 배지를 두지 않는다 (D-233, D-243)
+    final badgeCount = me == null ? 0 : ref.watch(notificationBadgeProvider).value ?? 0;
+    Widget menu(NavItem item, String label, String path, {int badge = 0}) {
       final selected = item == current;
       return Semantics(
         selected: selected,
         child: TextButton(
-          onPressed: () => _leave(context, () => context.go(path)),
+          onPressed: () => _leave(context, () {
+            ref.invalidate(notificationBadgeProvider); // 화면을 옮길 때 배지 수를 다시 센다 (D-233, D-243)
+            context.go(path);
+          }),
           style: TextButton.styleFrom(
             foregroundColor: selected ? pointColor : inkColor,
             textStyle: TextStyle(
@@ -271,7 +279,12 @@ class _TopBar extends ConsumerWidget {
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             ),
           ),
-          child: Text(label),
+          child: Badge.count(
+            count: badge,
+            isLabelVisible: badge > 0,
+            offset: const Offset(12, -6),
+            child: Text(label),
+          ),
         ),
       );
     }
@@ -281,8 +294,13 @@ class _TopBar extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       spacing: narrow ? 4 : 32,
       children: [
-        menu(NavItem.videos, '영상 목록', '/videos'),
+        // 메뉴 이름은 와이어프레임 캔버스를 따른다 (D-237)
+        if (me != null) menu(NavItem.info, 'Info.', '/info'),
+        menu(NavItem.videos, '사건 목록', '/videos'),
         if (admin) menu(NavItem.link, '사건 관계자 연결', '/cases/new'),
+        if (me != null) menu(NavItem.notifications, '알림', '/notifications', badge: badgeCount),
+        if (me != null) menu(NavItem.myPage, '마이페이지', '/mypage'),
+        if (me != null) menu(NavItem.settings, '환경설정', '/settings'),
       ],
     );
     // 관리자 계정이면 로그아웃 왼쪽에 "관리자 계정"을 보인다 (캔버스)
@@ -302,7 +320,7 @@ class _TopBar extends ConsumerWidget {
       ),
       child: const Text('로그아웃'),
     );
-    if (narrow) {
+    if (MediaQuery.sizeOf(context).width < topBarWideWidth) {
       // 좁으면 로고 · 메뉴(넘치면 줄여 보임) · 로그아웃을 차례로 둔다
       return Container(
         height: _barHeight,
@@ -490,6 +508,95 @@ class Notice extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 카드 안 "이름 | 값" 한 줄 (캔버스 `.kv`). 줄 사이는 위쪽 1px 선이고 첫 줄은 선이 없다.
+class KeyValueRow extends StatelessWidget {
+  const KeyValueRow({super.key, required this.label, required this.value, this.first = false});
+
+  final String label;
+  final Widget value;
+  final bool first;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    constraints: const BoxConstraints(minHeight: 52),
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    decoration: BoxDecoration(
+      border: first ? null : const Border(top: BorderSide(color: lineColor)),
+    ),
+    child: Row(
+      children: [
+        SizedBox(
+          width: 160,
+          child: Text(label, style: const TextStyle(fontSize: 15, color: subColor)),
+        ),
+        Expanded(child: value),
+      ],
+    ),
+  );
+}
+
+/// 카드 안 "이름 ··· 고르기" 한 줄 (캔버스 `.opt`). 줄 전체를 눌러도 고른다.
+class OptionRow extends StatelessWidget {
+  const OptionRow({super.key, required this.label, required this.trailing, required this.onTap, this.first = false});
+
+  final String label;
+  final Widget trailing;
+  final VoidCallback onTap;
+  final bool first;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    child: Container(
+      constraints: const BoxConstraints(minHeight: 52),
+      decoration: BoxDecoration(
+        border: first ? null : const Border(top: BorderSide(color: lineColor)),
+      ),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 15))),
+          trailing,
+        ],
+      ),
+    ),
+  );
+}
+
+/// 연필 아이콘 버튼 (캔버스: 이름 옆 16px 회색 연필). 이름 수정·아이디 변경에 쓴다.
+class EditIconButton extends StatelessWidget {
+  const EditIconButton({super.key, required this.tooltip, required this.onPressed});
+
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: tooltip,
+    onPressed: onPressed,
+    iconSize: 16,
+    visualDensity: VisualDensity.compact,
+    color: doneChipColor,
+    icon: const Icon(Icons.edit_outlined),
+  );
+}
+
+/// 휴지통 아이콘 버튼 (캔버스: 줄 끝 20px 빨간 휴지통).
+class DeleteIconButton extends StatelessWidget {
+  const DeleteIconButton({super.key, required this.tooltip, required this.onPressed});
+
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: tooltip,
+    onPressed: onPressed,
+    iconSize: 20,
+    color: failChipColor,
+    icon: const Icon(Icons.delete_outline),
+  );
 }
 
 /// 작게 보이는 보조 문구 (열람기한 등).

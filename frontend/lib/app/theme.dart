@@ -16,12 +16,15 @@ const failChipColor = Color(0xFFB04A4A); // 분석 실패·업로드 확인 안 
 
 // 색상표 밖의 보조 회색. 작은 안내 글자, 입력칸 테두리, 막힌 버튼.
 const noteColor = Color(0xFF555555);
-// 정지 장면 위 표시 (D-190): 고른 차량 노랑, 파손 부위 주황, 바닥 변 흰색, 고른 파손 변 빨강
+// 정지 장면 위 표시 (D-190, D-237): 고른 차량 노랑, 파손 부위 주황, 바닥 점 테두리 흰색, 고른 파손 변 빨강
 const vehicleColor = Color(0xFFFACC15);
 const damageColor = Color(0xFFC2410C);
-const floorEdgeColor = Color(0xFFFFFFFF);
+const floorEdgeColor = Color(0xFFFFFFFF); // 바닥 모서리 점 테두리
 const chosenEdgeColor = Color(0xFFDC2626);
 const frontEdgeColor = Color(0xFF2563EB); // 차 앞쪽 변 (D-212)
+// 바닥 네 모서리 점·연결선은 밝은 파랑에 옅은 빛 번짐, 드래그 중인 파손 부위는 빨간 네 모서리만 (D-237)
+const cornerColor = Color(0xFF3D8BFF);
+const damageDragColor = failChipColor;
 const _fieldBorderColor = Color(0xFF8F8F8B);
 const _disabledBorderColor = Color(0xFFB5B5B5);
 const _disabledTextColor = Color(0xFF767676);

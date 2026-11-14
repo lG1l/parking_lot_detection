@@ -13,10 +13,6 @@ Pt toImagePoint(double dx, double dy, double scale, int width, int height) => (
 bool boxContainsPoint(Box b, double x, double y) =>
     x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3];
 
-/// [inner]가 [outer] 안(경계 포함)에 있는지 (05장 5.7 검증 7).
-bool boxInside(Box inner, Box outer) =>
-    inner[0] >= outer[0] && inner[1] >= outer[1] && inner[2] <= outer[2] && inner[3] <= outer[3];
-
 /// 점이 다각형 안인지. 점에서 오른쪽으로 반직선을 그어 변과 만나는 횟수가 홀수면 안이다.
 bool polygonContainsPoint(List<Pt> poly, double x, double y) {
   var inside = false;

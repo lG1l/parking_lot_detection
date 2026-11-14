@@ -26,13 +26,25 @@ class Api {
     return (loginId: j['login_id'] as String, maskedName: j['masked_name'] as String);
   }
 
-  Future<VideoCase> createCase(String victimLoginId) async =>
-      VideoCase.fromJson(await _c.post('/api/cases', {'victim_login_id': victimLoginId})); // 21
+  /// `case_name`은 관리자 쪽 사건 이름이 된다 (D-237, D-240).
+  Future<VideoCase> createCase(String victimLoginId, {required String caseName}) async => VideoCase.fromJson(
+    await _c.post('/api/cases', {'victim_login_id': victimLoginId, 'case_name': caseName}),
+  ); // 21
+
+  /// 사건 이름 바꾸기. 두 계정이 부르고, 부른 계정 쪽 이름만 바뀐다 (D-237, D-240)
+  Future<VideoCase> renameCase(int caseId, String caseName) async =>
+      VideoCase.fromJson(await _c.patch('/api/cases/$caseId', {'case_name': caseName})); // 27
+
+  /// 사건 삭제. 두 계정이 부르고, 부른 계정에서만 숨긴다 (D-237, D-239)
+  Future<void> deleteCase(int caseId) => _c.delete('/api/cases/$caseId'); // 28
 
   Future<List<VideoCase>> cases() async {
     final j = await _c.get('/api/cases'); // 22
     return [for (final e in j['items'] as List) VideoCase.fromJson(e as Map<String, dynamic>)];
   }
+
+  /// 피해자가 사건 초대를 수락한다. 피해자 계정만 부른다 (D-233 초안, 백엔드 미구현)
+  Future<void> acceptCase(int caseId) => _c.post('/api/cases/$caseId/accept'); // 26
 
   Future<void> agreeViewing(int videoId) =>
       _c.post('/api/videos/$videoId/viewing-agreement', {'confirm_supervision': true}); // 23

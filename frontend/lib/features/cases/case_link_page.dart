@@ -9,6 +9,12 @@ import '../../core/widgets/common.dart';
 /// 피해자 아이디가 없거나 피해자 계정이 아닐 때 (07장 2.3, 05장 21번).
 const inviteeInvalidMessage = '피해자 계정을 찾을 수 없습니다. 아이디를 다시 확인해 주세요.';
 
+/// 사건 이름을 비웠을 때 (캔버스 2.3, D-237).
+const caseNameEmptyMessage = '사건 이름을 입력해 주세요.';
+
+/// 사건 이름 최대 글자 수 (D-237 초안). 목록 한 칸에 들어가는 길이로 정했다.
+const caseNameMaxLength = 50;
+
 /// 관리자 계정이 아니면 목록으로 보낸다. 서버도 403 `ROLE_NOT_ALLOWED`로 막는다 (D-204).
 void requireAdmin(BuildContext context, WidgetRef ref) {
   ref.read(meProvider.future).then((me) {
@@ -18,8 +24,8 @@ void requireAdmin(BuildContext context, WidgetRef ref) {
   });
 }
 
-/// 2.3 사건 관계자 연결 (관리자). 피해자 아이디를 넣고 [연결]하면 24번으로 가린 이름을 확인하는 창을 띄우고(D-206),
-/// 창에서 [연결]하면 수락 단계 없이 사건이 생기고(21번) 그 사건의 업로드 화면으로 간다 (D-204).
+/// 2.3 사건 관계자 연결 (관리자). 사건 이름과 피해자 아이디를 넣고 [연결]하면 24번으로 가린 이름을 확인하는 창을 띄우고(D-206),
+/// 창에서 [연결]하면 수락 대기 사건이 생기고(21번) 그 사건의 업로드 화면으로 간다 (D-204, D-233).
 class CaseLinkPage extends ConsumerStatefulWidget {
   const CaseLinkPage({super.key});
 
@@ -28,8 +34,10 @@ class CaseLinkPage extends ConsumerStatefulWidget {
 }
 
 class _CaseLinkPageState extends ConsumerState<CaseLinkPage> {
+  final _name = TextEditingController();
   final _victim = TextEditingController();
   bool _busy = false;
+  String? _nameError;
   String? _error;
 
   @override
@@ -40,18 +48,24 @@ class _CaseLinkPageState extends ConsumerState<CaseLinkPage> {
 
   @override
   void dispose() {
+    _name.dispose();
     _victim.dispose();
     super.dispose();
   }
 
   Future<void> _link() async {
+    final name = _name.text.trim();
     final id = _victim.text.trim();
-    if (id.isEmpty) {
-      setState(() => _error = '피해자 아이디를 입력하세요');
+    if (name.isEmpty || id.isEmpty) {
+      setState(() {
+        _nameError = name.isEmpty ? caseNameEmptyMessage : null;
+        _error = id.isEmpty ? '피해자 아이디를 입력하세요' : null;
+      });
       return;
     }
     setState(() {
       _busy = true; // 같은 피해자를 두 번 누르면 사건이 둘 생기므로 바로 막는다
+      _nameError = null;
       _error = null;
     });
     final api = ref.read(apiProvider);
@@ -68,7 +82,7 @@ class _CaseLinkPageState extends ConsumerState<CaseLinkPage> {
       if (!ok || !mounted) return;
       // 백엔드 연결 필요: 21번 사건 생성·피해자 연결
       await backendNotice(context, ref, '연결');
-      final created = await api.createCase(found.loginId); // 21
+      final created = await api.createCase(found.loginId, caseName: name); // 21
       refreshSession(ref);
       if (mounted) redirectTo(context, '/cases/${created.id}/upload');
     } catch (e) {
@@ -97,8 +111,21 @@ class _CaseLinkPageState extends ConsumerState<CaseLinkPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Text(
-                  '피해자 계정을 연결하면 수락 단계 없이 바로 사건 하나로 묶입니다.\n연결한 뒤 그 사건에 CCTV 영상을 올립니다.',
+                  '피해자 계정을 연결하면 사건이 만들어지고, 피해자가 [알림]에서 수락하면 묶입니다.\n연결한 뒤 바로 그 사건에 CCTV 영상을 올릴 수 있습니다.',
                   style: TextStyle(fontSize: 15, height: 1.6),
+                ),
+                const SizedBox(height: 16),
+                const Text('사건 이름', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _name,
+                  enabled: !_busy,
+                  maxLength: caseNameMaxLength,
+                  decoration: InputDecoration(hintText: '사건 이름을 입력해 주세요', errorText: _nameError, counterText: ''),
+                  onChanged: (_) {
+                    if (_nameError != null) setState(() => _nameError = null);
+                  },
+                  onSubmitted: (_) => _link(),
                 ),
                 const SizedBox(height: 16),
                 const Text('피해자 아이디', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
