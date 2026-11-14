@@ -4,7 +4,7 @@
 
 ## 합의된 개발 순서 (D-114)
 
-프론트·백엔드는 준비된 테스트 이미지·클립과 가짜 워커로 실제 API·DB를 통한 서비스 흐름을 먼저 개발한다. 팀장은 후보 탐지·클립 추출·비식별화를 로컬에서 검증하고 Bedrock 요청·응답 처리를 준비한다. 데이터 계약을 먼저 맞추며, 권한 준비 후 작은 샘플로 AWS 기본 연결을 중간 확인한다. 주요 기능 완성 후 배포하여 실제 워커로 전체 흐름과 성능을 검증한다.
+프론트·백엔드는 준비된 테스트 이미지·클립과 가짜 워커로 실제 API·DB를 통한 서비스 흐름을 먼저 개발한다. 팀장은 후보 탐지·클립 추출·비식별화를 로컬에서 검증하고 Bedrock 요청·응답 처리를 준비한다. 후보 탐지 검증은 시험용 코드를 따로 만들지 않고, 워커의 탐지·추적과 후보 계산 부분을 먼저 만들어 영상에 돌려 확인한 뒤 SQS·DB·VLM을 붙인다 (D-240). 데이터 계약을 먼저 맞추며, 권한 준비 후 작은 샘플로 AWS 기본 연결을 중간 확인한다. 주요 기능 완성 후 배포하여 실제 워커로 전체 흐름과 성능을 검증한다.
 
 로컬 S3·SQS 대체는 로컬 파일 저장·간단한 작업 실행으로 정했다(D-115). 로컬 PostgreSQL은 Docker Compose로 실행한다(D-116). 버전·포트·실행 명령은 후속 작성한다. **CI는 D-129의 가벼운 전체 검사로 진행한다. CI 결과와 배포 연결은 D-130의 수동 확인을 따른다.** 아래 작성 항목을 이미 구현하거나 확정한 것으로 보지 않는다.
 
@@ -92,7 +92,7 @@ uvicorn에 `--host 0.0.0.0`을 붙이지 않는다. 기본값 `127.0.0.1`은 내
 | `source.mp4` | 짧은 정상 영상 1개 | H.264 MP4, 첫 프레임에 선택 가능한 차량. 실제 width·height·duration을 기록. 긴 CCTV 전체를 넣을 필요 없음 | 팀장 제공, 팀원 2 연결 |
 | `still-masked.jpg` | 정지 이미지 1장 | source의 첫 프레임과 같은 원본 해상도, 차량 위치 일치. 식별정보가 있으면 비식별화. 사용자가 선택할 차량을 알아볼 수 있어야 함 | 팀장 |
 | `detections.json` | 탐지 결과 1세트 | 실제 이미지에 맞는 `det_id`, `bbox`, `conf`, `polygon`. bbox와 polygon은 원본 픽셀 좌표. 별도 빈 배열 변형으로 차량 탐지 0건 검증 | 팀장, 팀원 2 형식 확인 |
-| `input-examples.json` | 정상 2종·비정상 변형 | schema_version 5, 보임/안 보임 각각의 차량 선택·damage_bbox·floor_corners 4점·damage_edges 예시. 설명·사진 포함/생략 사례 | 팀장 좌표, 팀원 2 검증값 |
+| `input-examples.json` | 정상 2종·비정상 변형 | schema_version 6, 보임/안 보임 각각의 차량 선택·damage_bbox·floor_corners 4점·front_edge·damage_edges 예시 (04장 4.4, D-208). 설명·사진 포함/생략 사례 | 팀장 좌표, 팀원 2 검증값 |
 | `damage-photo.jpg` | 선택 입력 사진 1장 | 허용된 정상 이미지. 사진 없이 진행하는 사례도 필수. 다른 확장자·초과 크기는 검증 단계에서 추가 | 팀장 또는 팀원 1 |
 | `clips/*.mp4` | 재생 가능한 후보 클립 2~3개 | H.264 MP4, 마스킹된 결과, 영상 경계 내 최대 30초. 대응 원본 시간 구간을 기록. 정상·시작/끝 경계 예시 준비 | 팀장 |
 | `candidate-results.json` | 정상 목록·파싱 실패 목록 | 아래 결과 계약에 맞는 후보/클립 메타데이터. 후보 0건·소수·다중 묶음은 같은 기본 자료의 시나리오 변형 | 팀장 내용, 팀원 2 적재 |
@@ -106,7 +106,7 @@ uvicorn에 `--host 0.0.0.0`을 붙이지 않는다. 기본값 `127.0.0.1`은 내
 
 - 원본 메타데이터: 자료 식별명, 파일 상대경로, 실제 해상도·길이, 녹화 시작 시각(선택). `video_id`·`job_id`·`still_frame_id` 등 DB ID는 업로드/적재 시 생성된 값으로 연결하며 고정 숫자를 복사하지 않는다.
 - 정지 장면: `t_sec=0`, 이미지 상대경로, `detections`. `det_id`는 그 이미지 안에서 유일하다.
-- 입력 예시: `vehicle.det_id`가 실제 탐지 항목을 가리키게 한다. 보임·안 보임 모두 damage_bbox는 선택 차량 내부다. floor_corners는 정해진 순서의 4개 원본 좌표, damage_edges는 1개 또는 이웃한 2개다. 미정 크기 제한을 새로 만들지 않는다.
+- 입력 예시: `vehicle.det_id`가 실제 탐지 항목을 가리키게 한다. 보임·안 보임 모두 damage_bbox는 선택 차량 내부다. floor_corners는 정해진 순서의 4개 원본 좌표, front_edge는 0~3의 정수 하나, damage_edges는 1개 또는 이웃한 2개다 (D-208). 미정 크기 제한을 새로 만들지 않는다.
 - 후보: 04장의 `judged_at_sec`, `list_kind`, `rank`, VLM 결과와 클립 연결에 필요한 값을 사용한다. 미정인 rule_name·병합 규칙은 테스트용임을 구분하고 알고리즘 결정으로 취급하지 않는다.
 - 시간: `incident_at_sec = judged_at_sec + 5`, `start_sec = max(0, judged_at_sec - 10)`, `end_sec = min(duration_sec, judged_at_sec + 20)`를 따른다. 정상 샘플은 사건 지점이 원본 범위 안에 있도록 고른다. 원본 끝 5초 이내 후보의 사건 지점 처리처럼 아직 불명확한 경계는 별도 명세 확인 대상으로 남긴다.
 - 클립: 파일 경로·start_sec·end_sec·crop_bbox가 실제 샘플과 맞아야 한다. 성공 결과만 재생 파일과 연결하고 열람 불가 결과에는 정상 재생 URL을 만들지 않는다.
@@ -227,7 +227,8 @@ CI 성공 여부를 자동으로 조회해 배포를 막는 기능이나 CI 성�
 - ~~GPU 자동 꺼짐 설정과 시연 날 끄는 방법~~ → D-131 (`.env`의 대기 시간 값, 0이면 끔. 시연 날 SSH로 접속해 바꾸고 워커 재시작, 끝나면 15로 되돌림. [02장 2.8](02-architecture.md#시연-날-설정)). 변수 이름은 팀장
 - ~~GPU EC2 접속(SSH) 방식~~ → D-128, D-133 (22번을 전체에 계속 열어 두고 키 인증만 허용. `.env` 작성·시연 날 설정·로그 확인에 쓴다). 키 페어·보안 그룹 규칙은 👤 팀원 2
 - GPU EC2 설치 스크립트: user data로 처음 켜질 때 한 번 실행한다(D-125: uv·Python 설치 → clone → `uv sync`·가중치 → 자동 실행 등록. `.env`는 설치 뒤 SSH로 접속해 작성한다, D-128·D-133). 내용은 팀장, Terraform 연결은 👤 팀원 2. DLAMI 위에 Python 패키지 설치. Terraform에서 AMI ID를 변수로 고정하는 방법, 루트 볼륨 크기 확인 (D-21)
-- Flutter 버전, `pipeline/` 포맷터·린터 (Python 3.12·uv는 D-119, 백엔드 EC2 OS·PostgreSQL 버전은 D-144, `backend/` 포맷터·린터 Ruff는 D-148, Terraform·AWS provider 버전은 D-149, GitHub Actions 액션 버전은 D-150)
+- Flutter 버전 (Python 3.12·uv는 D-119, 백엔드 EC2 OS·PostgreSQL 버전은 D-144, `backend/` 포맷터·린터 Ruff는 D-148, `pipeline/` 포맷터·린터 Ruff는 D-258, Terraform·AWS provider 버전은 D-149, GitHub Actions 액션 버전은 D-150)
+- `pipeline/` 검사를 CI 워크플로에 더하기: 팀장이 `pipeline/`을 만들 때 `uv run ruff check .`, `uv run ruff format --check .`와 테스트 명령을 팀원 2에게 전달한다. 워크플로 작업 추가·구성은 👤 팀원 2 결정 필요 (D-129, D-258)
 - ~~브랜치·커밋 규칙~~ → D-120 (`main` 바로 push, force push 금지, 계약 변경 공지, 결정 번호 규칙)
 
 ## 관련 결정·조건

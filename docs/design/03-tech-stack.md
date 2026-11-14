@@ -1,6 +1,6 @@
 # 03. 기술 스택과 저장소 구조
 
-> 마지막 수정: 2026-11-03
+> 마지막 수정: 2026-11-14
 > 표시: 🚧 미정 · ⚠️ 확인 필요 · 🔐 멘토 승인 필요
 
 ## 3.1 기술 스택
@@ -9,15 +9,15 @@
 |---|---|---|---|---|
 | 프론트엔드 | Flutter (Web 빌드), Dart | 팀 선택. PC 웹 브라우저 기준 (PRD 4장) | 팀원 1 | D-08 |
 | 백엔드 | Python, FastAPI | 비전·VLM 파이프라인과 같은 언어. API 문서(Swagger) 자동 생성 | 팀원 2 | D-07 |
-| 객체탐지 | YOLO11m, 차 영역과 정지 장면 차량 탐지는 YOLO11m-seg (시작값, U-06 실측으로 조정) | 차·사람 탐지, 정지 장면의 차량 다각형 | 팀장 | D-04, D-196, D-221 |
+| 객체탐지 | YOLO11m-seg. 1단계 정지 장면 차량 탐지와 2단계 채널 A·내 차 영역에 같은 모델을 쓴다 (시작값, U-06 실측으로 조정) | 차·사람 탐지, 정지 장면의 차량 다각형, 내 차 영역 | 팀장 | D-04, D-196, D-221, D-247 |
 | 추적 | ByteTrack (`trackers` 2.6.1 고정) | 탐지 결과를 이어 트랙을 만든다. `supervision` 0.31.0부터 ByteTrack이 빠졌다. `opencv-python`을 함께 설치하므로 OpenCV를 직접 빌드하면(D-198) 충돌을 막아야 한다 | 팀장 | D-04, D-196, D-200 |
 | 비식별화 | 사람 탐지 + 번호판 탐지 후 모자이크 (모델 🚧 U-09) | PRD 3.1 | 팀장 | |
 | 영상 처리 | FFmpeg, OpenCV | 디코딩, 청크 분할, 클립 자르기, H.264 인코딩. OpenCV는 기본 pip 패키지로 시작하고, MOG2가 너무 느리면 GPU용으로 직접 빌드한다 | 팀장 | D-198 |
-| VLM | AWS Bedrock (모델 🚧 U-08) | PRD 3.4. GPU 워커가 호출한다 | 팀장 | D-06, D-14 |
+| VLM | 학교 대체 LLM API (NxtCloud LLM Gateway, OpenAI 호환). 모델은 네 개를 시험해 보고 정한다 (D-261) | PRD 3.4. GPU 워커가 호출한다. 학교가 Bedrock 직접 권한 대신 준다 | 팀장 | D-06, D-14, D-261, D-263 |
 | DB | PostgreSQL 16 (백엔드 EC2에 apt로 직접 설치, 로컬은 Docker `postgres:16`) | 백엔드와 GPU 워커가 함께 접속해야 한다. 추가 비용 없음 | 팀원 2 | D-17, D-144 |
 | 작업 대기열 | AWS SQS 표준 대기열 1개 | 백엔드 → GPU 워커 작업 전달. 재전달 기본 제공, 무료 범위. DLQ는 두지 않는다 | 팀원 2, 팀장 | D-16, D-56 |
 | 파일 저장소 | AWS S3 (비공개) | 업로드·재생 모두 presigned URL로 직접 | 팀장, 팀원 2 | D-09, D-18 |
-| AWS 호출 | boto3 (AWS 공식 Python SDK) | GPU 켜기, S3 읽기·쓰기, presigned URL 발급, SQS 넣기·꺼내기, Bedrock 호출. 자격 증명은 코드에 넣지 않고 EC2 IAM 역할에서 자동으로 받는다 | 팀장, 팀원 2 | |
+| AWS 호출 | boto3 (AWS 공식 Python SDK) | GPU 켜기, S3 읽기·쓰기, presigned URL 발급, SQS 넣기·꺼내기. VLM 호출은 boto3로 하지 않는다(D-263). 자격 증명은 코드에 넣지 않고 EC2 IAM 역할에서 자동으로 받는다 | 팀장, 팀원 2 | |
 | 서버 | EC2: 백엔드(CPU) 1대 + GPU 1대 | | 팀장, 팀원 2 | D-10 |
 | 서버 OS·AMI | 백엔드: Ubuntu 24.04 LTS. GPU: AWS Deep Learning Base AMI (Ubuntu 22.04) | GPU: NVIDIA 드라이버·CUDA가 미리 설치되어 있다. AMI 사용료 없음 | 팀장, 팀원 2 | 백엔드: D-144, GPU: D-21 |
 | 인프라 코드 | Terraform 1.16 (AWS provider 6.x) | | 팀원 2 | D-149 |
@@ -43,10 +43,21 @@
 
 - Pretendard는 SIL OFL 1.1 라이선스다. 앱에 넣어 배포할 수 있고, 라이선스 파일(`LICENSE.txt`)을 글꼴 파일과 함께 둔다. (D-184)
 
-### Bedrock VLM
+### VLM (학교 대체 LLM API)
 
-- 영상을 직접 입력받는 모델과 이미지(프레임) 여러 장만 받는 모델이 있다. 입력 방식은 모델 선택과 함께 정한다. 🚧 (U-08)
-- ⚠️ 계정의 분당 요청·토큰 한도를 확인해야 한다. 동시 호출 수가 이 한도에 묶인다. 한도를 넘으면 `ThrottlingException`이 나므로 대기 시간을 늘려 가며 재시도한다. (D-06, D-19)
+- 학교는 Bedrock 직접 권한 대신 별도 LLM API(NxtCloud LLM Gateway)를 준다. VLM 호출을 구현할 때는 사용 가이드 <https://bedrock.nxtcloud.kr/guide/>를 따른다. 가이드 요약은 [02장 2.9](02-architecture.md#29-aws-서비스와-권한)의 「학교 대체 LLM API: 사용 가이드」에 있다. (D-263)
+- **호출 방식**: OpenAI 호환 HTTP API로 부른다(`POST /v1/chat/completions`). boto3·Bedrock Converse API는 쓰지 않는다. 키는 `Authorization: Bearer` 헤더로 보내고, 코드·문서에 쓰지 않고 환경변수로 받는다. 어떤 SDK를 쓸지와 환경변수 이름은 구현할 때 정한다 (`pipeline/`, 팀장).
+- **오류 처리**: 아래와 같이 한다. 재시도 횟수와 대기 시간은 구현할 때 시작값으로 정한다 (가이드에 없다).
+
+  | 응답 | 뜻 (가이드) | 처리 |
+  |---|---|---|
+  | 429 | 너무 빨리 보냄 | 대기 시간을 늘려 가며 다시 보낸다 (장애, 06장 6.6) |
+  | 500·502·504, 타임아웃 | 일시 오류 | 대기 시간을 늘려 가며 다시 보낸다 (장애, 06장 6.6) |
+  | 422 `budget_exceeded` | 한도 소진 | 다시 보내도 안 되므로 재시도하지 않고 작업을 `failed`로 바꾼다 |
+  | 401 키 오류, 400 `Invalid model name` | 설정 잘못 | 재시도하지 않고 작업을 `failed`로 바꾼다 |
+
+- ⚠️ 이미지 입력, 한 요청의 이미지 장수, 점수를 정해진 형식으로 받는 방법, 분당 한도 수치는 가이드에 없다. 실제 호출로 확인한다 (C-16). 동시 호출 수는 이 한도에 묶인다. (D-19)
+- 영상을 직접 입력받는 모델과 이미지(프레임) 여러 장만 받는 모델이 있다. 지금 설계는 프레임 여러 장을 보낸다 (D-73).
 
 ### PostgreSQL
 
@@ -97,4 +108,5 @@ parking_lot_detection/
 - DB 마이그레이션은 Alembic으로 한다. `backend/pyproject.toml` 의존성에 넣어 `uv.lock`으로 버전을 고정한다. 변경은 `op.execute`에 SQL로 직접 쓰고 자동 생성(autogenerate)은 쓰지 않는다. (D-151)
 - `backend/`의 DB 코드는 SQLAlchemy `text()`로 SQL을 직접 쓰고 값은 파라미터로 바인딩한다. ORM 모델은 만들지 않는다. 쓰기는 `engine.begin()` 안에서 하고, 외부 호출(S3·SQS·EC2)은 커밋한 뒤 블록 밖에서 한다. 단 D-46 대상 API(5.4의 7·11·13번)의 SQS 보내기는 블록 안에서 하고 실패하면 롤백한다. Ruff에 `S608`·`PGH004`를 더하고, `# noqa: S608`은 허용 목록 값을 넣은 줄에만 쓴다. (D-156)
 - `backend/` API는 동기(`def`)로 짜고 `async def`는 쓰지 않는다. DB 엔진은 `create_engine("postgresql+psycopg://...")`(psycopg 3)이다. boto3·bcrypt는 그대로 부른다. (D-157)
-- Flutter 버전, `pipeline/`의 포맷터·린터는 🚧 (U-03, 10장 문답 후 결정). Flutter는 3.38 이상이어야 한다(D-164 개발 서버 프록시)
+- `pipeline/`의 포맷터·린터도 Ruff 하나로 한다. `backend/`와 같은 방식이다(dev 의존성에 넣어 `uv.lock`으로 고정, 같은 명령). `pipeline/` 폴더를 만들 때 적용한다. CI 워크플로에 더하는 일은 👤 팀원 2 결정 필요. (D-258)
+- Flutter 버전은 🚧 (U-03, 10장 문답 후 결정). Flutter는 3.38 이상이어야 한다(D-164 개발 서버 프록시)
