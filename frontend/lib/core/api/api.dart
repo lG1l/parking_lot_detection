@@ -44,7 +44,7 @@ class Api {
     return [for (final e in j['items'] as List) VideoCase.fromJson(e as Map<String, dynamic>)];
   }
 
-  /// 피해자가 사건 초대를 수락한다. 피해자 계정만 부른다 (D-233 초안, 백엔드 미구현)
+  /// 피해자가 사건 초대를 수락한다. 피해자 계정만 부른다 (D-233)
   Future<void> acceptCase(int caseId) => _c.post('/api/cases/$caseId/accept'); // 26
 
   /// 채팅 메시지 전부, 오래된 순 (D-284~D-287). 주소·형식은 임시다. 팀원 2가 05장에 적으면 바꾼다 (백엔드 미구현)

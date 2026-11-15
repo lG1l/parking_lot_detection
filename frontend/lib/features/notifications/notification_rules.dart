@@ -85,7 +85,7 @@ List<NoticeMessage> messagesOf(VideoCase c, List<VideoSummary> videos, {required
       if (v.caseId == c.id) ?statusNoticeOf(v, admin: admin),
 ];
 
-/// 관리자 메뉴 [알림] 배지: 보관 기간이 끝나지 않은 영상 중 할 일(후보 선택 가능·분석 실패·업로드 확인 안 됨) 수 (D-243).
+/// 관리자 메뉴 [채팅] 배지: 보관 기간이 끝나지 않은 영상 중 할 일(후보 선택 가능·분석 실패·업로드 확인 안 됨) 수 (D-243).
 int adminTodoCount(List<VideoSummary> videos) => videos.where((v) {
   if (v.maskedDeleted) return false;
   return v.status == VideoStatus.ready ||

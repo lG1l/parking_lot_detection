@@ -140,7 +140,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   Future<void> _accept(VideoCase c) async {
     setState(() => _accepting.add(c.id));
     try {
-      // 백엔드 연결 필요: 26번 사건 초대 수락 (D-233 초안)
+      // 26번 사건 초대 수락 (D-233). 데모에서는 다른 버튼처럼 "눌렀다" 팝업을 먼저 띄운다
       await backendNotice(context, ref, '수락');
       await ref.read(apiProvider).acceptCase(c.id); // 26
       if (!mounted) return;

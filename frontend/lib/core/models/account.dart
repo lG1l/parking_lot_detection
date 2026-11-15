@@ -55,7 +55,7 @@ class VideoCase {
   final String victimName;
   final String createdAt;
 
-  /// 피해자가 초대를 수락한 시각 (D-233 초안, 22번 `accepted_at`).
+  /// 피해자가 초대를 수락한 시각 (D-233, 22번 `accepted_at`).
   final String? acceptedAt;
 
   /// 피해자가 아직 초대를 수락하지 않은 사건인지 (D-233).

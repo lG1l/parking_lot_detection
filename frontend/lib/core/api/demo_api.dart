@@ -69,7 +69,7 @@ class DemoApi extends Api {
     addCase(2, '지하 1층 범퍼 파손', 'victim02');
     // 연결만 하고 영상을 아직 올리지 않은 사건. 관리자 목록에서 누르면 업로드 화면으로 간다
     addCase(3, '입구 쪽 문콕', 'victim03');
-    // 피해자가 아직 수락하지 않은 사건. 피해자 [알림]에 뜨고, 수락하면 영상 12가 목록에 보인다 (D-233)
+    // 피해자가 아직 수락하지 않은 사건. 피해자 [채팅]에 뜨고, 수락하면 영상 12가 목록에 보인다 (D-233)
     addCase(4, '출구 앞 사이드미러', 'victim01', accepted: false);
 
     add(1, 1, '01_입력필요.mp4', VideoStatus.stage1Done);
@@ -242,12 +242,12 @@ class DemoApi extends Api {
       'admin_name': _me?.name ?? 'parking_admin',
       'victim_name': victimLoginId,
       'created_at': _iso(DateTime.now()),
-      'accepted_at': null, // 피해자가 [알림]에서 수락해야 묶인다 (D-233)
+      'accepted_at': null, // 피해자가 [채팅]에서 수락해야 묶인다 (D-233)
     };
     return _caseOf(_cases[id]!);
   }
 
-  // 22번은 피해자에게도 수락 전 사건을 준다. [알림] 목록에 필요하다 (D-233, D-238). 지운 사건은 뺀다 (D-239)
+  // 22번은 피해자에게도 수락 전 사건을 준다. [채팅] 목록에 필요하다 (D-233, D-238). 지운 사건은 뺀다 (D-239)
   @override
   Future<List<VideoCase>> cases() async {
     await _wait();
