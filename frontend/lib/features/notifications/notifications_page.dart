@@ -221,8 +221,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
           : Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SizedBox(width: 340, child: scrollList),
-                const SizedBox(width: 40),
+                SizedBox(width: 280, child: scrollList),
+                const SizedBox(width: 32),
                 Expanded(child: talk),
               ],
             ),
