@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
+import 'package:parking_lot_frontend/core/api/chat_socket.dart';
+import 'package:parking_lot_frontend/core/models/message.dart';
 import 'package:parking_lot_frontend/core/settings.dart';
 import 'package:parking_lot_frontend/features/damage_input/still_canvas.dart';
 
@@ -443,6 +445,61 @@ void main() {
     await settle(tester);
     expect(backend.count('PUT /api/chats/13/read'), 1);
     expect(find.text('3'), findsNothing); // 읽으면 목록 숫자와 메뉴 배지가 함께 사라진다
+  });
+
+  testWidgets('33번으로 온 새 메시지는 고른 상대면 대화에 붙고 읽음 처리, 다른 상대면 29번을 다시 읽는다. 같은 id는 버리고 화면을 떠나면 닫는다 (2.11, D-298)', (tester) async {
+    var unread03 = 0;
+    final backend = FakeBackend({
+      'GET /api/videos': (_) => json([]),
+      'GET /api/cases': (_) => json({
+        'items': [
+          {...case3(), 'accepted_at': '2026-11-02T10:00:00+09:00'},
+          {...case3(), 'id': 5, 'victim_name': 'victim03', 'created_at': '2026-10-20T09:00:00+09:00', 'accepted_at': '2026-10-20T10:00:00+09:00'},
+        ],
+      }),
+      'GET /api/chats': (_) => json({
+        'items': [
+          chatPeer(12, 'victim02', last: chatMsg(1, '첫 메시지', mine: false)),
+          chatPeer(13, 'victim03', last: chatMsg(5, '셋째 사람 메시지', mine: false), unread: unread03),
+        ],
+        'unread_total': unread03,
+      }),
+      'GET /api/chats/12/messages': (_) => json({'items': [chatMsg(1, '첫 메시지', mine: false)], 'has_more': false}),
+      'PUT /api/chats/12/read': (_) => json(null, 204),
+    });
+    final sockets = FakeChatSockets();
+    await pumpApp(tester, backend, '/notifications', sockets: sockets);
+    expect(sockets.opened.length, 1); // 화면을 열 때 연결 한 번
+    final socket = sockets.opened.single;
+    expect(backend.count('PUT /api/chats/12/read'), 1);
+
+    // 지금 고른 victim02의 새 메시지: 대화에 붙고 가장 큰 id(2)로 다시 읽음 처리
+    final incoming = ChatMessage.fromJson(chatMsg(2, '새로 온 메시지', mine: false));
+    socket.emit(ChatMessageEvent(12, incoming));
+    await settle(tester);
+    expect(find.text('새로 온 메시지'), findsOneWidget);
+    expect(backend.count('PUT /api/chats/12/read'), 2);
+
+    // 같은 id가 또 오면 버린다(말풍선도 읽음 처리도 늘지 않는다)
+    socket.emit(ChatMessageEvent(12, incoming));
+    await settle(tester);
+    expect(find.text('새로 온 메시지'), findsOneWidget);
+    expect(backend.count('PUT /api/chats/12/read'), 2);
+
+    // 고르지 않은 victim03의 새 메시지: 대화를 읽지 않고 29번만 다시 읽어 목록 숫자가 늘어난다
+    unread03 = 1;
+    final peersBefore = backend.count('GET /api/chats');
+    socket.emit(ChatMessageEvent(13, ChatMessage.fromJson(chatMsg(6, '다른 상대 메시지', mine: false))));
+    await settle(tester);
+    expect(backend.count('GET /api/chats'), greaterThan(peersBefore));
+    expect(backend.count('GET /api/chats/13/messages'), 0);
+    expect(find.text('1'), findsWidgets);
+
+    // 모르는 type의 줄은 이벤트가 되지 않는다
+    expect(parseChatEvent('{"type":"typing","peer_user_id":12}'), isNull);
+    expect(socket.closed, isFalse);
+    await unmount(tester);
+    expect(socket.closed, isTrue); // 화면을 떠나면 닫는다
   });
 
   testWidgets('메시지가 많아도 입력칸은 화면 아래에 고정되어 보인다 (2.11, D-297)', (tester) async {

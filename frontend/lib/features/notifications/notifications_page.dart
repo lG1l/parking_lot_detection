@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/theme.dart';
 import '../../core/api/api.dart';
 import '../../core/api/api_error.dart';
+import '../../core/api/chat_socket.dart';
 import '../../core/format.dart';
 import '../../core/constants.dart';
 import '../../core/models/account.dart';
@@ -19,7 +22,8 @@ import 'notification_rules.dart';
 /// 오른쪽은 고른 사람과의 대화로, 사건마다 구분선 아래에 그 사건의 알림을 잇는다.
 /// 대기 중인 사건 초대는 피해자가 [수락]하면 그 사건이 묶인다 (D-233). 관리자는 [수락]이 없고 할 일을 본다 (D-243).
 /// 거절은 없다. 대화 아래에 메시지 흐름과 입력칸이 있고, 수락한 사건이 있는 상대에게만 보낸다 (D-297).
-/// 22번·8번·메시지는 열 때와 [수락]·보내기 뒤에만 읽는다. 새 메시지 받기(WebSocket, D-286)는 05장 주소가 나오면 붙인다.
+/// 22번·8번·메시지는 열 때와 [수락]·보내기 뒤에만 읽고, 새 메시지는 33번 WebSocket으로 받는다.
+/// 화면이 열려 있는 동안만 연결하고 떠나면 닫는다 (D-286, D-298).
 class NotificationsPage extends ConsumerStatefulWidget {
   const NotificationsPage({super.key});
 
@@ -52,17 +56,59 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   final _input = TextEditingController();
   String? _selected;
   final _accepting = <int>{}; // [수락]을 누른 사건. 다시 누르지 못하게 막는다
+  ChatSocket? _socket; // 33번
+  StreamSubscription<ChatEvent>? _socketSub;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _connect();
   }
 
   @override
   void dispose() {
+    _socketSub?.cancel();
+    _socket?.close(); // 화면을 떠나면 닫는다
     _input.dispose();
     super.dispose();
+  }
+
+  /// 33번에 연결한다. 연결 하나로 모든 상대의 메시지를 받는다.
+  void _connect() {
+    final socket = ref.read(chatSocketProvider)();
+    _socket = socket;
+    _socketSub = socket.events.listen(_onSocketEvent);
+  }
+
+  void _onSocketEvent(ChatEvent event) {
+    switch (event) {
+      case ChatMessageEvent():
+        _onSocketMessage(event);
+      case ChatClosedEvent():
+        break; // 닫는 코드별 처리는 끊김 처리에서 붙인다
+    }
+  }
+
+  /// 받은 메시지를 반영한다. 같은 `id`는 버린다. 지금 고른 상대면 대화에 붙이고(상대가 보낸 것이면 읽음 처리),
+  /// 그 밖의 상대이거나 모르는 상대면 29번을 다시 읽어 목록 요약과 안 읽은 수를 맞춘다 (D-298).
+  Future<void> _onSocketMessage(ChatMessageEvent e) async {
+    if (!mounted) return;
+    final current = _selected == null ? null : peerOf(_selected!, _peers);
+    if (current != null && current.peerUserId == e.peerUserId) {
+      if (_chat.any((m) => m.id == e.message.id)) return;
+      setState(() => _chat = mergeMessages(_chat, [e.message]));
+      if (e.message.mine) {
+        await _loadPeers(); // 다른 탭에서 보낸 것. 목록 요약만 맞춘다
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _markRead(current, _chat));
+      }
+      return;
+    }
+    final known = _peers.where((p) => p.peerUserId == e.peerUserId).firstOrNull;
+    if ((known?.lastMessage?.id ?? 0) >= e.message.id) return; // 이미 반영된 메시지
+    await _loadPeers();
+    if (mounted) ref.invalidate(notificationBadgeProvider);
   }
 
   /// 29번 대화 목록. 못 읽으면(서버에 아직 없을 수 있다) 비워 두고 알림 카드는 그대로 보인다.
