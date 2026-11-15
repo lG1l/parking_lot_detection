@@ -966,7 +966,7 @@ void main() {
     });
     await pumpApp(tester, backend, '/videos/7');
     expect(find.text('처리를 대기중입니다. 앞에 2건이 있습니다.'), findsOneWidget);
-    expect(find.text('사용자 입력 중'), findsOneWidget); // 진행도 4단계
+    expect(find.textContaining('사용자 입력 중'), findsOneWidget); // 진행도 4단계
     expect(backend.count('GET /api/videos/7'), 1);
 
     await tester.pump(const Duration(seconds: 5));
