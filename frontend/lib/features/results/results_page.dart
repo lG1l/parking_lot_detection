@@ -102,9 +102,10 @@ class _ResultsPageState extends ConsumerState<ResultsPage> {
     final d = _detail;
     final pins = _pins;
     return PageFrame(
-      eyebrow: '고정 목록',
+      // 불러오는 동안은 제목·소제목을 비워 둔다. 임시 제목 "결과"가 보였다가 바뀌지 않게 한다
+      eyebrow: d == null ? null : '고정 목록',
       eyebrowNotes: d == null ? const [] : [...counterpartNote(ref, _id), viewExpiresText(d.viewExpiresAt)],
-      title: d?.originalFilename ?? '결과',
+      title: d?.originalFilename,
       titleStrong: withoutExtension(d?.originalFilename),
       child: d == null || pins == null
           ? const Center(child: CircularProgressIndicator())

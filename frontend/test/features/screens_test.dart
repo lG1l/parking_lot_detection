@@ -1406,6 +1406,27 @@ void main() {
     expect(backend.calls, isNot(contains('GET /api/videos/7/pin')));
   });
 
+  testWidgets('피해자가 목록에서 확인 완료 영상을 누르면 상태 화면을 거치지 않고 결과 화면을 연다 (2.2, 2.9)', (tester) async {
+    final backend = FakeBackend({
+      'GET /api/videos': (_) => json([video('finished')]),
+      'GET /api/cases': (_) => json({
+        'items': [case3()],
+      }),
+      'GET /api/videos/7': (_) => json(video('finished')),
+      'GET /api/videos/7/incident-times': (_) => json([
+        {...pinnedWithTime(clipUrl: null)}
+          ..remove('clip_url')
+          ..remove('candidate_clip_id'),
+      ]),
+    }, role: 'victim');
+    await pumpApp(tester, backend, '/videos');
+    await tester.tap(find.text('CH01.mp4'));
+    await settle(tester);
+    expect(find.text('03:40:35 ~ 03:41:05'), findsOneWidget);
+    // 상태 화면을 거쳤다면 25번을 두 번 부른다
+    expect(backend.count('GET /api/videos/7/incident-times'), 1);
+  });
+
   testWidgets('열람기한이 지나 MASKED_EXPIRED를 받으면 보관 기간 종료 안내로 간다 (2.10)', (tester) async {
     // 파기 작업이 돌기 전이라 9번은 아직 masked_deleted가 false다
     final backend = FakeBackend({

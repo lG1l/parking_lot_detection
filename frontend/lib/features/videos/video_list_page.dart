@@ -246,6 +246,10 @@ class _VideoListPageState extends ConsumerState<VideoListPage> {
     final v = r.video;
     if (v == null) return admin ? () => context.go('/cases/${r.videoCase!.id}/upload') : null;
     if (admin && v.status == VideoStatus.uploading && !v.maskedDeleted) return null;
+    // 피해자의 "확인 완료"는 상태 화면을 거치지 않고 결과 화면을 바로 연다. 사건 지점 시간이 없으면
+    // 결과 화면이 상태 화면(분석 완료 안내)으로 보낸다. 관리자는 관리·감독 안내창 때문에 상태 화면부터 연다 (D-204)
+    final done = v.status == VideoStatus.finished || v.status == VideoStatus.exhausted;
+    if (!admin && done && !v.maskedDeleted) return () => context.go('/videos/${v.videoId}/results');
     return () => context.go('/videos/${v.videoId}');
   }
 }

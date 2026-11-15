@@ -191,7 +191,8 @@ class _VideoStatusPageState extends ConsumerState<VideoStatusPage> {
         // 열람기한은 업로드가 끝나 정해진 뒤에만 보인다 (D-211)
         _ => [...counterpartNote(ref, _id), if (d.viewExpiresAt != null) viewExpiresText(d.viewExpiresAt)],
       },
-      title: d?.originalFilename ?? '영상 상태',
+      // 불러오는 동안은 제목을 비워 둔다. 임시 제목이 보였다가 바뀌지 않게 한다
+      title: d?.originalFilename,
       titleStrong: d == null ? null : withoutExtension(d.originalFilename),
       child: d == null || screen == null ? const Center(child: CircularProgressIndicator()) : _body(context, d, screen),
     );
