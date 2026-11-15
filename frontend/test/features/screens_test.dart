@@ -688,6 +688,10 @@ void main() {
     expect(find.text('사건 관계자 계정 사용법'), findsOneWidget);
     expect(find.text('[채팅]에서 관리자의 사건 초대를 [수락]합니다.'), findsOneWidget);
     expect(find.text('관리자 계정 사용법'), findsNothing);
+    // 관리자 일을 설명하는 공통 문구 대신 피해자용 문구가 보인다 (D-306)
+    expect(find.text('관리자 최종 확인'), findsNothing);
+    expect(find.textContaining('최종 판단은 관리자가'), findsNothing);
+    expect(find.text('사건 지점 시간'), findsWidgets);
     // 메뉴의 [Info.]가 지금 화면으로 굵게 보인다 (800 굵기, D-305)
     expect(
       tester.widget<TextButton>(find.widgetWithText(TextButton, 'Info.')).style?.textStyle?.resolve({})?.fontWeight,
