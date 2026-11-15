@@ -25,6 +25,11 @@ class ChatClosedEvent extends ChatEvent {
   final int code;
 }
 
+/// 33번이 연결을 닫을 때 쓰는 코드 (05장 33번). 이 셋은 다시 연결하지 않는다.
+const chatCloseNoSession = 4401; // 세션 쿠키가 없거나 만료, 또는 로그아웃
+const chatCloseBadOrigin = 4403; // Origin이 서비스 주소와 다름
+const chatCloseTooMany = 4408; // 같은 계정의 연결이 3개를 넘어 가장 오래된 연결을 닫음
+
 /// 33번 연결 하나. 만들면 곧바로 연결을 시작하고, 다시 연결하려면 새로 만든다.
 abstract class ChatSocket {
   Stream<ChatEvent> get events;

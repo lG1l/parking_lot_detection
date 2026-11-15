@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:parking_lot_frontend/core/api/chat_socket.dart';
+import 'package:parking_lot_frontend/core/constants.dart';
 import 'package:parking_lot_frontend/core/models/message.dart';
 import 'package:parking_lot_frontend/core/settings.dart';
 import 'package:parking_lot_frontend/features/damage_input/still_canvas.dart';
@@ -500,6 +501,53 @@ void main() {
     expect(socket.closed, isFalse);
     await unmount(tester);
     expect(socket.closed, isTrue); // 화면을 떠나면 닫는다
+  });
+
+  testWidgets('33번이 그 밖의 이유로 끊기면 다시 연결해 빠진 메시지를 채우고, 4408이면 안내만 하고 다시 연결하지 않는다. 다른 메뉴로 가면 닫는다 (2.11, D-298)', (tester) async {
+    final backend = FakeBackend({
+      'GET /api/videos': (_) => json([]),
+      'GET /api/cases': (_) => json({
+        'items': [
+          {...case3(), 'accepted_at': '2026-11-02T10:00:00+09:00'},
+        ],
+      }),
+      'GET /api/chats': (_) => json({
+        'items': [chatPeer(12, 'victim02', last: chatMsg(1, '첫 메시지', mine: false))],
+        'unread_total': 0,
+      }),
+      'GET /api/chats/12/messages': (req) => json({
+        // 끊겨 있는 동안 상대가 id 2를 보냈다. after_id=1이면 그것만 온다
+        'items': req.url.queryParameters['after_id'] == '1'
+            ? [chatMsg(2, '끊긴 동안 온 메시지', mine: false)]
+            : [chatMsg(1, '첫 메시지', mine: false)],
+        'has_more': false,
+      }),
+      'PUT /api/chats/12/read': (_) => json(null, 204),
+    });
+    final sockets = FakeChatSockets();
+    await pumpApp(tester, backend, '/notifications', sockets: sockets);
+    expect(sockets.opened.length, 1);
+
+    sockets.opened[0].emit(ChatClosedEvent(1006)); // 네트워크 끊김
+    await tester.pump(pollInterval - const Duration(seconds: 1));
+    expect(sockets.opened.length, 1); // 아직 기다린다
+    await tester.pump(const Duration(seconds: 1));
+    await settle(tester);
+    expect(sockets.opened.length, 2); // pollInterval 뒤 다시 연결
+    expect(backend.count('GET /api/chats/12/messages?after_id=1'), 1); // 마지막으로 받은 id 뒤부터 채운다
+    expect(find.text('끊긴 동안 온 메시지'), findsOneWidget);
+    expect(backend.count('PUT /api/chats/12/read'), 2); // 채운 메시지도 읽음 처리
+
+    sockets.opened[1].emit(ChatClosedEvent(chatCloseTooMany));
+    await settle(tester);
+    expect(find.textContaining('다른 창에서 채팅을 열어'), findsOneWidget);
+    await tester.pump(pollInterval * 2);
+    await settle(tester);
+    expect(sockets.opened.length, 2); // 4408은 다시 연결하지 않는다
+
+    await tester.tap(find.text('사건 목록'));
+    await settle(tester);
+    expect(sockets.opened[1].closed, isTrue); // 채팅을 떠나면 닫는다
   });
 
   testWidgets('메시지가 많아도 입력칸은 화면 아래에 고정되어 보인다 (2.11, D-297)', (tester) async {

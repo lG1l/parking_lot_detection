@@ -58,6 +58,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   final _accepting = <int>{}; // [수락]을 누른 사건. 다시 누르지 못하게 막는다
   ChatSocket? _socket; // 33번
   StreamSubscription<ChatEvent>? _socketSub;
+  Timer? _reconnectTimer;
 
   @override
   void initState() {
@@ -68,6 +69,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
 
   @override
   void dispose() {
+    _reconnectTimer?.cancel();
     _socketSub?.cancel();
     _socket?.close(); // 화면을 떠나면 닫는다
     _input.dispose();
@@ -85,9 +87,49 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     switch (event) {
       case ChatMessageEvent():
         _onSocketMessage(event);
-      case ChatClosedEvent():
-        break; // 닫는 코드별 처리는 끊김 처리에서 붙인다
+      case ChatClosedEvent(:final code):
+        _onSocketClosed(code);
     }
+  }
+
+  /// 닫는 코드별 처리 (05장 33번, D-298). 4401은 로그인 화면으로, 4403은 조용히 멈추고,
+  /// 4408은 멈추고 안내한다. 이 셋은 다시 연결하지 않는다. 그 밖의 끊김은 [pollInterval] 뒤 다시 연결한다.
+  void _onSocketClosed(int code) {
+    if (!mounted) return;
+    switch (code) {
+      case chatCloseNoSession:
+        handleCommonError(context, ApiException(401, 'UNAUTHENTICATED'));
+      case chatCloseBadOrigin:
+        break;
+      case chatCloseTooMany:
+        showMessage(context, '다른 창에서 채팅을 열어 이 창의 실시간 연결을 닫았습니다. 화면을 다시 열면 이어집니다.');
+      default:
+        _reconnectTimer?.cancel();
+        _reconnectTimer = Timer(pollInterval, _reconnect);
+    }
+  }
+
+  /// 다시 연결한 뒤 끊겨 있던 동안 빠진 메시지를 채운다. 연결을 먼저 해서 그 사이에 온 것도 놓치지 않는다.
+  /// 지금 고른 상대는 30번을 `?after_id=(마지막으로 받은 id)`로 불러 붙이고, 나머지는 29번을 다시 읽는다.
+  Future<void> _reconnect() async {
+    if (!mounted) return;
+    _socketSub?.cancel();
+    _connect();
+    final current = _selected == null ? null : peerOf(_selected!, _peers);
+    if (current != null) {
+      final lastId = _chat.isEmpty ? null : _chat.map((m) => m.id).reduce((a, b) => a > b ? a : b);
+      try {
+        final missed = await ref.read(apiProvider).chatMessages(current.peerUserId, afterId: lastId); // 30
+        if (!mounted) return;
+        final merged = mergeMessages(_chat, missed);
+        if (merged.length != _chat.length) {
+          setState(() => _chat = merged);
+          WidgetsBinding.instance.addPostFrameCallback((_) => _markRead(current, merged));
+        }
+      } catch (_) {} // 못 채우면 다음에 열 때 다시 읽는다
+    }
+    await _loadPeers();
+    if (mounted) ref.invalidate(notificationBadgeProvider);
   }
 
   /// 받은 메시지를 반영한다. 같은 `id`는 버린다. 지금 고른 상대면 대화에 붙이고(상대가 보낸 것이면 읽음 처리),
