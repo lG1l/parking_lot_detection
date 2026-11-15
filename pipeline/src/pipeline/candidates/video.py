@@ -34,25 +34,25 @@ def select_by_time(frame_times: Iterable[float], fps: float = SAMPLING_FPS) -> I
             next_k = int((t + _TIME_EPS) * fps) + 1
 
 
+def _grab_times(cap: cv2.VideoCapture) -> Iterator[float]:
+    """프레임을 하나씩 넘기며 그 시각(초)을 내준다."""
+    # grab()은 프레임을 읽기만 하고 화면 변환은 하지 않는다. 고르지 않은 프레임은 변환을 아낀다.
+    while cap.grab():
+        yield cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
+
+
 def iter_analysis_frames(path: str, fps: float = SAMPLING_FPS) -> Iterator[AnalysisFrame]:
     """영상을 한 번 읽으면서 분석 프레임만 내준다."""
     cap = cv2.VideoCapture(path)
     if not cap.isOpened():
         raise FileNotFoundError(f"영상을 열 수 없습니다: {path}")
     try:
-        next_k = 0
-        index = 0
-        # grab()은 프레임을 읽기만 하고 화면 변환은 하지 않는다. 고르지 않은 프레임은 변환을 아낀다.
-        while cap.grab():
-            t = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
-            if t + _TIME_EPS < next_k / fps:
-                continue
+        # select_by_time이 프레임을 고른 순간 cap은 그 프레임에 멈춰 있다
+        for index, _ in enumerate(select_by_time(_grab_times(cap), fps)):
             ok, image = cap.retrieve()
             if not ok:
                 break
-            yield AnalysisFrame(index, t, image)
-            index += 1
-            next_k = int((t + _TIME_EPS) * fps) + 1
+            yield AnalysisFrame(index, cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0, image)
     finally:
         cap.release()
 

@@ -38,18 +38,10 @@ class RoiError(Exception):
 
 
 @dataclass(frozen=True)
-class FloorStrip:
-    """파손 변 바깥 바닥 띠. 위로 옮기기 전의 모양이다."""
-
-    polygon: np.ndarray  # 원본 픽셀 (N, 2) int32
-    out_m: float  # 파손 변 바깥으로 얼마나 나가는 띠인가 (m)
-
-
-@dataclass(frozen=True)
 class Roi:
     crop: Crop  # 분석 크롭 (보여줄 크롭을 못 담으면 넓힌 것)
     mask: np.ndarray  # 분석 크롭을 줄인 프레임 크기로 만든 ROI (안쪽 255)
-    strip: FloorStrip
+    strip: np.ndarray  # 파손 변 바깥 바닥 띠. 위로 옮기기 전의 다각형, 원본 픽셀 (N, 2) int32
     display: Crop  # 보여줄 크롭 (ROI 기준)
 
 
@@ -96,6 +88,13 @@ def _extend_end(end: np.ndarray, direction: np.ndarray, x_range: tuple[float, fl
     return end + max(t, 0.0) * direction
 
 
+def _damage_x_range(data: AnalysisInput) -> tuple[float, float]:
+    """파손 사각형을 좌우로 DAMAGE_PAD_X_RATIO만큼 넓힌 가로 범위 (원본 픽셀)."""
+    dx1, _, dx2, _ = data.damage_bbox
+    pad_x = DAMAGE_PAD_X_RATIO * (dx2 - dx1)
+    return (dx1 - pad_x, dx2 + pad_x)
+
+
 def _floor_strip(data: AnalysisInput) -> np.ndarray:
     """화면(원본 픽셀)의 띠 다각형. 앞쪽 꼭짓점들(변 1개 2개, 변 2개 3개)은 차에 붙은 파손 선 위의 점이다.
 
@@ -124,9 +123,7 @@ def _floor_strip(data: AnalysisInput) -> np.ndarray:
     start_1m = (corners[e1] - corners[(e1 + 1) % 4]) / _edge_length_m(e1, front)
     end_1m = (corners[(e2 + 1) % 4] - corners[e2]) / _edge_length_m(e2, front)
 
-    dx1, _, dx2, _ = data.damage_bbox
-    pad_x = DAMAGE_PAD_X_RATIO * (dx2 - dx1)
-    x_range = (dx1 - pad_x, dx2 + pad_x)
+    x_range = _damage_x_range(data)
     line[0] = _extend_end(line[0], start_1m, x_range)
     line[-1] = _extend_end(line[-1], end_1m, x_range)
 
@@ -156,23 +153,28 @@ def _sweep_up(mask: np.ndarray, polygon: np.ndarray, lift: int) -> None:
 
 def _roi_mask_original(
     data: AnalysisInput, frame: tuple[int, int]
-) -> tuple[np.ndarray, FloorStrip]:
+) -> tuple[np.ndarray, np.ndarray]:
     """원본 화면 크기의 ROI 마스크 (안쪽 255)와 바닥 띠. 화면 밖으로 나간 부분은 버려진다."""
     width, height = frame
     polygon = np.round(_floor_strip(data)).astype(np.int32)
     # 화면 속 차체 높이 = 가장 먼(화면에서 가장 높은) 바닥 모서리 ~ bbox 위 변(먼 쪽 지붕).
     # bbox 세로는 바닥 사각형의 앞뒤 깊이까지 들어 있어, 카메라가 높을수록 차 높이보다 훨씬 커진다
     body_height = min(y for _, y in data.floor_corners) - data.vehicle_bbox[1]
+    if body_height <= 0:
+        # 음수면 띠가 아래로 쓸려 엉뚱한 ROI가 된다
+        raise RoiError(
+            "바닥 네 모서리가 차량 사각형의 위 변보다 위에 있습니다. 입력을 확인해 주세요."
+        )
     lift = round(body_height * LIFT_RATIO)
 
     mask = np.zeros((height, width), np.uint8)
     _sweep_up(mask, polygon, lift)
 
     # 파손 사각형(좌우 여백 포함)이 빠져 있으면 그 자리를 더한다 (합집합이라 이미 덮인 곳은 그대로다)
-    dx1, dy1, dx2, dy2 = data.damage_bbox
-    pad_x = DAMAGE_PAD_X_RATIO * (dx2 - dx1)
-    cv2.rectangle(mask, (round(dx1 - pad_x), dy1), (round(dx2 + pad_x), dy2), 255, -1)
-    return mask, FloorStrip(polygon, STRIP_OUT_M)
+    left, right = _damage_x_range(data)
+    _, dy1, _, dy2 = data.damage_bbox
+    cv2.rectangle(mask, (round(left), dy1), (round(right), dy2), 255, -1)
+    return mask, polygon
 
 
 def build_roi(data: AnalysisInput, frame: tuple[int, int], crop: Crop) -> Roi:

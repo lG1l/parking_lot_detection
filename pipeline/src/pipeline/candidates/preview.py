@@ -1,7 +1,7 @@
 """분석 크롭·입력을 원본 영상 위에 그린 확인용 영상을 만든다. 명령의 진입점이다.
 
 실행 (pipeline/ 폴더에서):
-    uv run python -m pipeline.candidates.preview <영상> <입력 JSON> <출력 폴더>
+    uv run python -m pipeline.candidates.preview <영상|사진> <입력 JSON> <출력 폴더>
 """
 
 import os
@@ -13,7 +13,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from pipeline.candidates.crop import Crop, CropError, analysis_crop, to_original
 from pipeline.candidates.inputs import AnalysisInput, InputError, load_input
-from pipeline.candidates.roi import FloorStrip, Roi, RoiError, build_roi, camera_side_edges
+from pipeline.candidates.roi import STRIP_OUT_M, Roi, RoiError, build_roi, camera_side_edges
 from pipeline.candidates.video import SAMPLING_FPS, iter_analysis_frames
 
 # 그림 색 (BGR)
@@ -78,12 +78,12 @@ def draw_display_crop(image: np.ndarray, display: Crop) -> None:
     cv2.rectangle(image, (x1, y1), (x2 - 1, y2 - 1), CYAN, _LINE)
 
 
-def draw_strip(image: np.ndarray, strip: FloorStrip) -> np.ndarray:
+def draw_strip(image: np.ndarray, strip: np.ndarray) -> np.ndarray:
     """바닥 띠를 빨강 반투명으로 그린 새 그림을 돌려준다."""
     layer = image.copy()
-    cv2.fillPoly(layer, [strip.polygon], RED)
+    cv2.fillPoly(layer, [strip], RED)
     out = cv2.addWeighted(layer, _STRIP_ALPHA, image, 1 - _STRIP_ALPHA, 0)
-    cv2.polylines(out, [strip.polygon], True, RED, _LINE)
+    cv2.polylines(out, [strip], True, RED, _LINE)
     return out
 
 
@@ -115,8 +115,8 @@ def _label_list(
         ("보여줄 영역", (dx + 6, dy), CYAN),
         ("ROI", (int(all_pts[:, 0].min()) + 6, int(all_pts[:, 1].min()) + 6), GREEN),
     ]
-    cx, cy = roi.strip.polygon.mean(axis=0)
-    labels.append((f"바닥띠 (파손 변 바깥 {roi.strip.out_m:g}m)", (int(cx) - 80, int(cy)), RED))
+    cx, cy = roi.strip.mean(axis=0)
+    labels.append((f"바닥띠 (파손 변 바깥 {STRIP_OUT_M:g}m)", (int(cx) - 80, int(cy)), RED))
     return labels
 
 
@@ -140,7 +140,7 @@ def draw_roi(image: np.ndarray, contours: list[np.ndarray]) -> np.ndarray:
     return out
 
 
-def _draw_label(image: np.ndarray, index: int, time_sec: float) -> None:
+def _draw_time(image: np.ndarray, index: int, time_sec: float) -> None:
     text = f"{_format_time(time_sec)}  #{index}"
     # 어두운 영상에서도 읽히게 검은 테두리를 먼저 쓴다
     cv2.putText(image, text, (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.4, (0, 0, 0), 6)
@@ -161,7 +161,7 @@ def make_preview(video_path: str, input_path: str, out_dir: str) -> None:
     print(
         f"보여줄 크롭 (원본 픽셀): {roi.display.rect}  크기 {roi.display.width}×{roi.display.height}"
     )
-    print(f"바닥띠: 파손 변 바깥 {roi.strip.out_m:g}m, 꼭짓점 {roi.strip.polygon.tolist()}")
+    print(f"바닥띠: 파손 변 바깥 {STRIP_OUT_M:g}m, 꼭짓점 {roi.strip.tolist()}")
     print(f"카메라 쪽 변: {camera_side_edges(data.floor_corners)}  파손 변: {data.damage_edges}")
     print(f"ROI 넓이 비율 (분석 크롭 대비): {np.count_nonzero(roi_mask) / roi_mask.size:.1%}")
 
@@ -177,7 +177,7 @@ def make_preview(video_path: str, input_path: str, out_dir: str) -> None:
         draw_inputs(image, crop, data)
         draw_display_crop(image, roi.display)
         image = draw_labels(image, labels)
-        _draw_label(image, frame.index, frame.time_sec)
+        _draw_time(image, frame.index, frame.time_sec)
         if frame.index == 0:
             cv2.imwrite(os.path.join(out_dir, "preview_first.png"), image)
         writer.write(image)

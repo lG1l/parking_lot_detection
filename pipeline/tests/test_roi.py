@@ -1,4 +1,7 @@
+import dataclasses
+
 import numpy as np
+import pytest
 
 from pipeline.candidates.crop import analysis_crop, to_original, to_reduced
 from pipeline.candidates.inputs import AnalysisInput
@@ -9,6 +12,7 @@ from pipeline.candidates.roi import (
     LIFT_RATIO,
     STRIP_OUT_M,
     TWO_EDGE_KEEP_RATIO,
+    RoiError,
     _floor_strip,
     _out_at,
     build_roi,
@@ -132,3 +136,10 @@ def test_보여줄_크롭은_ROI를_담고_분석_크롭은_보여줄_크롭을_
     left, top = to_original((float(xs.min()), float(ys.min())), roi.crop)
     right, bottom = to_original((float(xs.max()), float(ys.max())), roi.crop)
     assert dx1 <= left and dy1 <= top and right <= dx2 and bottom <= dy2
+
+
+def test_바닥_모서리가_차량_사각형_위_변보다_위면_멈춘다():
+    # 가장 먼 모서리 y 630보다 bbox 위 변이 아래(650)면 차체 높이가 음수가 된다
+    data = dataclasses.replace(_input([1]), vehicle_bbox=(715, 650, 1261, 728))
+    with pytest.raises(RoiError):
+        build_roi(data, (1920, 1080), analysis_crop(data.vehicle_bbox, (1920, 1080)))
