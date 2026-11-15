@@ -673,14 +673,28 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
       ('사진', photo == null ? '없음' : photo.name),
       ('설명', text.isEmpty ? '없음' : text),
     ];
+    // 선 표: 머리 아래 검은 선, 줄마다 연한 선 (D-305)
+    const headStyle = TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: subColor);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final (i, (name, value)) in rows.indexed)
+        Container(
+          padding: const EdgeInsets.only(bottom: 8),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: inkColor)),
+          ),
+          child: const Row(
+            children: [
+              SizedBox(width: 96, child: Text('항목', style: headStyle)),
+              Expanded(child: Text('입력 내용', style: headStyle)),
+            ],
+          ),
+        ),
+        for (final (name, value) in rows)
           Container(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            decoration: BoxDecoration(
-              border: i == 0 ? null : const Border(top: BorderSide(color: lineColor)),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: lineColor)),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
