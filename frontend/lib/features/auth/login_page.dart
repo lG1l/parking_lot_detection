@@ -85,7 +85,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _LabeledField(
+            UnderlineField(
               label: '아이디',
               child: TextField(
                 controller: _id,
@@ -99,7 +99,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               ),
             ),
             const SizedBox(height: 6),
-            _LabeledField(
+            UnderlineField(
               label: '비밀번호',
               child: TextField(
                 controller: _password,
@@ -180,25 +180,4 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       ),
     );
   }
-}
-
-/// 입력칸 위에 이름을 두는 칸 (캔버스 로그인 화면).
-class _LabeledField extends StatelessWidget {
-  const _LabeledField({required this.label, required this.child});
-
-  final String label;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-    label: label,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(label, style: kickerStyle),
-        const SizedBox(height: 2),
-        child,
-      ],
-    ),
-  );
 }

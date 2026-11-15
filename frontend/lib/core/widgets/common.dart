@@ -854,38 +854,84 @@ class SideSteps extends StatelessWidget {
   final List<({String title, String text})> items;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      for (var i = 0; i < items.length; i++)
-        Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: const BoxDecoration(
-            border: Border(top: BorderSide(color: lineColor)),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 40,
-                child: Text(
-                  (i + 1).toString().padLeft(2, '0'),
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: pillColor),
+  Widget build(BuildContext context) => Container(
+    decoration: const BoxDecoration(
+      border: Border(top: BorderSide(color: inkColor)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < items.length; i++)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 18),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: lineColor)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 44,
+                  child: Text(
+                    (i + 1).toString().padLeft(2, '0'),
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w300, color: pillColor, height: 1),
+                  ),
                 ),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(items[i].title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 4),
-                    Text(items[i].text, style: const TextStyle(fontSize: 14, height: 1.5, color: subColor)),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(items[i].title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 4),
+                      Text(items[i].text, style: const TextStyle(fontSize: 14, height: 1.5, color: subColor)),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-    ],
+      ],
+    ),
+  );
+}
+
+/// 왼쪽 내용 + 오른쪽 안내(폭 380)를 나란히 둔다. 좁은 창에서는 안내를 아래로 보낸다 (연결·업로드 화면).
+class SideLayout extends StatelessWidget {
+  const SideLayout({super.key, required this.main, required this.side});
+
+  final Widget main;
+  final Widget side;
+
+  @override
+  Widget build(BuildContext context) => isNarrow(context)
+      ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [main, const SizedBox(height: 32), side])
+      : Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: main),
+            const SizedBox(width: 72),
+            SizedBox(width: 380, child: side),
+          ],
+        );
+}
+
+/// 밑줄 입력칸 위에 작은 칸 이름을 둔다 (캔버스 `.field`). 밑줄·포커스 색은 테마가 정한다.
+class UnderlineField extends StatelessWidget {
+  const UnderlineField({super.key, required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: label,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(label, style: kickerStyle),
+        const SizedBox(height: 2),
+        child,
+      ],
+    ),
   );
 }
