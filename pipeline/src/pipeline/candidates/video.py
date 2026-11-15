@@ -1,4 +1,4 @@
-"""영상을 분석 프레임(샘플링 fps)만 골라 내준다 (D-198, D-282)."""
+"""영상을 분석 프레임(샘플링 fps)만 골라 내준다 (D-198, D-300)."""
 
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
@@ -23,7 +23,7 @@ class AnalysisFrame:
 def select_by_time(frame_times: Iterable[float], fps: float = SAMPLING_FPS) -> Iterator[int]:
     """프레임 시각 목록에서 분석 프레임의 위치(0부터)를 차례로 고른다.
 
-    k번째 분석 프레임은 시각이 k / fps 이상인 첫 프레임이다 (D-282).
+    k번째 분석 프레임은 시각이 k / fps 이상인 첫 프레임이다 (D-300).
     프레임 번호로 고르면 가변 프레임 속도 영상에서 시각이 밀리기 때문이다.
     """
     next_k = 0

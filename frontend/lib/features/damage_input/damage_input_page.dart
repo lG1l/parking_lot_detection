@@ -668,7 +668,7 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
       ('파손 보임', _visible == true ? '보임' : '안 보임'),
       ('파손 부위', '빨간 사각형'),
       ('바닥 모서리', '${_corners.length}개'),
-      ('앞쪽 변', '파란 선'),
+      ('앞쪽 변', '초록 선'),
       ('파손 변', '${_edges.length}개'),
       ('사진', photo == null ? '없음' : photo.name),
       ('설명', text.isEmpty ? '없음' : text),

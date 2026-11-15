@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app/theme.dart';
 import '../../core/api/api.dart';
 import '../../core/session.dart';
 import '../../core/widgets/common.dart';
@@ -75,7 +74,18 @@ class _CaseLinkPageState extends ConsumerState<CaseLinkPage> {
       if (!mounted) return;
       final ok = await confirm(
         context,
-        '${found.loginId} (${found.maskedName}) 님을 연결합니다. 연결하면 이 계정이 영상 정지 장면을 보게 됩니다.',
+        '${found.loginId} (${found.maskedName}) 님을 연결합니다.',
+        content: Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(
+                text: '${found.loginId} (${found.maskedName})',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+              const TextSpan(text: ' 님을 연결합니다.'),
+            ],
+          ),
+        ),
         title: '피해자 계정을 연결할까요?',
         okLabel: '연결',
       );
@@ -111,7 +121,7 @@ class _CaseLinkPageState extends ConsumerState<CaseLinkPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Text(
-                  '피해자 계정을 연결하면 사건이 만들어지고, 피해자가 [알림]에서 수락하면 묶입니다.\n연결한 뒤 바로 그 사건에 CCTV 영상을 올릴 수 있습니다.',
+                  '피해자 계정을 연결하면 사건이 생성되고, 피해자가 [채팅]에서 수락 시 최종 연결됩니다.\nCCTV 영상 업로드는 바로 진행할 수 있습니다.',
                   style: TextStyle(fontSize: 15, height: 1.6),
                 ),
                 const SizedBox(height: 16),
@@ -121,7 +131,7 @@ class _CaseLinkPageState extends ConsumerState<CaseLinkPage> {
                   controller: _name,
                   enabled: !_busy,
                   maxLength: caseNameMaxLength,
-                  decoration: InputDecoration(hintText: '사건 이름을 입력해 주세요', errorText: _nameError, counterText: ''),
+                  decoration: InputDecoration(errorText: _nameError, counterText: ''),
                   onChanged: (_) {
                     if (_nameError != null) setState(() => _nameError = null);
                   },
@@ -140,14 +150,9 @@ class _CaseLinkPageState extends ConsumerState<CaseLinkPage> {
                   onSubmitted: (_) => _link(),
                 ),
                 const SizedBox(height: 16),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    FilledButton(onPressed: _busy ? null : _link, child: const Text('연결')),
-                    const Text('연결하면 영상 올리기 화면으로 넘어갑니다.', style: TextStyle(fontSize: 13, color: noteColor)),
-                  ],
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: FilledButton(onPressed: _busy ? null : _link, child: const Text('연결')),
                 ),
               ],
             ),

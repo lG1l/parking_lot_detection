@@ -127,7 +127,7 @@ def get_batch(
         clips = conn.execute(
             text(
                 "SELECT * FROM (SELECT DISTINCT ON (d.id) d.rank, d.vlm_score, c.id AS clip_id, "
-                "c.start_sec, c.end_sec, c.masked_s3_key FROM candidates d "
+                "d.start_sec, d.end_sec, c.masked_s3_key FROM candidates d "
                 "JOIN candidate_clips c ON c.candidate_id = d.id AND c.status = 'done' "
                 "WHERE d.analysis_job_id = :j AND d.list_kind = :k AND d.batch_no = :n "
                 "ORDER BY d.id, c.id DESC) latest ORDER BY rank"

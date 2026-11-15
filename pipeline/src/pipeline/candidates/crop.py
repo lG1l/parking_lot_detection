@@ -101,7 +101,7 @@ def expand_to_contain(crop: Crop, region: Rect, frame: tuple[int, int]) -> Crop:
 
 
 def display_crop(region: Rect, frame: tuple[int, int], margin_ratio: float) -> Crop:
-    """region(ROI를 담는 사각형)에 폭·높이의 margin_ratio씩 여백을 더한 16:9 보여줄 크롭 (D-284).
+    """region(ROI를 담는 사각형)에 폭·높이의 margin_ratio씩 여백을 더한 16:9 보여줄 크롭 (D-302).
 
     차량이 아니라 ROI가 기준이다. 화면 밖으로 나가면 크기를 유지한 채 안쪽으로 민다.
     """

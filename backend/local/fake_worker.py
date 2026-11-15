@@ -214,14 +214,19 @@ class Worker:
                 failed = i >= main_count
                 conn.execute(
                     text(
-                        "INSERT INTO candidates (analysis_job_id, judged_at_sec, channel, rule_name, "
-                        "track_id, vlm_pass1, vlm_score, list_kind, rank) "
-                        "VALUES (:j, :t, 'A', 'fake_rule', :tr, :p1, :sc, :lk, :rk)"
+                        "INSERT INTO candidates (analysis_job_id, start_sec, end_sec, track_ids, "
+                        "motion_ranges, likely_moments, vlm_pass1, vlm_score, list_kind, rank) "
+                        "VALUES (:j, :s, :e, :tr, CAST(:mr AS jsonb), CAST(:lm AS jsonb), "
+                        ":p1, :sc, :lk, :rk)"
                     ),
                     {
                         "j": job_id,
-                        "t": 600.0 + i * 120,
-                        "tr": i + 1,
+                        # 클립 길이는 30초 고정이 아니다 (D-245). 홀수 번째는 25초로 둔다
+                        "s": 585.0 + i * 120 + (5 if i % 2 else 0),
+                        "e": 615.0 + i * 120,
+                        "tr": [i + 1],
+                        "mr": json.dumps([[595.0 + i * 120, 605.0 + i * 120]]),
+                        "lm": json.dumps([{"track_id": i + 1, "at_sec": 600.0 + i * 120}]),
                         "p1": None if failed else True,
                         "sc": None if failed else 95 - i,
                         "lk": "parse_failed" if failed else "main",
@@ -251,7 +256,7 @@ class Worker:
                     break
                 ids = conn.execute(
                     text(
-                        "SELECT id, judged_at_sec FROM candidates WHERE analysis_job_id = :j "
+                        "SELECT id FROM candidates WHERE analysis_job_id = :j "
                         "AND list_kind = :k AND batch_no IS NULL ORDER BY rank LIMIT :n"
                     ),
                     {"j": job_id, "k": kind, "n": BATCH_SIZE},
@@ -266,15 +271,9 @@ class Worker:
                     )
                     conn.execute(
                         text(
-                            "INSERT INTO candidate_clips (candidate_id, start_sec, end_sec, crop_bbox) "
-                            "VALUES (:c, :s, :e, :box)"
+                            "INSERT INTO candidate_clips (candidate_id, crop_bbox) VALUES (:c, :box)"
                         ),
-                        {
-                            "c": row.id,
-                            "s": row.judged_at_sec - 15,
-                            "e": row.judged_at_sec + 15,
-                            "box": CROP_BBOX,
-                        },
+                        {"c": row.id, "box": CROP_BBOX},
                     )
                 if upto is None:
                     break
@@ -306,8 +305,8 @@ class Worker:
             if tries < CLIP_TRIES:
                 conn.execute(
                     text(
-                        "INSERT INTO candidate_clips (candidate_id, start_sec, end_sec, crop_bbox) "
-                        "SELECT candidate_id, start_sec, end_sec, crop_bbox FROM candidate_clips "
+                        "INSERT INTO candidate_clips (candidate_id, crop_bbox) "
+                        "SELECT candidate_id, crop_bbox FROM candidate_clips "
                         "WHERE id = :c"
                     ),
                     {"c": clip_id},

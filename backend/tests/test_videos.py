@@ -206,8 +206,8 @@ def test_exhausted_reports_candidate_counts(admin, case):
     assert admin.get(f"/api/videos/{vid}").json()["candidate_total"] == 0
     for verdict in ("not_found", "unavailable", "unavailable"):
         sql(
-            "INSERT INTO candidates (analysis_job_id, judged_at_sec, channel, rule_name, track_id, verdict) "
-            "VALUES (:j, 1, 'A', 'r', 1, :v)",
+            "INSERT INTO candidates (analysis_job_id, start_sec, end_sec, track_ids, motion_ranges, "
+            "likely_moments, verdict) VALUES (:j, 0, 30, '{1}', '[]', '[]', :v)",
             j=job,
             v=verdict,
         )

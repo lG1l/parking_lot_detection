@@ -306,7 +306,7 @@ class _RenameDialogState extends State<_RenameDialog> {
             onSubmitted: (_) => _save(),
           ),
           // 이름은 계정마다 따로다 (D-240)
-          const SmallText('내 목록에서만 바뀝니다. 상대 계정에 보이는 이름은 그대로입니다.'),
+          const SmallText('변경한 이름은 나에게만 보이며, 상대방 계정에는 반영되지 않습니다.'),
         ],
       ),
     ),

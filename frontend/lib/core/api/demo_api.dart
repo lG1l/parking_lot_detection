@@ -2,8 +2,10 @@ import 'dart:math' as math;
 
 import 'package:http/http.dart' as http;
 
+import '../constants.dart';
 import '../models/account.dart';
 import '../models/analysis.dart';
+import '../models/message.dart';
 import '../models/video.dart';
 import 'api.dart';
 import 'api_client.dart';
@@ -67,7 +69,7 @@ class DemoApi extends Api {
     addCase(2, '지하 1층 범퍼 파손', 'victim02');
     // 연결만 하고 영상을 아직 올리지 않은 사건. 관리자 목록에서 누르면 업로드 화면으로 간다
     addCase(3, '입구 쪽 문콕', 'victim03');
-    // 피해자가 아직 수락하지 않은 사건. 피해자 [알림]에 뜨고, 수락하면 영상 12가 목록에 보인다 (D-233)
+    // 피해자가 아직 수락하지 않은 사건. 피해자 [채팅]에 뜨고, 수락하면 영상 12가 목록에 보인다 (D-233)
     addCase(4, '출구 앞 사이드미러', 'victim01', accepted: false);
 
     add(1, 1, '01_입력필요.mp4', VideoStatus.stage1Done);
@@ -98,6 +100,17 @@ class DemoApi extends Api {
     });
     add(12, 4, '12_수락대기.mp4', VideoStatus.stage1Done);
 
+    // 사건 1에 예시 메시지 (D-297)
+    void say(String role, String body, int minutesAgo) => _messages.add({
+      'id': _messages.length + 1,
+      'case_id': 1,
+      'sender_role': role,
+      'body': body,
+      'created_at': _iso(DateTime.now().subtract(Duration(minutes: minutesAgo))),
+    });
+    say('admin', '안녕하세요, 영상을 올렸습니다. 차량과 파손 부위를 입력해 주세요.', 30);
+    say('victim', '확인했습니다. 곧 입력하겠습니다.', 20);
+
     _pins[3] = [_pinOf(_clip(3, 1)), _pinOf(_clip(3, 3))];
   }
 
@@ -108,6 +121,7 @@ class DemoApi extends Api {
   final _cases = <int, Map<String, Object?>>{};
   final _agreed = <int>{}; // 관리·감독 안내에 동의한 영상 (23번)
   final _pins = <int, List<Map<String, Object?>>>{};
+  final _messages = <Map<String, Object?>>[]; // 채팅 메시지 (D-297)
   final _mainBatch = <int, int>{}; // 영상별 지금 묶음 번호
   final _failedSeen = <int>{}; // 점수 미산출 탭을 넘긴 영상
   Me? _me;
@@ -228,12 +242,12 @@ class DemoApi extends Api {
       'admin_name': _me?.name ?? 'parking_admin',
       'victim_name': victimLoginId,
       'created_at': _iso(DateTime.now()),
-      'accepted_at': null, // 피해자가 [알림]에서 수락해야 묶인다 (D-233)
+      'accepted_at': null, // 피해자가 [채팅]에서 수락해야 묶인다 (D-233)
     };
     return _caseOf(_cases[id]!);
   }
 
-  // 22번은 피해자에게도 수락 전 사건을 준다. [알림] 목록에 필요하다 (D-233, D-238). 지운 사건은 뺀다 (D-239)
+  // 22번은 피해자에게도 수락 전 사건을 준다. [채팅] 목록에 필요하다 (D-233, D-238). 지운 사건은 뺀다 (D-239)
   @override
   Future<List<VideoCase>> cases() async {
     await _wait();
@@ -272,6 +286,36 @@ class DemoApi extends Api {
     final c = _cases[caseId];
     if (c == null) throw ApiException(404, 'CASE_NOT_FOUND');
     c['accepted_at'] ??= _iso(DateTime.now()); // 이미 수락했으면 그대로 성공
+  }
+
+  /// 수락된 사건의 메시지만, 오래된 순. 사건을 숨겨도 채팅은 그대로다 (D-287)
+  @override
+  Future<List<ChatMessage>> messages() async {
+    await _wait();
+    return [
+      for (final m in _messages)
+        if (_cases[m['case_id']]?['accepted_at'] != null)
+          ChatMessage.fromJson(m.cast<String, dynamic>()),
+    ];
+  }
+
+  @override
+  Future<ChatMessage> sendMessage(int caseId, String body) async {
+    await _wait();
+    final c = _cases[caseId];
+    if (c == null) throw ApiException(404, 'CASE_NOT_FOUND');
+    if (c['accepted_at'] == null) throw ApiException(409, 'INVALID_STATE'); // 수락 뒤에만 (D-287). 숨김은 보지 않는다
+    final text = body.trim();
+    if (text.isEmpty || text.length > maxMessageLength) throw ApiException(422, 'VALIDATION_FAILED');
+    final m = <String, Object?>{
+      'id': _messages.length + 1,
+      'case_id': caseId,
+      'sender_role': _admin ? 'admin' : 'victim',
+      'body': text,
+      'created_at': _iso(DateTime.now()),
+    };
+    _messages.add(m);
+    return ChatMessage.fromJson(m.cast<String, dynamic>());
   }
 
   @override

@@ -69,12 +69,17 @@ flutter:
   fonts:
     - family: Pretendard
       fonts:
+      - asset: assets/fonts/pretendard/Pretendard-Light.otf
+        weight: 300
       - asset: assets/fonts/pretendard/Pretendard-Regular.otf
         weight: 400
       - asset: assets/fonts/pretendard/Pretendard-Medium.otf
         weight: 500
       - asset: assets/fonts/pretendard/Pretendard-SemiBold.otf
         weight: 600
+      # Light·ExtraBold는 이용 안내 화면의 큰 영문 글자에만 쓴다 (D-292)
+      - asset: assets/fonts/pretendard/Pretendard-ExtraBold.otf
+        weight: 800
 
   # To add assets to your application, add an assets section, like this:
   # assets:
