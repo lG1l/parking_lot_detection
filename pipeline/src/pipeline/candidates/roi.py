@@ -1,8 +1,11 @@
-"""바닥 지도, 카메라 쪽 변 판정, ROI 마스크 (D-194, D-244, D-284).
+"""카메라 쪽 변 판정, 바닥 띠, ROI 마스크 (D-194, D-244, D-284).
 
 ROI는 "파손 변 주변에서 접근하는 물체가 화면에 나타나는 자리"다.
-파손 변 바깥 바닥 띠를 화면 위로 그대로 옮겨 쓸고 지나간 자리에, 파손 사각형 주변을 더한다 (D-284).
+파손 변 바깥 바닥 띠를 화면 위로 차량 bbox 세로만큼 그대로 옮겨 쓸고 지나간 자리에, 파손 사각형 주변을 더한다 (D-284).
 파손 변이 파손 사각형의 가로 범위에 못 미치면 변을 늘려 띠도 함께 늘린다.
+
+띠의 길이(m)는 찍은 변을 자로 써서 잰다: 앞·뒤 변은 CAR_WIDTH_M, 옆 변은 CAR_LENGTH_M이다.
+네 모서리로 바닥 전체를 펴는 변환은 쓰지 않는다. 모서리가 조금만 어긋나도 사각형 바깥에서 크기가 크게 부풀기 때문이다.
 """
 
 from dataclasses import dataclass
@@ -13,18 +16,15 @@ import numpy as np
 from pipeline.candidates.crop import Crop, display_crop, expand_to_contain
 from pipeline.candidates.inputs import AnalysisInput, Point
 
-# 바닥 지도가 가정하는 일반 승용차 크기 (m). D-194, D-244 한계
+# 찍은 변의 실제 길이로 가정하는 일반 승용차 크기 (m). D-194, D-244 한계
 CAR_WIDTH_M = 1.8
 CAR_LENGTH_M = 4.7
 
 # D-284 (시작값)
 STRIP_OUT_M = 0.8  # 파손 변 바깥 띠 폭 (m). 손이 닿는 구역과 같다
 TWO_EDGE_KEEP_RATIO = 2 / 3  # 파손 변 2개: 각 변을 만나는 모서리에서 이 비율만큼만 쓴다
-END_FLARE_DEG = 30  # 띠의 차에 붙지 않은 끝을 변의 수직선에서 바깥으로 이 각도만큼 벌린다
-# 띠를 위로 옮기는 높이: 띠의 화면에서 가장 낮은 꼭짓점은 차량 bbox 세로 × 이 값.
-# 다른 꼭짓점은 카메라 깊이에 반비례해 줄이거나 늘린다 (실제로 같은 높이)
-VISIBLE_HEIGHT_RATIO = 1.0  # 파손 변이 모두 카메라 쪽
-HIDDEN_HEIGHT_RATIO = 1.1  # 그 밖: 차 너머 사람·물체가 지붕 위로 보이는 만큼 더 높인다
+# 띠의 차에 붙지 않은 끝은 실제 바닥에서 파손 변과 직각(이웃 변 방향)이다. 그 끝을 이 각도만큼 더 바깥으로 벌린다
+END_FLARE_DEG = 30
 # 파손 사각형을 자기 폭의 이 배씩 좌우로 넓힌 자리는 꼭 ROI에 넣는다.
 # 파손 변이 그 가로 범위에 못 미치면 변을 그 끝까지 늘려 띠·ROI도 함께 늘린다 (세로는 띠를 쓸어 올린 높이를 따른다)
 DAMAGE_PAD_X_RATIO = 0.5 / 3
@@ -68,127 +68,82 @@ def camera_side_edges(corners: list[Point]) -> list[int]:
     return result
 
 
-def floor_points(front_edge: int) -> list[tuple[float, float]]:
-    """바닥 지도 위 네 모서리의 위치 (m). 앞쪽 변이 폭 방향 끝 변이다 (D-194).
+def _edge_length_m(edge: int, front_edge: int) -> float:
+    """변 edge의 실제 길이 (m). 앞쪽 변과 그 맞은편이 폭, 나머지가 길이다 (D-194)."""
+    return CAR_WIDTH_M if (edge - front_edge) % 2 == 0 else CAR_LENGTH_M
 
-    모서리 front_edge → (0,0), 그다음 모서리부터 차례로 (폭,0), (폭,길이), (0,길이)다.
-    인덱스는 corners 순서와 같다.
+
+def _out_at(corners: np.ndarray, edge: int, t: float, front_edge: int) -> np.ndarray:
+    """변 edge 위 t(시작 0 ~ 끝 1) 자리에서 바깥 STRIP_OUT_M만큼의 화면 벡터.
+
+    변의 끝에서 실제로 직각인 방향은 그 끝에서 만나는 이웃 변을 바깥으로 이어 간 방향이다.
+    이웃 변의 화면 길이를 자로 써서 STRIP_OUT_M을 재고, 두 끝 사이는 고르게 섞는다.
     """
-    layout = [(0, 0), (CAR_WIDTH_M, 0), (CAR_WIDTH_M, CAR_LENGTH_M), (0, CAR_LENGTH_M)]
-    return [layout[(j - front_edge) % 4] for j in range(4)]
+    prev, nxt, far = (edge - 1) % 4, (edge + 1) % 4, (edge + 2) % 4
+    at_start = (corners[edge] - corners[prev]) * STRIP_OUT_M / _edge_length_m(prev, front_edge)
+    at_end = (corners[nxt] - corners[far]) * STRIP_OUT_M / _edge_length_m(nxt, front_edge)
+    return (1 - t) * at_start + t * at_end
 
 
-def _is_visible_case(data: AnalysisInput) -> bool:
-    """파손 변이 모두 카메라 쪽인가. 앞·뒤 끝 변이어도 카메라 쪽이면 파손이 보인다 (D-284)."""
-    camera = camera_side_edges(data.floor_corners)
-    return all(e in camera for e in data.damage_edges)
-
-
-def _outward(floor: np.ndarray, edge: int) -> np.ndarray:
-    """바닥 지도에서 변 edge의 바깥 방향 단위 벡터. 바닥 지도는 직사각형이라 변 가운데 → 바깥이다."""
-    a, b = floor[edge], floor[(edge + 1) % 4]
-    out = (a + b) / 2 - floor.mean(axis=0)
-    return out / np.linalg.norm(out)
-
-
-def _unit(v: np.ndarray) -> np.ndarray:
-    return v / np.linalg.norm(v)
-
-
-def _damage_line(data: AnalysisInput) -> tuple[np.ndarray, list[int]]:
-    """차에 붙은 파손 선의 점들 (바닥 지도 m)과 그 순서대로의 파손 변 번호.
-
-    변 1개: [시작, 끝]. 변 2개: [p, 만나는 모서리, q]. p·q는 모서리에서 각 변의 2/3 지점이다.
-    """
-    floor = np.array(floor_points(data.front_edge), dtype=np.float64)
-    edges = data.damage_edges
-    if len(edges) == 1:
-        e = edges[0]
-        return np.array([floor[e], floor[(e + 1) % 4]]), [e]
-    # 이웃한 두 변 e1 → e2 (e2의 시작점 = e1의 끝점 = 만나는 모서리)
-    e1, e2 = edges if (edges[0] + 1) % 4 == edges[1] else edges[::-1]
-    corner = floor[e2]
-    p = corner + (floor[e1] - corner) * TWO_EDGE_KEEP_RATIO
-    q = corner + (floor[(e2 + 1) % 4] - corner) * TWO_EDGE_KEEP_RATIO
-    return np.array([p, corner, q]), [e1, e2]
-
-
-def _extend_end(
-    end: np.ndarray, direction: np.ndarray, to_screen: np.ndarray, x_range: tuple[float, float]
-) -> np.ndarray:
-    """선의 끝 end를 바닥 지도에서 direction(단위 벡터)으로 늘려, 화면 x가 x_range의 끝에 닿게 한다.
-
-    이미 닿았거나 그 방향으로는 닿을 수 없으면 그대로 둔다.
-    """
-    h = to_screen
-    a, c = h[0] @ [*end, 1.0], h[2] @ [*end, 1.0]
-    b, e = h[0, :2] @ direction, h[2, :2] @ direction
-    # t m 늘린 점의 화면 x = (a + b·t) / (c + e·t). 왼쪽·오른쪽 중 움직이는 쪽 끝을 목표로 한다
-    target = x_range[1] if b * c - a * e > 0 else x_range[0]
-    denom = b - target * e
-    if denom == 0:
+def _extend_end(end: np.ndarray, direction: np.ndarray, x_range: tuple[float, float]) -> np.ndarray:
+    """선의 끝 end를 화면에서 direction으로 늘려, x가 x_range의 끝에 닿게 한다. 이미 닿았으면 그대로 둔다."""
+    if direction[0] == 0:
         return end
-    t = (target * c - a) / denom
-    # t ≤ 0: 이미 닿았다. 분모 부호가 바뀜: 카메라 뒤로 넘어가야 닿는다
-    if t <= 0 or (c + e * t) * c <= 0:
-        return end
-    return end + t * direction
+    target = x_range[1] if direction[0] > 0 else x_range[0]
+    t = (target - end[0]) / direction[0]
+    return end + max(t, 0.0) * direction
 
 
-def _floor_strip(data: AnalysisInput, to_screen: np.ndarray) -> np.ndarray:
-    """바닥 지도(m)의 띠 다각형. 앞쪽 꼭짓점들(파손 선의 점 수만큼)은 차에 붙은 파손 선 위의 점이다.
+def _floor_strip(data: AnalysisInput) -> np.ndarray:
+    """화면(원본 픽셀)의 띠 다각형. 앞쪽 꼭짓점들(변 1개 2개, 변 2개 3개)은 차에 붙은 파손 선 위의 점이다.
 
-    파손 선의 두 끝을 파손 사각형(좌우 여백 포함)의 가로 범위까지 늘린 뒤, 바깥 STRIP_OUT_M로 띠를 만든다.
+    변 1개: 선 = [시작, 끝]. 변 2개: 선 = [p, 만나는 모서리, q]. p·q는 모서리에서 각 변의 2/3 지점이다.
+    선의 두 끝을 파손 사각형(좌우 여백 포함)의 가로 범위까지 늘린 뒤, 바깥 STRIP_OUT_M로 띠를 만든다.
     차에 붙지 않은 두 끝은 바깥으로 갈수록 END_FLARE_DEG만큼 벌어진다.
     변 2개면 두 띠의 바깥 꼭짓점을 이어 L자 하나로 만든다 (만나는 모서리는 이어져 있어 벌릴 끝이 없다).
     """
-    floor = np.array(floor_points(data.front_edge), dtype=np.float64)
-    line, edges = _damage_line(data)
-    start_dir, end_dir = _unit(line[0] - line[1]), _unit(line[-1] - line[-2])
+    corners = np.array(data.floor_corners, dtype=np.float64)
+    front = data.front_edge
+    edges = data.damage_edges
+    if len(edges) == 1:
+        e1 = e2 = edges[0]
+        line = [corners[e1], corners[(e1 + 1) % 4]]
+        t_start, t_end = 0.0, 1.0
+    else:
+        # 이웃한 두 변 e1 → e2 (e2의 시작점 = e1의 끝점 = 만나는 모서리)
+        e1, e2 = edges if (edges[0] + 1) % 4 == edges[1] else edges[::-1]
+        corner = corners[e2]
+        p = corner + (corners[e1] - corner) * TWO_EDGE_KEEP_RATIO
+        q = corner + (corners[(e2 + 1) % 4] - corner) * TWO_EDGE_KEEP_RATIO
+        line = [p, corner, q]
+        t_start, t_end = 1 - TWO_EDGE_KEEP_RATIO, TWO_EDGE_KEEP_RATIO
+
+    # 변을 따라 1m가 화면에서 얼마인가. 시작 쪽은 변을 거꾸로, 끝 쪽은 변 방향으로 나간다
+    start_1m = (corners[e1] - corners[(e1 + 1) % 4]) / _edge_length_m(e1, front)
+    end_1m = (corners[(e2 + 1) % 4] - corners[e2]) / _edge_length_m(e2, front)
 
     dx1, _, dx2, _ = data.damage_bbox
     pad_x = DAMAGE_PAD_X_RATIO * (dx2 - dx1)
     x_range = (dx1 - pad_x, dx2 + pad_x)
-    line[0] = _extend_end(line[0], start_dir, to_screen, x_range)
-    line[-1] = _extend_end(line[-1], end_dir, to_screen, x_range)
+    line[0] = _extend_end(line[0], start_1m, x_range)
+    line[-1] = _extend_end(line[-1], end_1m, x_range)
 
-    # 바깥 끝이 변 방향으로 더 나가는 거리. 비스듬히 다가오는 사람도 띠 끝에서 잡는다
-    flare = STRIP_OUT_M * np.tan(np.radians(END_FLARE_DEG))
-    outs = [STRIP_OUT_M * _outward(floor, e) for e in edges]
-    outer = [line[-1] + outs[-1] + flare * end_dir]
+    # 바깥 끝이 변 방향으로 더 나가는 거리 (m). 직각에서 END_FLARE_DEG 벌어진 선이 된다
+    flare_m = STRIP_OUT_M * np.tan(np.radians(END_FLARE_DEG))
+    outer = [line[-1] + _out_at(corners, e2, t_end, front) + flare_m * end_1m]
     if len(edges) == 2:
-        outer.append(line[1] + outs[0] + outs[1])
-    outer.append(line[0] + outs[0] + flare * start_dir)
+        outer.append(line[1] + _out_at(corners, e1, 1.0, front) + _out_at(corners, e2, 0.0, front))
+    outer.append(line[0] + _out_at(corners, e1, t_start, front) + flare_m * start_1m)
     return np.vstack([line, outer])
 
 
-def _to_screen(points: np.ndarray, to_screen: np.ndarray) -> np.ndarray:
-    moved = cv2.perspectiveTransform(points.reshape(-1, 1, 2).astype(np.float32), to_screen)
-    return moved.reshape(-1, 2)
+def _sweep_up(mask: np.ndarray, polygon: np.ndarray, lift: int) -> None:
+    """polygon을 화면 위로 lift만큼 옮기며 지나간 자리 전체를 mask에 채운다.
 
-
-def _depth(points: np.ndarray, to_screen: np.ndarray) -> np.ndarray:
-    """바닥 지도 점(m)들의 카메라 깊이에 비례하는 값 (바닥 → 화면 변환의 셋째 행 w)."""
-    return np.c_[points, np.ones(len(points))] @ to_screen[2]
-
-
-def _lifts(
-    floor_poly: np.ndarray, to_screen: np.ndarray, ref: np.ndarray, base: float
-) -> np.ndarray:
-    """꼭짓점마다 위로 옮길 높이 (px). 바닥 지도 점 ref에서 base만큼이 되게 원근 배율로 맞춘다.
-
-    같은 실제 높이는 화면에서 깊이에 반비례해 보인다. 그래서 위로 옮긴 경계는 실제로 같은 높이의 선이 되어
-    바닥 변과 실제 세계에서 평행하다 (화면에서는 같은 소실점으로 모인다).
+    다각형, 옮긴 다각형, 각 변이 지나간 평행사변형의 합집합이다.
+    모든 꼭짓점을 같은 높이로 옮기므로 위 경계는 띠의 변과 화면에서 평행하다.
     """
-    return base * _depth(ref[None], to_screen)[0] / _depth(floor_poly, to_screen)
-
-
-def _sweep_up(mask: np.ndarray, polygon: np.ndarray, lifts: np.ndarray) -> None:
-    """polygon의 꼭짓점을 각자 lifts만큼 화면 위로 옮기며 지나간 자리 전체를 mask에 채운다.
-
-    다각형, 옮긴 다각형, 각 변이 지나간 사각형의 합집합이다.
-    """
-    up = polygon - np.stack([np.zeros(len(lifts)), lifts], axis=1).round().astype(np.int32)
+    up = polygon - [0, lift]
     parts = [polygon, up]
     for i in range(len(polygon)):
         j = (i + 1) % len(polygon)
@@ -202,20 +157,12 @@ def _roi_mask_original(
 ) -> tuple[np.ndarray, FloorStrip]:
     """원본 화면 크기의 ROI 마스크 (안쪽 255)와 바닥 띠. 화면 밖으로 나간 부분은 버려진다."""
     width, height = frame
-    src = np.array(data.floor_corners, dtype=np.float32)
-    dst = np.array(floor_points(data.front_edge), dtype=np.float32)
-    to_screen = cv2.getPerspectiveTransform(dst, src)
-
-    floor_poly = _floor_strip(data, to_screen)
-    polygon = np.round(_to_screen(floor_poly, to_screen)).astype(np.int32)
-    # 띠의 화면에서 가장 낮은 꼭짓점(ROI의 낮은 쪽 세로 변)을 화면 속 차 높이(bbox 세로)만큼 올린다.
-    # 차가 화면에서 크든 작든 같은 규칙이 된다
-    ref = floor_poly[int(np.argmax(polygon[:, 1]))]
-    ratio = VISIBLE_HEIGHT_RATIO if _is_visible_case(data) else HIDDEN_HEIGHT_RATIO
-    base = (data.vehicle_bbox[3] - data.vehicle_bbox[1]) * ratio
+    polygon = np.round(_floor_strip(data)).astype(np.int32)
+    # 띠를 화면 속 차 높이(bbox 세로)만큼 올린다. 차가 화면에서 크든 작든 같은 규칙이 된다
+    lift = data.vehicle_bbox[3] - data.vehicle_bbox[1]
 
     mask = np.zeros((height, width), np.uint8)
-    _sweep_up(mask, polygon, _lifts(floor_poly, to_screen, ref, base))
+    _sweep_up(mask, polygon, lift)
 
     # 파손 사각형(좌우 여백 포함)이 빠져 있으면 그 자리를 더한다 (합집합이라 이미 덮인 곳은 그대로다)
     dx1, dy1, dx2, dy2 = data.damage_bbox
