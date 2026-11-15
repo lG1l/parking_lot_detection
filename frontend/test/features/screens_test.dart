@@ -400,6 +400,51 @@ void main() {
     expect(tester.getTopLeft(find.text('확인했습니다')).dx, greaterThan(tester.view.physicalSize.width / 2));
   });
 
+  testWidgets('안 읽은 수는 목록 줄 숫자와 합친 메뉴 배지로 보이고, 대화를 열면 읽음 처리로 사라진다. 30일 안내가 목록 위에 있다 (2.11, D-298)', (tester) async {
+    var unread02 = 2; // 처음 열리는 대화. 32번을 부르면 0이 된다
+    var unread03 = 3;
+    final backend = FakeBackend({
+      'GET /api/videos': (_) => json([]),
+      'GET /api/cases': (_) => json({
+        'items': [
+          {...case3(), 'accepted_at': '2026-11-02T10:00:00+09:00'},
+          {...case3(), 'id': 5, 'victim_name': 'victim03', 'created_at': '2026-10-20T09:00:00+09:00', 'accepted_at': '2026-10-20T10:00:00+09:00'},
+        ],
+      }),
+      'GET /api/chats': (_) => json({
+        'items': [
+          chatPeer(12, 'victim02', last: chatMsg(2, '둘째 메시지', mine: false), unread: unread02),
+          chatPeer(13, 'victim03', last: chatMsg(5, '셋째 사람 메시지', mine: false), unread: unread03),
+        ],
+        'unread_total': unread02 + unread03,
+      }),
+      'GET /api/chats/12/messages': (_) => json({
+        'items': [chatMsg(1, '첫 메시지', mine: false), chatMsg(2, '둘째 메시지', mine: false)],
+        'has_more': false,
+      }),
+      'GET /api/chats/13/messages': (_) => json({'items': [chatMsg(5, '셋째 사람 메시지', mine: false)], 'has_more': false}),
+      'PUT /api/chats/12/read': (_) {
+        unread02 = 0;
+        return json(null, 204);
+      },
+      'PUT /api/chats/13/read': (_) {
+        unread03 = 0;
+        return json(null, 204);
+      },
+    });
+    await pumpApp(tester, backend, '/notifications');
+    expect(find.text('메시지는 보낸 지 30일이 지나면 지워집니다.'), findsOneWidget);
+    expect(backend.count('PUT /api/chats/12/read'), 1); // 처음 고른 사람은 그린 뒤 바로 읽음 처리
+    // 고른 사람 숫자는 사라지고, 안 읽은 victim03의 숫자 3이 목록 줄과 메뉴 배지(기존 수 0 + 3)에 하나씩 보인다
+    expect(find.text('3'), findsNWidgets(2));
+    expect(find.text('2'), findsNothing);
+
+    await tester.tap(find.text('victim03'));
+    await settle(tester);
+    expect(backend.count('PUT /api/chats/13/read'), 1);
+    expect(find.text('3'), findsNothing); // 읽으면 목록 숫자와 메뉴 배지가 함께 사라진다
+  });
+
   testWidgets('메시지가 많아도 입력칸은 화면 아래에 고정되어 보인다 (2.11, D-297)', (tester) async {
     final all = [for (var i = 1; i <= 40; i++) chatMsg(i, '메시지 $i', mine: false, at: '2026-11-02T10:00:00+09:00')];
     final backend = FakeBackend({

@@ -20,3 +20,7 @@ ChatPeer? peerOf(String name, List<ChatPeer> peers) {
   }
   return null;
 }
+
+/// 메뉴 [채팅] 배지 수: 기존 수(피해자는 대기 중인 초대 수, 관리자는 할 일 수)에 안 읽은 채팅 수를 더한다 (D-298).
+/// 29번이 실패해 [unreadTotal]이 null이면 채팅 수는 0으로 친다.
+int chatBadgeCount(int base, int? unreadTotal) => base + (unreadTotal ?? 0);

@@ -106,6 +106,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       return;
     }
     await _loadPeers();
+    if (mounted) ref.invalidate(notificationBadgeProvider); // 읽음 처리 뒤 메뉴 배지를 다시 센다 (D-298)
   }
 
   void _select(_Person p) {
@@ -315,6 +316,8 @@ class _PersonList extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: 6,
         children: [
+          // 어느 상대를 골라도 항상 보이게 목록 위에 둔다 (D-288, D-298)
+          const Padding(padding: EdgeInsets.only(bottom: 4), child: SmallText('메시지는 보낸 지 30일이 지나면 지워집니다.')),
           for (final p in people)
             Material(
               color: p.name == selectedName ? lineColor : offWhiteColor,
@@ -340,12 +343,20 @@ class _PersonList extends StatelessWidget {
                           if (p.latestAt case final at?) SmallText(formatKstMinute(at).substring(5)), // "MM-DD HH:mm"
                         ],
                       ),
-                      // 시간 아래까지 한 줄을 다 쓰고, 넘치면 "..."로 줄인다 (D-297)
-                      Text(
-                        summaryOf(p),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 13, color: subColor, height: 1.5),
+                      // 시간 아래까지 한 줄을 쓰고, 넘치면 "..."로 줄인다. 안 읽은 수는 그 줄 오른쪽 끝에 둔다 (D-297, D-298)
+                      Row(
+                        spacing: 8,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              summaryOf(p),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 13, color: subColor, height: 1.5),
+                            ),
+                          ),
+                          if ((p.peer?.unread ?? 0) > 0) _UnreadDot(p.peer!.unread),
+                        ],
                       ),
                     ],
                   ),
@@ -356,6 +367,25 @@ class _PersonList extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 안 읽은 메시지 수를 보이는 빨간 숫자 동그라미 (D-298).
+class _UnreadDot extends StatelessWidget {
+  const _UnreadDot(this.count);
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: '안 읽은 메시지 $count개',
+    child: Container(
+      constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      alignment: Alignment.center,
+      decoration: const BoxDecoration(color: failChipColor, borderRadius: BorderRadius.all(Radius.circular(10))),
+      child: Text('$count', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: offWhiteColor)),
+    ),
+  );
 }
 
 /// 고른 사람과의 대화. 사건마다 날짜 구분선 아래에 그 사건의 알림을 잇는다.
