@@ -44,6 +44,8 @@ users ──┬──< sessions        (로그인 세션)
         │
         ├──< access_logs     (열람·초대·파기 기록, D-53)
         │
+        ├──< chat_messages   (관리자·피해자 채팅, D-285)
+        │
 videos ──┬── upload_agreements  (위탁계약 동의 D-147)
         ├──< viewing_agreements  (관리·감독 안내 동의, D-204)
         └──1:1── analysis_jobs
@@ -428,6 +430,21 @@ ROI 안에서 움직임이 있던 시간대를 자른 클립 하나 (D-245). 2�
   - **`FOR SHARE`가 있어야 [확인 끝내기](전이 9·15)·마지막 [다음](전이 12)과 겹치지 않는다.** 한 문장이어도 PostgreSQL 기본 격리 수준에서는 SELECT가 행을 잠그지 않는다. 그래서 상태를 읽은 직후 다른 요청이 끝 상태로 바꾸고 커밋하면 행이 그대로 들어간다. `FOR SHARE`를 붙이면 고정이 먼저 잠근 경우 17번·13번이 고정이 끝날 때까지 기다린다. 끝 상태가 먼저 커밋된 경우에는 이 SELECT가 바뀐 상태로 조건을 다시 봐서 0행이 된다 (D-101).
 - `candidate_clip_id` FK에는 CASCADE를 걸지 않는다. 그래서 고정된 클립 행만 따로 지우려 하면 DB가 거부한다. 분석 작업째 지울 때는 두 행이 함께 지워진다.
 - **고정 해제는 [확인 끝내기] 전까지 할 수 있다.** 작업 상태가 `ready`·`batch_running`일 때 이 행을 지운다(20번). 상태는 바꾸지 않고 S3에서 지울 파일도 없다. 끝 상태에서는 지우지 않는다. 고정 전 확인창은 그대로 둔다. (D-181, D-80)
+
+### chat_messages
+
+관리자 계정과 피해자 계정이 [알림] 화면에서 주고받은 메시지 한 줄. 사건이 아니라 두 계정 쌍에 붙는다. (D-284, D-285)
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `id` | bigserial PK | 대화 안의 순서로도 쓴다 |
+| `admin_user_id` | bigint FK → users | 대화의 관리자 계정 |
+| `victim_user_id` | bigint FK → users | 대화의 피해자 계정 |
+| `sender_user_id` | bigint FK → users | 보낸 계정. 위 둘 중 하나다 |
+| `body` | text | 메시지 내용 |
+| `created_at` | timestamptz | 보낸 시각 |
+
+- `case_id`가 없다. 같은 두 계정의 사건이 여러 개여도 대화는 하나다.
 
 ### access_logs
 
@@ -892,6 +909,15 @@ CREATE TABLE pinned_incidents (
   UNIQUE (analysis_job_id, candidate_clip_id)                              -- 작업당 여러 개 (D-80)
 );
 
+CREATE TABLE chat_messages (                 -- D-285
+  id             bigserial PRIMARY KEY,
+  admin_user_id  bigint      NOT NULL REFERENCES users(id),
+  victim_user_id bigint      NOT NULL REFERENCES users(id),
+  sender_user_id bigint      NOT NULL REFERENCES users(id),
+  body           text        NOT NULL,
+  created_at     timestamptz NOT NULL DEFAULT now()
+);
+
 -- 법정 기록. 지우지 않는다 (D-53)
 CREATE TABLE access_logs (
   id           bigserial PRIMARY KEY,
@@ -919,6 +945,7 @@ CREATE INDEX idx_clips_candidate     ON candidate_clips (candidate_id);
 CREATE INDEX idx_access_video        ON access_logs (video_id, created_at DESC);
 CREATE INDEX idx_videos_raw_alive    ON videos (upload_completed_at) WHERE raw_deleted_at IS NULL;
 CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE masked_deleted_at IS NULL;
+CREATE INDEX idx_chat_pair           ON chat_messages (admin_user_id, victim_user_id, id);
 ```
 
 | 인덱스 | 어떤 조회에 쓰나 |
@@ -933,6 +960,7 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 | `access_logs (video_id, created_at DESC)` | "이 영상에 누가 언제 닿았나" (D-53) |
 | `videos (upload_completed_at) WHERE raw_deleted_at IS NULL` | 파기 주기 작업이 보관 상한(30일)이 지난 "파기 표시할 것"을 찾을 때. 부분 인덱스라 이미 표시한 영상은 아예 들어오지 않는다 (D-52, D-64) |
 | `videos (upload_completed_at) WHERE masked_deleted_at IS NULL` | 같은 주기 작업이 마스킹본 파기 대상을 찾을 때 (D-57) |
+| `chat_messages (admin_user_id, victim_user_id, id)` | 두 계정의 대화를 보낸 순서로 꺼낼 때 (D-285) |
 
 - 데모 규모(영상 수십 건)에서는 인덱스가 없어도 느리지 않다. 행이 많아져도 조회가 느려지지 않게 미리 둔다.
 - `still_frames`·`vehicle_selections`·`damage_inputs`·`pinned_incidents`는 UNIQUE 제약이 만드는 인덱스로 충분하다. 모두 `analysis_job_id`로만 찾기 때문이다. `pinned_incidents`의 UNIQUE는 `(analysis_job_id, candidate_clip_id)`라 앞 칼럼만으로도 이 인덱스를 쓴다.
