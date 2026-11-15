@@ -369,19 +369,20 @@ class _Conversation extends StatelessWidget {
       for (final m in messagesOf(c))
         switch (m) {
           NoticeAccepted() => _NoticeCard(
-            title: acceptedTitle,
+            title: acceptedTitle(admin: admin),
             emoji: acceptedEmoji,
-            caseLine: '사건 $title',
+            caseLine: title,
+            mine: noticeIsMine(m, admin: admin),
             at: c.acceptedAt ?? c.createdAt,
           ),
           NoticeInvite() => _NoticeCard(
             title: inviteTitle(admin: admin),
             emoji: inviteEmoji,
-            caseLine: '사건 $title',
-            at: admin ? c.createdAt : c.acceptedAt ?? c.createdAt,
-            footer: admin
-                ? null
-                : c.pending
+            caseLine: title,
+            mine: noticeIsMine(m, admin: admin),
+            at: c.createdAt,
+            // 수락하면 오른쪽에 수락 카드가 따로 붙으므로, 요청 카드에는 수락 전 [수락]만 둔다
+            footer: !admin && c.pending
                 ? FilledButton(
                     onPressed: accepting.contains(c.id) ? null : () => onAccept(c),
                     style: FilledButton.styleFrom(
@@ -390,13 +391,14 @@ class _Conversation extends StatelessWidget {
                     ),
                     child: const Text('수락'),
                   )
-                : const Text('수락했습니다.', style: TextStyle(fontSize: 14, color: subColor)),
+                : null,
           ),
-          NoticeStatus(:final video, :final title, :final emoji, :final problem) => _NoticeCard(
-            title: title,
+          NoticeStatus(:final video, title: final noticeTitle, :final emoji, :final problem) => _NoticeCard(
+            title: noticeTitle,
             emoji: emoji,
             problem: problem,
-            caseLine: '사건 $title · ${video.originalFilename}',
+            caseLine: title, // 작은 글씨는 사건 이름만 (D-294)
+            mine: noticeIsMine(m, admin: admin),
             onTap: () => context.go('/videos/${video.videoId}'),
           ),
         },
@@ -404,8 +406,9 @@ class _Conversation extends StatelessWidget {
   }
 }
 
-/// 알림 카드. 제목과 오른쪽 이모지, 아래 한 줄에 사건을 적는다.
-/// [problem]이면 제목을 실패 색으로 그린다. [at]이 있으면 카드 오른쪽 아래 바깥에 시각(HH:mm)만 보인다.
+/// 알림 카드. 제목과 오른쪽 이모지, 아래 작은 글씨로 사건 이름만 적는다.
+/// [problem]이면 제목을 실패 색으로 그린다. [mine]이면(내가 한 일) 오른쪽, 아니면 왼쪽에 둔다 (D-294).
+/// [at]이 있으면 카드 바깥 안쪽 옆에 시각(HH:mm)만 보인다.
 class _NoticeCard extends StatelessWidget {
   const _NoticeCard({
     required this.title,
@@ -415,11 +418,13 @@ class _NoticeCard extends StatelessWidget {
     this.footer,
     this.onTap,
     this.at,
+    required this.mine,
   });
 
   final String title;
   final String emoji;
   final String caseLine;
+  final bool mine;
   final bool problem;
   final Widget? footer;
   final VoidCallback? onTap;
@@ -428,14 +433,13 @@ class _NoticeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final time = at;
+    final stamp = time == null ? null : SmallText(formatKstMinute(time).substring(11)); // "HH:mm"
+    final box = Flexible(child: _box());
     return Row(
-      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: mine ? MainAxisAlignment.end : MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.end,
       spacing: 8,
-      children: [
-        Flexible(child: _box()),
-        if (time != null) SmallText(formatKstMinute(time).substring(11)), // "HH:mm"
-      ],
+      children: mine ? [?stamp, box] : [box, ?stamp],
     );
   }
 
@@ -506,13 +510,13 @@ class _Bubble extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 420),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: mine ? pointColor : offWhiteColor,
+            color: mine ? pointLightColor : offWhiteColor, // 내 것은 연한 포인트색 (D-294)
             borderRadius: BorderRadius.circular(cardRadius),
-            border: Border.all(color: mine ? pointColor : lineColor),
+            border: Border.all(color: mine ? pointLightColor : lineColor),
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            child: Text(message.body, style: TextStyle(fontSize: 16, color: mine ? offWhiteColor : inkColor)),
+            child: Text(message.body, style: const TextStyle(fontSize: 16, color: inkColor)),
           ),
         ),
       ),

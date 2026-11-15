@@ -39,8 +39,8 @@ void main() {
     expect(kinds(messagesOf(_case(pending: true), [_video(VideoStatus.ready)], admin: true)), '연결,후보 선택 가능');
     // 피해자, 수락 전 사건: 초대만 (영상 정보를 보이지 않는다, D-233·D-238)
     expect(kinds(messagesOf(_case(pending: true), [_video(VideoStatus.stage1Done)], admin: false)), '연결');
-    // 피해자, 수락한 사건: 기존 알림 그대로
-    expect(kinds(messagesOf(_case(), [_video(VideoStatus.stage1Done)], admin: false)), '연결,사전 입력 필요');
+    // 피해자, 수락한 사건: 요청·수락(내 쪽)·영상 알림 (D-294)
+    expect(kinds(messagesOf(_case(), [_video(VideoStatus.stage1Done)], admin: false)), '연결,수락함,사전 입력 필요');
     // 보관 기간이 끝난 영상은 알림이 없다
     expect(kinds(messagesOf(_case(), [_video(VideoStatus.ready, expired: true)], admin: true)), '연결,수락함');
     // 업로드 확인 안 됨은 실패 칩 색

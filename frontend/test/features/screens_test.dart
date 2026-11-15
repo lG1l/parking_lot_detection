@@ -238,8 +238,14 @@ void main() {
     expect(backend.count('POST /api/cases/3/accept'), 1);
     expect(find.text('사건을 수락했습니다. 사건 목록에서 볼 수 있습니다.'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, '수락'), findsNothing);
-    expect(find.text('수락했습니다.'), findsOneWidget);
+    expect(find.text('연결을 수락했어요!'), findsOneWidget);
     expect(find.text('내 차량을 입력해 주세요!'), findsOneWidget); // 수락하면 영상 상태 알림이 붙는다 (D-237)
+    // 피해자 기준: 관리자가 보낸 요청·영상 알림은 왼쪽, 내가 한 수락은 오른쪽 (D-294)
+    final middle = tester.view.physicalSize.width / tester.view.devicePixelRatio / 2;
+    final talkLeft = tester.getTopLeft(find.text('연결 요청이 왔어요!')).dx;
+    expect(tester.getTopLeft(find.text('연결을 수락했어요!')).dx, greaterThan(middle));
+    expect(tester.getTopLeft(find.text('내 차량을 입력해 주세요!')).dx, talkLeft);
+    expect(talkLeft, lessThan(tester.getTopLeft(find.text('연결을 수락했어요!')).dx));
 
     await tester.tap(find.text('사건 목록'));
     await settle(tester);
@@ -313,12 +319,12 @@ void main() {
     expect(find.textContaining('사건 2건 · '), findsOneWidget);
     expect(find.text('2026-11-01'), findsOneWidget); // 사건 구분선은 날짜만
     expect(find.text('2026-11-05'), findsOneWidget);
-    expect(find.text('사건 첫 사건'), findsNWidgets(2)); // 연결 요청·연결 수락 카드
+    expect(find.text('첫 사건'), findsNWidgets(2)); // 연결 요청·연결 수락 카드의 작은 글씨는 사건 이름만
     expect(find.text('수락 대기 중'), findsNothing);
 
     await tester.tap(find.text('victim03'));
     await settle(tester);
-    expect(find.text('사건 첫 사건'), findsNothing);
+    expect(find.text('첫 사건'), findsNothing);
     expect(find.text('연결을 요청했어요'), findsOneWidget);
   });
 

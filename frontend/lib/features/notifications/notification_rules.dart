@@ -14,7 +14,7 @@ class NoticeInvite extends NoticeMessage {
   final VideoCase videoCase;
 }
 
-/// 관리자 알림: 피해자가 연결을 수락했다 (D-243).
+/// 피해자가 연결을 수락했다. 관리자에게는 상대가 한 일, 피해자에게는 내가 한 일이다 (D-243, D-294).
 class NoticeAccepted extends NoticeMessage {
   const NoticeAccepted(this.videoCase);
 
@@ -37,7 +37,15 @@ class NoticeStatus extends NoticeMessage {
 const inviteEmoji = '🤝';
 const acceptedEmoji = '✅';
 String inviteTitle({required bool admin}) => admin ? '연결을 요청했어요' : '연결 요청이 왔어요!';
-const acceptedTitle = '연결이 수락되었어요!';
+String acceptedTitle({required bool admin}) => admin ? '연결이 수락되었어요!' : '연결을 수락했어요!';
+
+/// 내 쪽(오른쪽)에 둘 알림인지. 연결 요청은 관리자가, 연결 수락은 피해자가 한 일이다.
+/// 영상 상태 알림은 내게 오는 소식이라 상대 쪽(왼쪽)이다 (D-294).
+bool noticeIsMine(NoticeMessage m, {required bool admin}) => switch (m) {
+  NoticeInvite() => admin,
+  NoticeAccepted() => !admin,
+  NoticeStatus() => false,
+};
 
 /// 영상 상태 중 계정이 알아야 하는 것만 알림으로 만든다. 나머지는 null.
 NoticeStatus? statusNoticeOf(VideoSummary v, {required bool admin}) {
@@ -60,11 +68,11 @@ NoticeStatus? statusNoticeOf(VideoSummary v, {required bool admin}) {
   };
 }
 
-/// 사건의 알림. 초대(와 관리자는 수락함)가 먼저, 영상 상태 알림이 뒤따른다.
+/// 사건의 알림. 초대와 (수락했으면) 수락이 먼저, 영상 상태 알림이 뒤따른다.
 /// 피해자에게는 수락 전 사건의 영상 알림을 붙이지 않는다(D-233, D-238). 관리자는 수락 전에도 붙인다.
 List<NoticeMessage> messagesOf(VideoCase c, List<VideoSummary> videos, {required bool admin}) => [
   NoticeInvite(c),
-  if (admin && !c.pending) NoticeAccepted(c),
+  if (!c.pending) NoticeAccepted(c),
   if (admin || !c.pending)
     for (final v in videos)
       if (v.caseId == c.id) ?statusNoticeOf(v, admin: admin),
