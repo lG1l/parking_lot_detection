@@ -27,10 +27,11 @@ def _pinned(conn, video_id: int, job_id: int | None, valid_until) -> list[dict]:
     """고정한 순서대로 (05장 15번). est_*_at은 녹화 시작 시각이 없으면 NULL이 된다 (D-85)."""
     rows = conn.execute(
         text(
-            "SELECT c.id, c.start_sec, c.end_sec, c.masked_s3_key, p.pinned_at, "
-            "v.recording_started_at + c.start_sec * interval '1 second' AS est_start, "
-            "v.recording_started_at + c.end_sec * interval '1 second' AS est_end "
+            "SELECT c.id, d.start_sec, d.end_sec, c.masked_s3_key, p.pinned_at, "
+            "v.recording_started_at + d.start_sec * interval '1 second' AS est_start, "
+            "v.recording_started_at + d.end_sec * interval '1 second' AS est_end "
             "FROM pinned_incidents p JOIN candidate_clips c ON c.id = p.candidate_clip_id "
+            "JOIN candidates d ON d.id = c.candidate_id "
             "JOIN videos v ON v.id = :v WHERE p.analysis_job_id = :j "
             "ORDER BY p.pinned_at, p.id"
         ),
@@ -150,10 +151,11 @@ def get_incident_times(
         if row.status in ("finished", "exhausted"):  # 그 전에는 고정을 풀 수 있다
             rows = conn.execute(
                 text(
-                    "SELECT c.start_sec, c.end_sec, p.pinned_at, "
-                    "v.recording_started_at + c.start_sec * interval '1 second' AS est_start, "
-                    "v.recording_started_at + c.end_sec * interval '1 second' AS est_end "
+                    "SELECT d.start_sec, d.end_sec, p.pinned_at, "
+                    "v.recording_started_at + d.start_sec * interval '1 second' AS est_start, "
+                    "v.recording_started_at + d.end_sec * interval '1 second' AS est_end "
                     "FROM pinned_incidents p JOIN candidate_clips c ON c.id = p.candidate_clip_id "
+                    "JOIN candidates d ON d.id = c.candidate_id "
                     "JOIN videos v ON v.id = :v WHERE p.analysis_job_id = :j "
                     "ORDER BY p.pinned_at, p.id"
                 ),

@@ -8,7 +8,7 @@
 
 > **D-221(2026-11-03, 팀장): 10번 `detections`에 `polygon`을 더한다. 11번은 바뀌지 않는다.**
 
-> **D-245·D-246(2026-11-12): 12번 SQL 예시에서 `judged_at_sec`를 뺐다. 응답에 쓰지 않던 값이고, `candidates`에서 없어질 칸이다. 응답 형식은 바뀌지 않는다. `start_sec`·`end_sec`를 어느 테이블에서 읽을지는 👤 담당자 결정 필요(팀원 2, 인수인계 문서(저장소 밖) `변경.md` B1).**
+> **D-245·D-246(2026-11-12): 12번 SQL 예시에서 `judged_at_sec`를 뺐다. 응답에 쓰지 않던 값이고, `candidates`에서 없어질 칸이다. 응답 형식은 바뀌지 않는다. `start_sec`·`end_sec`는 `candidates`에서 읽는다 (D-280).**
 
 > 마지막 수정: 2026-11-14
 > 표시: 🚧 미정 · ⚠️ 확인 필요 · 🔐 멘토 승인 필요
@@ -990,7 +990,7 @@ DB는 `payload`의 내용을 검사하지 않는다. 아래를 백엔드(Pydanti
 
 ```sql
 SELECT DISTINCT ON (d.id)
-       d.rank, c.id AS clip_id, c.start_sec, c.end_sec, c.masked_s3_key
+       d.rank, c.id AS clip_id, d.start_sec, d.end_sec, c.masked_s3_key
   FROM candidates d
   JOIN candidate_clips c ON c.candidate_id = d.id AND c.status = 'done'
  WHERE d.analysis_job_id = :job_id

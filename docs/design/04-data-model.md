@@ -340,16 +340,16 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 
 ### candidates
 
-룰이 판정한 근접 순간 하나. 2단계에서 GPU 워커가 만든다.
+ROI 안에서 움직임이 있던 시간대를 자른 클립 하나 (D-245). 2단계에서 GPU 워커가 만든다.
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | `id` | bigserial PK | |
 | `analysis_job_id` | bigint FK → analysis_jobs | |
-| `judged_at_sec` | double precision | 판정 시점(원본 시간). 가장 가까웠던 순간이고, VLM 프레임 샘플링의 **기준점**으로도 쓴다 (D-73, D-84). 불변 조건 7 |
-| `channel` | text | 어느 채널이 잡았는지. `A`(객체탐지+추적) · `B`(근접 영역 움직임) (D-71). 두 채널이 같은 물체를 잡아 하나로 합친 후보의 값은 🚧 (U-13) |
-| `rule_name` | text | 어느 룰이 잡았는지. 목록은 🚧 (U-13) |
-| `track_id` | integer | 근거가 된 트랙. 채널 A·B 트랙이 한 번호 체계를 나눠 쓰며, 영상 안에서 유일하다 (4.8, D-76). 채널 A는 1번부터, 채널 B는 1,000,001번부터 매긴다 (D-257) |
+| `start_sec`, `end_sec` | double precision | 클립 구간. 원본 시간 기준 초. 후보를 만들 때 06장 6.5 규칙으로 정하고, 만든 뒤 고치지 않는다 (D-245, D-280). 불변 조건 7 |
+| `track_ids` | integer[] | 후보에 든 트랙 번호 전부. 채널 A·B 트랙이 한 번호 체계를 나눠 쓰며, 영상 안에서 유일하다 (4.8, D-76). 채널 A는 1번부터, 채널 B는 1,000,001번부터 매긴다 (D-257, D-249, D-281) |
+| `motion_ranges` | jsonb | 후보 구간 목록. 클립 안에서 움직임이 있던 시간대를 합친 `[시작, 끝]` 쌍의 배열. 원본 시간 기준 초. 예 `[[105.0,112.0],[115.0,117.0]]` (D-250, D-281) |
+| `likely_moments` | jsonb | 유력 시점 목록. `{"track_id", "at_sec"}`의 배열. 원본 시간 기준 초. 0개면 `[]`. 예 `[{"track_id":31,"at_sec":108.4}]` (D-250, D-281) |
 | `vlm_pass1` | boolean | 1차 VLM 결과. `true` 통과 · `false` 탈락. 1차 전이거나 1차를 건너뛴 후보는 비어 있다 (D-74, U-32) |
 | `vlm_score` | integer | 0~100. 2차 VLM이 매긴다. 1차에서 탈락하면 0. VLM 호출 전과 2차 파싱 실패는 비어 있다 (D-74, D-93) |
 | `list_kind` | text | 어느 목록인지. `main`(후보군) · `parse_failed`(2차 VLM 파싱 실패). 처음에는 `main`이고, 2차 VLM이 끝내 점수를 내지 못하면 워커가 `parse_failed`로 바꾼다 (D-93, D-99) |
@@ -361,8 +361,7 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 
 - **VLM은 후보를 지우지 않는다.** 점수를 매기기 전후로 행 수가 같다. 1차에서 탈락한 후보도 `vlm_score = 0`으로 남아 정렬 맨 아래에 온다. (불변 조건 4, D-74)
 - **2차 파싱 실패는 0점이 아니다.** 점수가 없을 뿐 사건 가능성이 낮다는 뜻이 아니므로 `vlm_score`를 비워 두고 파싱 실패 목록(`list_kind = 'parse_failed'`)으로 보낸다. 1차 파싱 실패는 통과(`vlm_pass1 = true`)로 보고 2차로 보낸다 (D-93).
-- 후보는 **판정 시점 하나만** 저장한다. 사건 지점(= `judged_at_sec + 5초`)은 01장 1.6의 상수로 계산한다. 클립 구간은 클립을 만들 때 계산해 `candidate_clips`에만 저장한다. (D-33)
-  - ⚠️ 연속된 판정을 하나로 합치는 규칙(U-13, 팀장)에 따라 후보가 "구간"을 가져야 하면, 그때 후보 구간 칼럼을 더한다.
+- 클립 구간은 후보를 만들 때 정해 `candidates`에만 저장한다. `candidate_clips`에는 두지 않는다. 고정한 사건의 시간이 바뀌지 않도록 후보의 `start_sec`·`end_sec`는 만든 뒤 고치지 않는다. (D-245, D-280)
 - "못 찾음"은 후보마다 따로 받지 않는다. 사용자가 묶음 아래 [다음]을 누르면 그 묶음 후보 전부를 한 번에 `not_found`로 바꾼다. (D-37)
 - 판단(`verdict`)은 클립이 아니라 후보에 붙인다. 클립은 다시 만들 수 있지만 사용자의 판단은 후보 하나에 대한 것이기 때문이다.
 - **"찾음"은 `pinned_incidents` 한 곳에만 기록한다.** 후보마다 "찾음" 칸을 두지 않는다. 두 곳에 적으면 서로 어긋날 수 있다. 찾음을 고른 후보의 `verdict`는 그대로 둔다(`unseen`, 또는 [다음]으로 넘긴 뒤 고정했으면 `not_found`). 확정 여부는 언제나 `pinned_incidents`로 본다. (D-35, D-80)
@@ -375,7 +374,6 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 |---|---|---|
 | `id` | bigserial PK | |
 | `candidate_id` | bigint FK → candidates | 어느 목록 몇 번째 묶음인지는 이 후보의 `list_kind`·`batch_no`로 본다 (D-33) |
-| `start_sec`, `end_sec` | double precision | 원본 시간 기준 구간. 판정 시점 −10초 ~ +20초를 영상 경계에서 잘라낸 값 (4.7). 불변 조건 7 |
 | `masked_s3_key` | text | 마스킹본 버킷 키 (4.9) |
 | `crop_bbox` | integer[] | 클립을 잘라 낸 영역 `[x1, y1, x2, y2]`. 원본 해상도 기준 픽셀. 본인 차량 주변이다 (D-70, D-84). 16:9로 맞추려고 패딩을 붙이면 패딩까지 포함한 화면 전체를 적으므로 원본 밖 값(음수, width·height 초과)이 들어갈 수 있다 (D-209). 크기는 🚧 (U-30) |
 | `status` | text | `pending` · `running` · `done` · `failed` |
@@ -624,11 +622,11 @@ SELECT count(*) FROM q
 | 영상 안의 시간 | `*_sec` | double precision | **원본 영상 시작부터의 경과 초** |
 | 벽시계 시각 | `*_at` | timestamptz | UTC로 저장한다 |
 
-- 후보는 원본 시간 기준 판정 시점을, 후보 클립은 원본 시간 기준 시작·끝을 가진다. 고정된 사건 지점은 가리키는 클립의 값을 그대로 쓴다. **디코딩 청크로 자르거나 클립으로 가공한 뒤에도 이 값이 유지된다.** (불변 조건 7, D-33)
+- 후보는 원본 시간 기준 클립 구간(시작·끝)을 가진다. 후보 클립과 고정된 사건 지점은 가리키는 후보의 값을 그대로 쓴다. **디코딩 청크로 자르거나 클립으로 가공한 뒤에도 이 값이 유지된다.** (불변 조건 7, D-33, D-280)
   - 구간 파일 3번이 원본 720초에서 시작하면, 그 파일에 적히는 `t`는 0이 아니라 720.0부터다. 거슬러 돌린 줄은 이보다 최대 10초 앞설 수 있다 (4.8, D-258).
   - 클립(30초 이하) 안의 시간(0~최대 30초)은 DB에 저장하지 않는다. 저장하는 것은 원본 기준 `start_sec`·`end_sec`뿐이다.
 - **실제 시각은 저장하지 않는다.** 원본 시간은 `*_sec`로만 두고, 실제 시각이 필요하면 `videos.recording_started_at + *_sec`로 **응답을 만들 때만** 계산한다(05장 15·25번). 영상이 중간에 끊기지 않았다는 가정이라 추정값이다 (D-85).
-- 후보 클립 구간은 `판정 시점 −10초 ~ +20초`로 계산한다. 영상 경계를 넘으면 잘라내고, 그 결과를 `candidate_clips.start_sec`·`end_sec`에 저장한다. 따라서 클립 길이가 30초보다 짧을 수 있다. (01장 1.6)
+- 후보 클립 구간은 06장 6.5 규칙으로 계산해 `candidates.start_sec`·`end_sec`에 저장한다. 길이는 30초 이하다. (01장 1.6, D-245, D-280)
 
 ## 4.8 트랙 결과 파일 형식
 
@@ -862,10 +860,11 @@ CREATE TABLE damage_inputs (
 CREATE TABLE candidates (
   id              bigserial PRIMARY KEY,
   analysis_job_id bigint           NOT NULL REFERENCES analysis_jobs(id) ON DELETE CASCADE,
-  judged_at_sec   double precision NOT NULL,   -- 구간은 저장하지 않는다 (D-33). VLM 기준점 (D-84)
-  channel         text             NOT NULL,   -- 'A' | 'B' (D-71). 합친 후보의 값은 🚧 (U-13)
-  rule_name       text             NOT NULL,   -- 목록은 🚧 (U-13)
-  track_id        integer          NOT NULL,   -- 영상 안에서 유일 (4.8, D-76)
+  start_sec       double precision NOT NULL,   -- 클립 구간. 만든 뒤 고치지 않는다 (D-280)
+  end_sec         double precision NOT NULL,
+  track_ids       integer[]        NOT NULL,   -- 후보에 든 트랙 번호 전부 (D-249)
+  motion_ranges   jsonb            NOT NULL,   -- 후보 구간 [[시작, 끝], ...] (D-250)
+  likely_moments  jsonb            NOT NULL,   -- 유력 시점 [{"track_id", "at_sec"}, ...]. 없으면 [] (D-250)
   vlm_pass1       boolean,                     -- 1차 VLM 통과/탈락. 1차 전·건너뜀은 비어 있다 (D-74)
   vlm_score       integer,                     -- 0~100. 1차 탈락은 0. VLM 호출 전과 2차 파싱 실패는 비어 있다 (D-93)
   list_kind       text             NOT NULL DEFAULT 'main',   -- 'main' | 'parse_failed' (D-99)
@@ -878,9 +877,7 @@ CREATE TABLE candidates (
 
 CREATE TABLE candidate_clips (
   id            bigserial PRIMARY KEY,
-  candidate_id  bigint           NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,   -- 묶음 번호는 후보에서 (D-33)
-  start_sec     double precision NOT NULL,
-  end_sec       double precision NOT NULL,
+  candidate_id  bigint           NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,   -- 구간·묶음 번호는 후보에서 (D-33, D-280)
   masked_s3_key text,                          -- 완료 후 채운다
   crop_bbox     integer[],                     -- [x1, y1, x2, y2] 원본 픽셀. 클립을 만들 때 채운다 (D-70, D-84)
   status        text             NOT NULL DEFAULT 'pending',
@@ -972,7 +969,6 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 | 다음 묶음을 만들던 워커가 죽어 `pending` 클립이 남은 작업 | **해결 → D-94, D-99**. `next_batch`를 받으면 상태와 관계없이 `pending` 클립부터 마저 만든다 (4.4) |
 | 파손이 안 보일 때 받을 위치 입력 | **해결 → D-92**. 작은 사각형을 원본 화면 절대 좌표로 저장 |
 | 통로 쪽/옆면을 사용자가 고를지 | **해결 → D-98**. 바닥 네 모서리와 파손 변을 받는다(`damage_inputs` `schema_version` 5, D-99) |
-| 두 채널이 합친 후보의 `channel` 값 | 🚧 U-13 (팀장) |
 | `crop_bbox`를 화면에 줄지 | **해결 → D-176**. 주지 않는다 |
 | 추적기 상태 파일 형식 | 06장 (D-76) |
 | 워커가 어떤 오류를 `failed`로 볼지 (전이 13) | **해결 → D-93, D-94** |
@@ -991,7 +987,7 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 - 차량·파손 부위 입력, 본인 차량은 추적하지 않는다: D-29 (U-13 일부 해결) → **탐지된 차량을 고른다: D-65**
 - 로그인 세션은 DB 테이블 + HttpOnly 쿠키: D-30
 - 사건 지점 고정은 파일 복사 없이 클립 행 참조: D-32
-- 후보는 판정 시점만, 구간·묶음 번호는 한 곳에만: D-33
+- 클립 구간은 후보에만, 묶음 번호도 후보에만: D-33, D-280
 - 파손 부위 방향(`sides`)은 저장하지 않고 워커가 계산: D-34 → **바닥 네 모서리와 파손 변을 사용자가 입력: D-98, `schema_version` 5: D-99**
 - "찾음"은 `pinned_incidents` 한 곳에만: D-35 → **여러 개 고정, 상태를 바꾸지 않음, [확인 끝내기]로 `finished`: D-80**
 - 우선 누끼 없이 드래그한 차량 사각형을 그대로 씀: D-36 (D-65로 대체) / 차량·파손 부위는 한 번에 저장: D-36
@@ -1015,7 +1011,7 @@ CREATE INDEX idx_videos_masked_alive ON videos (upload_completed_at) WHERE maske
 - 1단계는 정지 장면만, 입력 뒤 2단계: D-67 → **`stage1_running`·`stage1_input_done` 없음, 전이 4·5·6 비움, "앞에 N건"에 2단계 대기 포함: D-81**
 - 한 묶음 앞서 준비: D-68 → **`current_batch_no`: D-82**
 - 탐지 상황·사진·텍스트 입력: D-72 → **`damage_inputs` `schema_version` 4, 사진은 원본 버킷 `inputs/`: D-83, D-92**
-- 탐지 채널 A·B, VLM 기준점, 1차·2차 VLM, 클립 크롭: D-70, D-71, D-73, D-74 → **`channel`·`vlm_pass1`·`crop_bbox`: D-84**
+- 탐지 채널 A·B, VLM 기준점, 1차·2차 VLM, 클립 크롭: D-70, D-71, D-73, D-74 → **`channel`·`vlm_pass1`·`crop_bbox`: D-84** → **`channel` 삭제, 트랙 번호·후보 구간·유력 시점: D-249, D-250, D-281**
 - 녹화 시작 시각(선택 입력)과 추정 실제 시각: D-85
 - 열람 기한은 `upload_completed_at + 30일`로 계산, 안 보임 위치는 화면 좌표 사각형: D-92
 - VLM 파싱 실패 목록, `failed` 기준(실패율·장애 지속): D-93 → **`list_kind`, `current_failed_batch_no`, 두 목록을 다 넘기면 `exhausted`: D-99**
