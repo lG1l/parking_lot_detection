@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -18,7 +20,7 @@ import 'notification_rules.dart';
 /// 오른쪽은 고른 사람과의 대화로, 사건마다 구분선 아래에 그 사건의 알림을 잇는다.
 /// 대기 중인 사건 초대는 피해자가 [수락]하면 그 사건이 묶인다 (D-233). 관리자는 [수락]이 없고 할 일을 본다 (D-243).
 /// 거절은 없다. 대화 아래에 메시지 흐름과 입력칸이 있고, 수락한 사건이 있는 상대에게만 보낸다 (D-290).
-/// 22번·8번은 열 때와 [수락] 뒤에만 부른다. 주기적으로 부르지 않는다.
+/// 22번·8번은 열 때와 [수락] 뒤에만 부르고, 메시지(29번)만 화면 상태 조회 주기마다 다시 읽는다.
 class NotificationsPage extends ConsumerStatefulWidget {
   const NotificationsPage({super.key});
 
@@ -46,6 +48,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   List<ChatMessage> _chat = [];
   bool _sending = false;
   final _input = TextEditingController();
+  Timer? _poll; // 열려 있는 동안 메시지를 다시 읽는다 (D-290)
   String? _selected;
   final _accepting = <int>{}; // [수락]을 누른 사건. 다시 누르지 못하게 막는다
 
@@ -53,10 +56,12 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   void initState() {
     super.initState();
     _load();
+    _poll = Timer.periodic(pollInterval, (_) => _loadMessages()); // 실패하면 조용히 다음 주기에
   }
 
   @override
   void dispose() {
+    _poll?.cancel(); // 화면을 떠나면 멈춘다
     _input.dispose();
     super.dispose();
   }
