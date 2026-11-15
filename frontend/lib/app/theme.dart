@@ -19,10 +19,9 @@ const focusLineColor = Color(0xFF3D8BFF); // 입력칸 포커스 · 탭 밑줄 �
 const glowColorTop = Color(0x333D8BFF); // 오른쪽 위 파란 빛 번짐 (rgba(61,139,255) 0.20)
 const glowColorBottom = Color(0x293D8BFF); // 왼쪽 아래 파란 빛 번짐 (0.16)
 
-// 목록 상태 칩 바탕. 색상표보다 조금 연하게 (D-190, 팀원 1)
-const progressChipColor = Color(0xFFB8C2D0); // 업로드 중·대기 중·분석 중. 검정 글자와 약 10:1
-const doneChipColor = Color(0xFF64748B); // 확인 완료. 흰 글자와 약 4.5:1
-const failChipColor = Color(0xFFB04A4A); // 분석 실패·업로드 확인 안 됨. 채도를 낮춘 빨강, 흰 글자와 약 5.1:1
+// 보조 아이콘·실패 표시 색 (상태 칩은 D-305로 점 + 글자가 됐다)
+const doneChipColor = Color(0xFF64748B); // 연필 아이콘 등. 흰 바탕에서 약 4.8:1
+const failChipColor = Color(0xFFB04A4A); // 분석 실패·업로드 확인 안 됨 점·글자. 채도를 낮춘 빨강, 흰 바탕에서 5.35:1
 
 // 색상표 밖의 보조 회색. 작은 안내 글자, 입력칸 테두리, 막힌 버튼.
 const noteColor = Color(0xFF555555);
