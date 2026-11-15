@@ -369,7 +369,9 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
           : Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SizedBox(width: 280, child: scrollList),
+                SizedBox(width: 300, child: scrollList),
+                const SizedBox(width: 8),
+                const VerticalDivider(width: 1, color: lineColor), // 목록과 대화 사이 hair 선 (D-305)
                 const SizedBox(width: 32),
                 Expanded(child: talk),
               ],
@@ -402,22 +404,23 @@ class _PersonList extends StatelessWidget {
       label: '${admin ? '피해자' : '관리자'} 목록',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 6,
         children: [
           // 어느 상대를 골라도 항상 보이게 목록 위에 둔다 (D-288, D-303)
           const Padding(padding: EdgeInsets.only(bottom: 4), child: SmallText('메시지는 보낸 지 30일이 지나면 지워집니다.')),
+          // 카드 상자 없이 hair 줄 목록. 고른 줄은 옅은 파란 바탕 + 왼쪽 파란 막대 (캔버스 새 컨셉, D-305)
           for (final p in people)
             Material(
-              color: p.name == selectedName ? lineColor : offWhiteColor,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: const BorderSide(color: lineColor),
-              ),
-              clipBehavior: Clip.antiAlias,
+              color: p.name == selectedName ? const Color(0x143D8BFF) : Colors.transparent,
               child: InkWell(
                 onTap: () => onSelect(p),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border(
+                      left: BorderSide(color: p.name == selectedName ? focusLineColor : Colors.transparent, width: 3),
+                      bottom: const BorderSide(color: lineColor),
+                    ),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(12, 14, 8, 14),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     spacing: 6,
@@ -509,7 +512,15 @@ class _Conversation extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     spacing: 12,
     children: [
-      Text(person.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
+      // 큰 제목 + 검은 아래선 (캔버스 새 컨셉, D-305)
+      Container(
+        padding: const EdgeInsets.only(bottom: 14),
+        decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: inkColor))),
+        child: Text(
+          person.name,
+          style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w600, height: 1.2, color: inkColor),
+        ),
+      ),
       // 대화만 스크롤하고 입력칸은 아래에 고정한다. reverse라 처음부터 맨 아래(최근 메시지)가 보인다 (D-297)
       Expanded(
         child: SingleChildScrollView(
@@ -525,7 +536,11 @@ class _Conversation extends StatelessWidget {
           ),
         ),
       ),
-      _Composer(peer: peer, input: input, sending: sending, onSend: onSend),
+      Container(
+        padding: const EdgeInsets.only(top: 12),
+        decoration: const BoxDecoration(border: Border(top: BorderSide(color: inkColor))),
+        child: _Composer(peer: peer, input: input, sending: sending, onSend: onSend),
+      ),
     ],
   );
 
@@ -617,13 +632,11 @@ class _NoticeCard extends StatelessWidget {
   Widget _box() => ConstrainedBox(
     constraints: const BoxConstraints(maxWidth: 320),
     child: Material(
-      color: offWhiteColor,
+      color: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(cardRadius),
-        side: const BorderSide(color: lineColor),
+        side: const BorderSide(color: hairColor),
       ),
-      shadowColor: const Color(0x0F2D3748),
-      elevation: 1,
       clipBehavior: Clip.antiAlias,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -693,9 +706,9 @@ class _Bubble extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 420),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: mine ? pointLightColor : offWhiteColor, // 내 것은 연한 포인트색 (D-297)
+            color: mine ? pointLightColor : Colors.transparent, // 내 것은 연한 포인트색 (D-297)
             borderRadius: BorderRadius.circular(cardRadius),
-            border: Border.all(color: mine ? pointLightColor : lineColor),
+            border: Border.all(color: mine ? pointLightColor : hairColor),
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
