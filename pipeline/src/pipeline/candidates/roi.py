@@ -21,8 +21,8 @@ CAR_LENGTH_M = 4.7
 STRIP_OUT_M = 0.8  # 파손 변 바깥 띠 폭 (m). 손이 닿는 구역과 같다
 TWO_EDGE_KEEP_RATIO = 2 / 3  # 파손 변 2개: 각 변을 만나는 모서리에서 이 비율만큼만 쓴다
 END_FLARE_DEG = 30  # 띠의 차에 붙지 않은 끝을 변의 수직선에서 바깥으로 이 각도만큼 벌린다
-# 띠를 위로 옮기는 높이: 파손 변의 화면에서 낮은 끝(카메라에 가까운 끝)은 차량 bbox 세로 × 이 값.
-# 다른 꼭짓점은 그 자리의 원근 배율만큼 줄이거나 늘린다
+# 띠를 위로 옮기는 높이: 띠의 화면에서 가장 낮은 꼭짓점은 차량 bbox 세로 × 이 값.
+# 다른 꼭짓점은 카메라 깊이에 반비례해 줄이거나 늘린다 (실제로 같은 높이)
 VISIBLE_HEIGHT_RATIO = 1.0  # 파손 변이 모두 카메라 쪽
 HIDDEN_HEIGHT_RATIO = 1.1  # 그 밖: 차 너머 사람·물체가 지붕 위로 보이는 만큼 더 높인다
 # 파손 사각형을 자기 폭의 이 배씩 좌우로 넓힌 자리는 꼭 ROI에 넣는다.
@@ -167,15 +167,9 @@ def _to_screen(points: np.ndarray, to_screen: np.ndarray) -> np.ndarray:
     return moved.reshape(-1, 2)
 
 
-def _local_scale(point: np.ndarray, to_screen: np.ndarray) -> float:
-    """바닥 지도 point(m) 자리에서 바닥 1m가 화면에서 몇 px로 보이는가 (넓이 배율의 제곱근).
-
-    방향에 따라 조금 다르므로 가로·세로 1m 사각형이 화면에서 차지하는 넓이로 평균을 낸다.
-    """
-    pts = np.array([point, point + [1.0, 0.0], point + [0.0, 1.0]])
-    o, ex, ey = _to_screen(pts, to_screen)
-    (ax, ay), (bx, by) = ex - o, ey - o
-    return float(np.sqrt(abs(ax * by - ay * bx)))
+def _depth(points: np.ndarray, to_screen: np.ndarray) -> np.ndarray:
+    """바닥 지도 점(m)들의 카메라 깊이에 비례하는 값 (바닥 → 화면 변환의 셋째 행 w)."""
+    return np.c_[points, np.ones(len(points))] @ to_screen[2]
 
 
 def _lifts(
@@ -183,10 +177,10 @@ def _lifts(
 ) -> np.ndarray:
     """꼭짓점마다 위로 옮길 높이 (px). 바닥 지도 점 ref에서 base만큼이 되게 원근 배율로 맞춘다.
 
-    멀리 있는 꼭짓점은 작게 보이므로 덜 올리고, 가까운 꼭짓점은 더 올린다.
+    같은 실제 높이는 화면에서 깊이에 반비례해 보인다. 그래서 위로 옮긴 경계는 실제로 같은 높이의 선이 되어
+    바닥 변과 실제 세계에서 평행하다 (화면에서는 같은 소실점으로 모인다).
     """
-    scales = np.array([_local_scale(p, to_screen) for p in floor_poly])
-    return base * scales / _local_scale(ref, to_screen)
+    return base * _depth(ref[None], to_screen)[0] / _depth(floor_poly, to_screen)
 
 
 def _sweep_up(mask: np.ndarray, polygon: np.ndarray, lifts: np.ndarray) -> None:
@@ -214,10 +208,9 @@ def _roi_mask_original(
 
     floor_poly = _floor_strip(data, to_screen)
     polygon = np.round(_to_screen(floor_poly, to_screen)).astype(np.int32)
-    # 파손 변(늘리기 전)의 화면에서 낮은 끝을 화면 속 차 높이(bbox 세로)만큼 올린다.
+    # 띠의 화면에서 가장 낮은 꼭짓점(ROI의 낮은 쪽 세로 변)을 화면 속 차 높이(bbox 세로)만큼 올린다.
     # 차가 화면에서 크든 작든 같은 규칙이 된다
-    line, _ = _damage_line(data)
-    ref = line[int(np.argmax(_to_screen(line, to_screen)[:, 1]))]
+    ref = floor_poly[int(np.argmax(polygon[:, 1]))]
     ratio = VISIBLE_HEIGHT_RATIO if _is_visible_case(data) else HIDDEN_HEIGHT_RATIO
     base = (data.vehicle_bbox[3] - data.vehicle_bbox[1]) * ratio
 

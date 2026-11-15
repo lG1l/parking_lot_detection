@@ -48,31 +48,42 @@ def _covered(roi, original):
 
 
 def test_건너편_변이_파손이면_지붕_위까지_덮지만_끝없이_높지는_않다():
-    # bbox 세로 280 × 1.1 = 308을 가장 가까운 꼭짓점에서 올리고, 먼 꼭짓점은 덜 올린다. x=880 위 경계 ≈ 387
+    # bbox 세로 280 × 1.1 = 308을 가장 낮은 꼭짓점에서 올리고, 먼 꼭짓점은 덜 올린다. x=880 위 경계 ≈ 359
     roi = _roi([3])
     assert _covered(roi, (880, 400))  # 지붕(448)보다 48px 위
     assert not _covered(roi, (880, 250))
 
 
 def test_카메라_쪽_옆면만_파손이면_차_높이만큼_올린다():
-    # 파손 변의 낮은 끝 (962,746)을 bbox 세로 280만큼 올려 bbox 위 변(448) 근처까지. x=1123 위 경계 ≈ 430
+    # 띠의 가장 낮은 꼭짓점 (789,864)을 bbox 세로 280만큼 올린다. 위 경계: x=962 ≈ 502, x=1123 ≈ 458
     roi = _roi([1])
-    assert _covered(roi, (962, 470))
-    assert not _covered(roi, (962, 455))
-    assert _covered(roi, (1123, 445))
-    assert not _covered(roi, (1123, 415))
+    assert _covered(roi, (962, 510))
+    assert not _covered(roi, (962, 495))
+    assert _covered(roi, (1123, 465))
+    assert not _covered(roi, (1123, 450))
 
 
-def test_먼_꼭짓점은_원근만큼_덜_올린다():
+def test_가장_낮은_꼭짓점은_정확히_bbox_세로만큼_올린다():
+    data = _input([1])
+    to_screen = _to_screen_matrix(data)
+    floor_poly = _floor_strip(data, to_screen)
+    lowest = int(np.argmax(_to_screen(floor_poly, to_screen)[:, 1]))
+    lifts = _lifts(floor_poly, to_screen, floor_poly[lowest], 280)
+    assert np.isclose(lifts[lowest], 280)
+    assert lifts.max() <= 280 + 1e-6  # 가장 낮은 꼭짓점이 카메라에 가장 가깝다
+
+
+def test_먼_꼭짓점은_덜_올려_위_경계가_실제로_바닥_변과_평행하다():
     data = _input([1])
     to_screen = _to_screen_matrix(data)
     near, far = np.array(floor_points(0)[1]), np.array(floor_points(0)[2])
-    outside = near + [STRIP_OUT_M, 0]
-    lifts = _lifts(np.array([near, far, outside]), to_screen, near, 280)
-    # 기준점 (962,746)은 그대로, 먼 끝 (1284,636)은 덜, 더 가까운 바깥 점은 더 올린다
-    assert np.isclose(lifts[0], 280)
-    assert lifts[1] < lifts[0] * 0.9
-    assert lifts[2] > lifts[0]
+    on_edge = np.array([near, (near + far) / 2, far])
+    lifts = _lifts(on_edge, to_screen, near, 280)
+    assert lifts[2] < lifts[1] < lifts[0]
+    # 실제로 같은 높이로 올린 직선 위 세 점은 화면에서도 한 직선 위에 있다
+    tops = _to_screen(on_edge, to_screen) - np.c_[np.zeros(3), lifts]
+    (ax, ay), (bx, by) = tops[1] - tops[0], tops[2] - tops[0]
+    assert abs(ax * by - ay * bx) < 1e-3 * np.hypot(bx, by) ** 2
 
 
 def test_파손_변_1개는_양_끝이_바깥으로_벌어진다():
