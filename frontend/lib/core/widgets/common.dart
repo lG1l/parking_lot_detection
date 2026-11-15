@@ -204,7 +204,12 @@ class PageFrame extends StatelessWidget {
     }
     // 흰 바탕 + 파란 빛 번짐 두 개가 맨 뒤에 깔린다 (D-305)
     return Scaffold(
-      body: Stack(children: [const Positioned.fill(child: PageGlow()), body]),
+      body: Stack(
+        children: [
+          const Positioned.fill(child: PageGlow()),
+          body,
+        ],
+      ),
     );
   }
 
@@ -359,12 +364,7 @@ class _TopBar extends ConsumerWidget {
               fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
             ),
           ),
-          child: Badge.count(
-            count: badge,
-            isLabelVisible: badge > 0,
-            offset: const Offset(12, -6),
-            child: Text(label),
-          ),
+          child: Badge.count(count: badge, isLabelVisible: badge > 0, offset: const Offset(12, -6), child: Text(label)),
         ),
       );
     }
@@ -444,7 +444,12 @@ class _Logo extends StatelessWidget {
 /// 구역 틀. 새 컨셉에서는 상자·그림자 없이 위쪽 1px 연한 선으로 구역을 나눈다 (D-305).
 /// [border]를 주면 그 테두리의 상자(모서리 16)로 그린다 (예: 고정한 후보).
 class PageCard extends StatelessWidget {
-  const PageCard({super.key, required this.child, this.padding = const EdgeInsets.symmetric(vertical: 24), this.border});
+  const PageCard({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.symmetric(vertical: 24),
+    this.border,
+  });
 
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -456,7 +461,9 @@ class PageCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: border == null ? padding : const EdgeInsets.all(20),
     decoration: border == null
-        ? const BoxDecoration(border: Border(top: BorderSide(color: lineColor)))
+        ? const BoxDecoration(
+            border: Border(top: BorderSide(color: lineColor)),
+          )
         : BoxDecoration(borderRadius: BorderRadius.circular(cardRadius), border: border),
     // 안의 목록 줄·버튼 물결이 바탕에 가리지 않게 한다
     child: Material(type: MaterialType.transparency, child: child),
@@ -573,54 +580,58 @@ class Notice extends StatelessWidget {
   }
 }
 
-/// 카드 안 "이름 | 값" 한 줄 (캔버스 `.kv`). 줄 사이는 위쪽 1px 선이고 첫 줄은 선이 없다.
+/// "이름 | 값 | (버튼)" 한 줄. 아래 1px 연한 선(`hair`), 이름은 작은 소제목 글자, 값은 17px 600 (캔버스 새 컨셉, D-305).
 class KeyValueRow extends StatelessWidget {
-  const KeyValueRow({super.key, required this.label, required this.value, this.first = false});
+  const KeyValueRow({super.key, required this.label, required this.value});
 
   final String label;
   final Widget value;
-  final bool first;
 
   @override
   Widget build(BuildContext context) => Container(
-    constraints: const BoxConstraints(minHeight: 52),
-    padding: const EdgeInsets.symmetric(vertical: 6),
-    decoration: BoxDecoration(
-      border: first ? null : const Border(top: BorderSide(color: lineColor)),
+    padding: const EdgeInsets.symmetric(vertical: 14),
+    decoration: const BoxDecoration(
+      border: Border(bottom: BorderSide(color: lineColor)),
     ),
     child: Row(
       children: [
         SizedBox(
-          width: 160,
-          child: Text(label, style: const TextStyle(fontSize: 15, color: subColor)),
+          width: isNarrow(context) ? 112 : 200,
+          child: Text(label, style: kickerStyle),
         ),
-        Expanded(child: value),
+        Expanded(
+          child: DefaultTextStyle.merge(
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            child: value,
+          ),
+        ),
       ],
     ),
   );
 }
 
-/// 카드 안 "이름 ··· 고르기" 한 줄 (캔버스 `.opt`). 줄 전체를 눌러도 고른다.
+/// "이름 ··· ›" 한 줄. 아래 연한 선이 있고 줄 전체를 눌러 고른다 (캔버스 새 컨셉, D-305).
 class OptionRow extends StatelessWidget {
-  const OptionRow({super.key, required this.label, required this.trailing, required this.onTap, this.first = false});
+  const OptionRow({super.key, required this.label, required this.onTap});
 
   final String label;
-  final Widget trailing;
   final VoidCallback onTap;
-  final bool first;
 
   @override
   Widget build(BuildContext context) => InkWell(
     onTap: onTap,
     child: Container(
-      constraints: const BoxConstraints(minHeight: 52),
-      decoration: BoxDecoration(
-        border: first ? null : const Border(top: BorderSide(color: lineColor)),
+      constraints: const BoxConstraints(minHeight: 60),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: lineColor)),
       ),
       child: Row(
         children: [
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 15))),
-          trailing,
+          Expanded(
+            child: Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          ),
+          const Text('›', style: TextStyle(fontSize: 20, color: progressColor)),
         ],
       ),
     ),
