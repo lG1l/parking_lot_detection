@@ -42,7 +42,7 @@ class StillOverlay {
 /// 원본 크기 [natural]의 이미지를 주어진 폭 안에 비율을 지켜 보여주고, 입력을 원본 좌표로 넘긴다.
 /// 표시 영역을 이미지 크기에 딱 맞추므로 여백이 없고, 화면 좌표 ÷ 배율 = 원본 좌표다 (05장 5.6·5.7).
 ///
-/// 오른쪽 위 돋보기 [+]·[−]로 사진을 확대한다 (D-286). 표시 영역의 크기는 그대로이고, 그 안에서 사진만
+/// 오른쪽 위 돋보기 [+]·[−]로 사진을 확대한다 (D-290). 표시 영역의 크기는 그대로이고, 그 안에서 사진만
 /// 커져 잘려 보인다. 확대한 상태에서는 드래그로 사진을 옮긴다. 파손 부위를 드래그하는 단계([onDragStart]가
 /// 있을 때)만은 드래그가 사각형 그리기이므로 사진이 옮겨지지 않는다.
 /// 확대·이동 중에도 누른 위치는 (화면 좌표 + 이동량) ÷ (배율 × 확대) = 원본 좌표로 바꿔 넘긴다.
@@ -78,7 +78,7 @@ class StillCanvas extends StatefulWidget {
   State<StillCanvas> createState() => _StillCanvasState();
 }
 
-/// 확대 단계. [+]·[−]를 누를 때마다 한 단계씩 움직인다 (D-286).
+/// 확대 단계. [+]·[−]를 누를 때마다 한 단계씩 움직인다 (D-290).
 const stillZoomLevels = [1.0, 1.5, 2.0, 3.0, 4.0];
 
 class _StillCanvasState extends State<StillCanvas> {
@@ -252,7 +252,7 @@ class _StillCanvasState extends State<StillCanvas> {
   }
 }
 
-/// 사진 오른쪽 위의 돋보기 [+]·[−]. 반투명 흰 바탕에 지금 배율을 함께 보인다 (D-286).
+/// 사진 오른쪽 위의 돋보기 [+]·[−]. 반투명 흰 바탕에 지금 배율을 함께 보인다 (D-290).
 class _ZoomButtons extends StatelessWidget {
   const _ZoomButtons({required this.zoom, required this.onZoomIn, required this.onZoomOut});
 
@@ -329,7 +329,7 @@ class _OverlayPainter extends CustomPainter {
     if (damage != null) {
       final r = _rect(damage);
       if (o.damageCornersOnly) {
-        // 그리는 단계: 네 모서리 안을 옅은 빨강으로 채우고 빨간 네 모서리를 그린다 (D-289)
+        // 그리는 단계: 네 모서리 안을 옅은 빨강으로 채우고 빨간 네 모서리를 그린다 (D-293)
         canvas.drawRect(r, Paint()..color = damageDragColor.withValues(alpha: 0.2));
         _cornerMarks(canvas, r);
       } else {
@@ -348,7 +348,7 @@ class _OverlayPainter extends CustomPainter {
     for (var i = 0; i < (n == 4 ? 4 : n - 1); i++) {
       final a = _off(o.corners[i]);
       final b = _off(o.corners[(i + 1) % n]);
-      // 선은 굵기 2(변을 고르는 단계는 3), 번짐 7로 얇게 그린다 (D-288)
+      // 선은 굵기 2(변을 고르는 단계는 3), 번짐 7로 얇게 그린다 (D-292)
       canvas.drawLine(
         a,
         b,
@@ -367,7 +367,7 @@ class _OverlayPainter extends CustomPainter {
       );
     }
     if (n == 4) {
-      // 고른 변은 형광 선: 파손 변은 빨간 형광, 앞쪽 변은 초록 형광 (D-288)
+      // 고른 변은 형광 선: 파손 변은 빨간 형광, 앞쪽 변은 초록 형광 (D-292)
       for (final i in o.edges) {
         _neonLine(canvas, _off(o.corners[i]), _off(o.corners[(i + 1) % 4]), chosenEdgeColor);
       }
@@ -384,7 +384,7 @@ class _OverlayPainter extends CustomPainter {
       }
     }
     // 찍은 점은 번호 없이 점만 그린다 (D-232). 파랑 점에 흰 테두리, 둘레에 옅은 빛 번짐 (캔버스, D-237).
-    // 점이 사진을 덜 가리도록 지름 10·번짐 20으로 줄였다 (D-287)
+    // 점이 사진을 덜 가리도록 지름 10·번짐 20으로 줄였다 (D-291)
     for (final corner in o.corners) {
       final c = _off(corner);
       canvas.drawCircle(c, 10, Paint()..color = cornerColor.withValues(alpha: _glowAlpha));
@@ -426,7 +426,7 @@ class _OverlayPainter extends CustomPainter {
     }
   }
 
-  /// 형광 선: 흐린 넓은 빛(굵기 14) 위에 진한 선(굵기 4), 가운데 옅은 흰 줄(굵기 1.5)을 겹친다 (D-288).
+  /// 형광 선: 흐린 넓은 빛(굵기 14) 위에 진한 선(굵기 4), 가운데 옅은 흰 줄(굵기 1.5)을 겹친다 (D-292).
   void _neonLine(Canvas canvas, Offset a, Offset b, Color color, {bool dashed = false}) {
     void line(Paint p) => dashed ? _dashedLine(canvas, a, b, p) : canvas.drawLine(a, b, p);
     line(

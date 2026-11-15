@@ -20,7 +20,7 @@ const noteColor = Color(0xFF555555);
 const vehicleColor = Color(0xFFFACC15);
 const damageColor = Color(0xFFC2410C);
 const floorEdgeColor = Color(0xFFFFFFFF); // 바닥 모서리 점 테두리
-// 고른 변은 형광 선으로 그린다 (D-288): 파손 변은 빨간 형광, 차 앞쪽 변은 초록 형광 (D-212)
+// 고른 변은 형광 선으로 그린다 (D-292): 파손 변은 빨간 형광, 차 앞쪽 변은 초록 형광 (D-212)
 const chosenEdgeColor = Color(0xFFFF2D3D);
 const frontEdgeColor = Color(0xFF22E55F);
 // 바닥 네 모서리 점·연결선은 밝은 파랑에 옅은 빛 번짐, 드래그 중인 파손 부위는 빨간 네 모서리만 (D-237)

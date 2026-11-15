@@ -27,7 +27,7 @@ GoRouter createRouter({String initialLocation = '/'}) => GoRouter(
     GoRoute(path: '/videos', builder: (_, _) => const VideoListPage()),
     // 피해자 계정: 사건 초대 수락 (D-233)
     GoRoute(path: '/notifications', builder: (_, _) => const NotificationsPage()),
-    // 두 계정: 설정 (마이페이지 + 환경설정, D-284). 옛 마이페이지 주소는 설정으로 보낸다
+    // 두 계정: 설정 (마이페이지 + 환경설정, D-288). 옛 마이페이지 주소는 설정으로 보낸다
     GoRoute(path: '/mypage', redirect: (_, _) => '/settings'),
     GoRoute(path: '/settings', builder: (_, _) => const SettingsPage()),
     // 관리자 계정: 사건 관계자 연결(21번) → 그 사건의 업로드 (D-204)
