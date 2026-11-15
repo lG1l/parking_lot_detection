@@ -207,26 +207,22 @@ class _VideoListPageState extends ConsumerState<VideoListPage> {
               child: Center(child: CircularProgressIndicator()),
             )
           : all!.isEmpty
-          ? StateCard(
-              icon: Icons.videocam_outlined,
+          ? _EmptyNote(
               title: admin ? '아직 사건이 없습니다' : '아직 올라온 영상이 없습니다',
               messages: [
-                admin
-                    ? '상단의 [사건 관계자 연결]에서 피해자 계정을 연결해 주세요.\n연결하면 사건이 만들어지고, 그 사건에 CCTV 영상을 올릴 수 있습니다.'
-                    : '주차장 관리자에게 문의해 주세요.',
+                admin ? '상단의 [사건 관계자 연결]에서 피해자 계정을 연결해 주세요.' : '주차장 관리자에게 문의해 주세요.',
+                if (admin) '연결하면 사건이 만들어지고, 그 사건에 CCTV 영상을 올릴 수 있습니다.',
               ],
+              action: admin
+                  ? FilledButton(onPressed: () => context.go('/cases/new'), child: const Text('사건 관계자 연결'))
+                  : null,
             )
           : rows.isEmpty
-          ? StateCard(
-              icon: Icons.search,
-              title: '검색 결과가 없습니다',
-              messages: ['‘$query’와 일치하는 사건 이름이 없습니다.\n이름을 다시 확인해 주세요.'],
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (!_folded(context)) _HeaderRow(admin: admin),
-                for (final r in orderRows(rows)) ...[
+          ? _EmptyNote(title: '검색 결과가 없습니다', messages: ['‘$query’와 일치하는 사건 이름이 없습니다.\n이름을 다시 확인해 주세요.'])
+          : LineTable(
+              header: _folded(context) ? null : _HeaderRow(admin: admin),
+              rows: [
+                for (final r in orderRows(rows))
                   _VideoRow(
                     r,
                     admin: admin,
@@ -234,8 +230,6 @@ class _VideoListPageState extends ConsumerState<VideoListPage> {
                     onRename: _actionsOf(r) ? () => _rename(r.videoCase!) : null,
                     onDelete: _actionsOf(r) ? () => _delete(r) : null,
                   ),
-                  const SizedBox(height: 8),
-                ],
               ],
             ),
     );
@@ -326,23 +320,20 @@ class _HeaderRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final labels = ['사건 이름', admin ? '피해자' : '관리자', '상태', '열람기한'];
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 4),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 32),
-        child: Row(
-          children: [
-            for (final (i, label) in labels.indexed)
-              Expanded(
-                flex: _columnFlex[i],
-                child: _fit(
-                  Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: noteColor)),
-                ),
+    return Row(
+      children: [
+        for (final (i, label) in labels.indexed)
+          Expanded(
+            flex: _columnFlex[i],
+            child: _fit(
+              Text(
+                label,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: subColor),
               ),
-            const SizedBox(width: _deleteColumnWidth),
-          ],
-        ),
-      ),
+            ),
+          ),
+        const SizedBox(width: _deleteColumnWidth),
+      ],
     );
   }
 }
@@ -393,7 +384,7 @@ class _VideoRow extends StatelessWidget {
         runSpacing: 6,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          _StatusChip(row, admin: admin),
+          _StatusText(row, admin: admin),
           if (_person.isNotEmpty) SmallText('${admin ? '피해자' : '관리자'} $_person'),
           SmallText(expires == null ? '열람기한: 업로드 완료 후 정해집니다' : '열람기한 ${formatKstDate(expires)}'),
         ],
@@ -404,59 +395,41 @@ class _VideoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final expires = row.video?.viewExpiresAt;
-    return Container(
-      decoration: BoxDecoration(
-        color: offWhiteColor,
-        borderRadius: BorderRadius.circular(cardRadius),
-        border: Border.all(color: lineColor),
-        boxShadow: cardShadow,
-      ),
-      child: Material(
-        type: MaterialType.transparency,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(cardRadius),
-          onTap: onTap,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 56),
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(isNarrow(context) ? 16 : 24, 6, isNarrow(context) ? 8 : 16, 6),
-              child: _folded(context)
-                  ? _narrow(expires)
-                  : Row(
-                      children: [
-                        Expanded(flex: _columnFlex[0], child: _name),
-                        Expanded(
-                          flex: _columnFlex[1],
-                          child: Text(_person, style: const TextStyle(fontSize: 15)),
-                        ),
-                        Expanded(
-                          flex: _columnFlex[2],
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: _fit(_StatusChip(row, admin: admin)),
-                          ),
-                        ),
-                        // 날짜만 보인다. 시각까지는 상태 화면에서 본다 (D-190)
-                        Expanded(
-                          flex: _columnFlex[3],
-                          child: expires == null
-                              ? const SmallText('업로드 완료 후 정해집니다')
-                              : _fit(Text(formatKstDate(expires), style: const TextStyle(fontSize: 15))),
-                        ),
-                        _deleteButton,
-                      ],
-                    ),
+    return LineRow(
+      onTap: onTap,
+      child: _folded(context)
+          ? _narrow(expires)
+          : Row(
+              children: [
+                Expanded(flex: _columnFlex[0], child: _name),
+                Expanded(
+                  flex: _columnFlex[1],
+                  child: Text(_person, style: const TextStyle(fontSize: 15)),
+                ),
+                Expanded(
+                  flex: _columnFlex[2],
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: _fit(_StatusText(row, admin: admin)),
+                  ),
+                ),
+                // 날짜만 보인다. 시각까지는 상태 화면에서 본다 (D-190)
+                Expanded(
+                  flex: _columnFlex[3],
+                  child: expires == null
+                      ? const SmallText('업로드 완료 후 정해집니다')
+                      : _fit(Text(formatKstDate(expires), style: const TextStyle(fontSize: 15))),
+                ),
+                _deleteButton,
+              ],
             ),
-          ),
-        ),
-      ),
     );
   }
 }
 
-/// 상태별 색·아이콘 칩 (D-183, D-190). 색은 캔버스 색상표의 쓰임을 따르고, 크기는 캔버스 `.tag`다 (D-237).
-class _StatusChip extends StatelessWidget {
-  const _StatusChip(this.row, {required this.admin});
+/// 상태 점 + 글자 (D-305). 글자는 07장 2.2 그대로이고, 점 색은 [StatusDot]이 글자로 고른다.
+class _StatusText extends StatelessWidget {
+  const _StatusText(this.row, {required this.admin});
 
   final ListRow row;
   final bool admin;
@@ -464,57 +437,47 @@ class _StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final video = row.video;
-    final pending = row.pending; // 수락 대기 중은 상태와 관계없이 기다림 색이다 (D-233)
-    final group = pending
-        ? StatusGroup.waiting
-        : video?.listGroup(admin: admin) ?? (admin ? StatusGroup.todo : StatusGroup.waiting);
-    final ended = group == StatusGroup.ended;
-    final (background, foreground) = switch (group) {
-      StatusGroup.todo => (pointColor, offWhiteColor),
-      StatusGroup.waiting => (progressChipColor, inkColor),
-      StatusGroup.done => (doneChipColor, offWhiteColor),
-      StatusGroup.problem => (failChipColor, offWhiteColor),
-      StatusGroup.ended => (lineColor, inkColor),
-    };
-    final icon = pending
-        ? Icons.hourglass_empty
+    final label =
+        row
+            .pending // 수락 대기 중은 상태와 관계없이 기다림이다 (D-233)
+        ? '수락 대기 중'
         : video == null
-        ? (admin ? Icons.upload_outlined : Icons.hourglass_empty)
-        : ended
-        ? Icons.inventory_2_outlined
-        : switch (video.status) {
-            VideoStatus.uploading => Icons.hourglass_empty,
-            VideoStatus.stillsRunning || VideoStatus.stage2Running => Icons.autorenew,
-            VideoStatus.stage1Done => Icons.edit_outlined,
-            VideoStatus.ready || VideoStatus.batchRunning => admin ? Icons.search : Icons.check_circle_outline,
-            VideoStatus.finished || VideoStatus.exhausted => Icons.push_pin_outlined,
-            VideoStatus.uploadFailed || VideoStatus.failed => Icons.priority_high,
-            _ => Icons.schedule,
-          };
-    return Container(
-      constraints: const BoxConstraints(minHeight: 36),
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(cardRadius)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: foreground),
-          const SizedBox(width: 8),
-          Text(
-            pending
-                ? '수락 대기 중'
-                : video == null
-                ? (admin ? '업로드 필요' : '업로드 중')
-                : video.listLabel(admin: admin),
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: foreground,
-              decoration: ended ? TextDecoration.lineThrough : null,
-            ),
-          ),
-        ],
-      ),
-    );
+        ? (admin ? '업로드 필요' : '업로드 중')
+        : video.listLabel(admin: admin);
+    final ended = !row.pending && video?.listGroup(admin: admin) == StatusGroup.ended;
+    return StatusDot(label, strike: ended);
   }
+}
+
+/// 비었을 때·검색 결과 없을 때 안내: 검은 윗선 아래 문장 + (있으면) 알약 버튼 (캔버스 `ListEmpty`).
+class _EmptyNote extends StatelessWidget {
+  const _EmptyNote({required this.title, required this.messages, this.action});
+
+  final String title;
+  final List<String> messages;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) => Align(
+    alignment: Alignment.topLeft,
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 620),
+      child: Container(
+        margin: const EdgeInsets.only(top: 12),
+        padding: const EdgeInsets.only(top: 28),
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: inkColor)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: 18,
+          children: [
+            Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+            for (final m in messages) Text(m, style: const TextStyle(fontSize: 16, height: 1.7, color: subColor)),
+            ?action,
+          ],
+        ),
+      ),
+    ),
+  );
 }
