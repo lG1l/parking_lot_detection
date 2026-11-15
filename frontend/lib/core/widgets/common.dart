@@ -29,6 +29,19 @@ Future<void> backendNotice(BuildContext context, WidgetRef ref, String action) a
 /// 지금 기록을 바꿔, 뒤로 가기가 사용자가 연 이전 화면으로 가게 한다 (D-185).
 void redirectTo(BuildContext context, String path) => Router.neglect(context, () => context.go(path));
 
+/// 로그아웃(2번)하고 로그인 화면으로 간다. 로그아웃은 [설정]의 보안 설정에만 있다 (D-284).
+Future<void> logout(BuildContext context, WidgetRef ref) async {
+  // 백엔드 연결 필요: 2번 로그아웃
+  await backendNotice(context, ref, '로그아웃');
+  try {
+    await ref.read(apiProvider).logout();
+  } on ApiException {
+    // 로그아웃은 실패해도 로그인 화면으로 간다
+  }
+  refreshSession(ref, account: true);
+  if (context.mounted) redirectTo(context, '/login');
+}
+
 /// 에러 문구를 스낵바로 보인다 (07장 3.1).
 void showMessage(BuildContext context, String message) {
   ScaffoldMessenger.of(context)
@@ -61,12 +74,13 @@ Future<bool> confirm(
   required String okLabel,
   String cancelLabel = '취소',
   String? title,
+  Widget? content, // 글자 크기를 섞어 보여야 할 때 message 대신 쓴다
 }) async {
   final ok = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
       title: title == null ? null : Text(title),
-      content: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 392), child: Text(message)),
+      content: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 392), child: content ?? Text(message)),
       actions: [
         OutlinedButton(onPressed: () => Navigator.pop(context, false), child: Text(cancelLabel)),
         FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(okLabel)),
@@ -81,14 +95,16 @@ const narrowWidth = 720.0;
 
 bool isNarrow(BuildContext context) => MediaQuery.sizeOf(context).width < narrowWidth;
 
-/// 이 폭보다 좁으면 상단 바 가운데 메뉴가 넘치지 않게 줄여 보인다. 메뉴가 5개(관리자는 6개)라 넓은 배치는 이 폭부터 쓴다 (D-236, D-243).
+/// 이 폭보다 좁으면 상단 바 가운데 메뉴가 넘치지 않게 줄여 보인다. 메뉴가 4개(관리자는 5개)라 넓은 배치는 이 폭부터 쓴다 (D-236, D-243, D-284).
 const topBarWideWidth = 1000.0;
 
 /// 상단 바 가운데 메뉴 (D-190, D-211). [link]는 관리자 계정에만 있고, [notifications]는 두 계정에 있다 (D-233, D-243).
-enum NavItem { info, videos, link, notifications, myPage, settings }
+/// [settings]는 마이페이지와 환경설정을 합친 [설정]이다 (D-284).
+enum NavItem { info, videos, link, notifications, settings }
 
 /// 화면 공통 틀. PC 브라우저 기준이라 가운데 최대 폭을 둔다.
-/// 상단 바는 왼쪽 로고 · 가운데 메뉴 · 오른쪽 로그아웃이고, 화면 제목은 본문 맨 위에 둔다 (D-190).
+/// 상단 바는 왼쪽 로고 · 가운데 메뉴 · 오른쪽 "관리자 계정"(관리자만)이고, 화면 제목은 본문 맨 위에 둔다 (D-190).
+/// 로그아웃은 상단 바에 두지 않고 [설정]에 둔다 (D-284).
 /// 메뉴는 관리자 계정이 [사건 목록]·[사건 관계자 연결], 피해자 계정이 [사건 목록]·[알림]이다 (D-211, D-233, D-237).
 class PageFrame extends StatelessWidget {
   const PageFrame({
@@ -244,18 +260,6 @@ class _TopBar extends ConsumerWidget {
     if (context.mounted) go();
   }
 
-  Future<void> _logout(BuildContext context, WidgetRef ref) async {
-    // 백엔드 연결 필요: 2번 로그아웃
-    await backendNotice(context, ref, '로그아웃');
-    try {
-      await ref.read(apiProvider).logout();
-    } on ApiException {
-      // 로그아웃은 실패해도 로그인 화면으로 간다
-    }
-    refreshSession(ref, account: true);
-    if (context.mounted) redirectTo(context, '/login');
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final me = ref.watch(meProvider).value;
@@ -298,30 +302,16 @@ class _TopBar extends ConsumerWidget {
         if (me != null) menu(NavItem.info, 'Info.', '/info'),
         menu(NavItem.videos, '사건 목록', '/videos'),
         if (admin) menu(NavItem.link, '사건 관계자 연결', '/cases/new'),
-        if (me != null) menu(NavItem.notifications, '알림', '/notifications', badge: badgeCount),
-        if (me != null) menu(NavItem.myPage, '마이페이지', '/mypage'),
-        if (me != null) menu(NavItem.settings, '환경설정', '/settings'),
+        if (me != null) menu(NavItem.notifications, '채팅', '/notifications', badge: badgeCount),
+        if (me != null) menu(NavItem.settings, '설정', '/settings'),
       ],
     );
-    // 관리자 계정이면 로그아웃 왼쪽에 "관리자 계정"을 보인다 (캔버스)
+    // 관리자 계정이면 오른쪽에 "관리자 계정"을 보인다 (캔버스). 로그아웃은 [설정]에 있다 (D-284)
     final account = admin && !isNarrow(context)
         ? const Text('관리자 계정', style: TextStyle(fontSize: 14, color: subColor))
         : null;
-    final logout = TextButton(
-      onPressed: () => _leave(context, () => _logout(context, ref)),
-      style: TextButton.styleFrom(
-        foregroundColor: inkColor,
-        textStyle: const TextStyle(
-          fontFamily: 'Pretendard',
-          fontSize: 16,
-          fontWeight: FontWeight.w400,
-          decoration: TextDecoration.underline,
-        ),
-      ),
-      child: const Text('로그아웃'),
-    );
     if (MediaQuery.sizeOf(context).width < topBarWideWidth) {
-      // 좁으면 로고 · 메뉴(넘치면 줄여 보임) · 로그아웃을 차례로 둔다
+      // 좁으면 로고 · 메뉴(넘치면 줄여 보임)를 차례로 둔다
       return Container(
         height: _barHeight,
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -332,7 +322,6 @@ class _TopBar extends ConsumerWidget {
             Expanded(
               child: FittedBox(fit: BoxFit.scaleDown, child: nav),
             ),
-            logout,
           ],
         ),
       );
@@ -356,7 +345,7 @@ class _TopBar extends ConsumerWidget {
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerRight,
-                child: Row(mainAxisSize: MainAxisSize.min, spacing: 20, children: [?account, logout]),
+                child: account ?? const SizedBox.shrink(),
               ),
             ),
           ),
