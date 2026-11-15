@@ -37,6 +37,22 @@ Map<String, Object?> case3() => {
   'created_at': '2026-11-01T14:03:00+09:00',
 };
 
+/// 29·30·31번의 메시지 한 건 (05장 5.12).
+Map<String, Object?> chatMsg(int id, String body, {required bool mine, String at = '2026-11-02T11:00:00+09:00'}) => {
+  'id': id,
+  'mine': mine,
+  'body': body,
+  'created_at': at,
+};
+
+/// 29번의 대화 상대 한 줄.
+Map<String, Object?> chatPeer(int userId, String name, {Map<String, Object?>? last, int unread = 0}) => {
+  'peer_user_id': userId,
+  'peer_name': name,
+  'last_message': last,
+  'unread': unread,
+};
+
 /// 위탁계약 체크 3개를 하고 [동의하고 영상 선택하기]를 누른다 (2.4).
 Future<void> agreeUpload(WidgetTester tester) async {
   for (final box in find.byType(CheckboxListTile).evaluate().toList()) {
@@ -303,6 +319,7 @@ void main() {
   });
 
   testWidgets('관리자 채팅은 피해자별로 묶고, 같은 피해자의 사건은 한 대화에 잇는다 (2.11)', (tester) async {
+    final first = chatMsg(1, '언제 올라오나요?', mine: false);
     final backend = FakeBackend({
       'GET /api/videos': (_) => json([]),
       'GET /api/cases': (_) => json({
@@ -312,33 +329,38 @@ void main() {
           {...case3(), 'id': 5, 'victim_name': 'victim03', 'created_at': '2026-11-03T09:00:00+09:00', 'accepted_at': null},
         ],
       }),
-      'GET /api/messages': (_) => json({
-        'items': [
-          {'id': 1, 'case_id': 3, 'sender_role': 'victim', 'body': '언제 올라오나요?', 'created_at': '2026-11-02T11:00:00+09:00'},
-        ],
+      // 22번에는 상대 계정 ID가 없어 이름으로 29번과 짝짓는다 (D-298). victim03은 수락한 사건이 없어 29번에 없다
+      'GET /api/chats': (_) => json({
+        'items': [chatPeer(12, 'victim02', last: first)],
+        'unread_total': 0,
       }),
+      'GET /api/chats/12/messages': (_) => json({'items': [first], 'has_more': false}),
+      'PUT /api/chats/12/read': (_) => json(null, 204),
     });
     await pumpApp(tester, backend, '/notifications');
     expect(find.text('victim03'), findsOneWidget);
     expect(find.text('victim02'), findsNWidgets(2)); // 왼쪽 한 줄 + 오른쪽 대화 제목 (최근 사람이 먼저)
     // 목록 요약은 "가장 최근 알림 · 가장 최근 채팅", 채팅이 없으면 알림만 (D-297)
     expect(find.text('연결 요청 · 언제 올라오나요?'), findsOneWidget);
+    expect(find.text('언제 올라오나요?'), findsOneWidget); // 30번 메시지가 대화에 보인다
     expect(find.text('연결 요청'), findsOneWidget);
     expect(find.text('2026-11-01'), findsOneWidget); // 사건 구분선은 날짜만
     expect(find.text('2026-11-05'), findsOneWidget);
     expect(find.text('첫 사건'), findsNWidgets(2)); // 연결 요청·연결 수락 카드의 작은 글씨는 사건 이름만
     expect(find.text('수락 대기 중'), findsNothing);
+    expect(backend.count('PUT /api/chats/12/read'), 1); // 그린 뒤 읽음으로 알린다
 
     await tester.tap(find.text('victim03'));
     await settle(tester);
     expect(find.text('첫 사건'), findsNothing);
     expect(find.text('연결을 요청했어요'), findsOneWidget);
+    expect(find.text('사건을 수락하면 메시지를 보낼 수 있습니다.'), findsOneWidget); // 29번에 없는 상대
+    expect(backend.screenCalls.where((c) => c.contains('/api/chats/') && c.contains('/messages')).length, 1);
   });
 
-  testWidgets('채팅은 기존 메시지를 좌우로 나눠 보이고, 보내면 30번 뒤 29번을 다시 읽는다 (2.11, D-297)', (tester) async {
-    final sent = <Map<String, Object?>>[
-      {'id': 1, 'case_id': 3, 'sender_role': 'admin', 'body': '영상을 올렸습니다', 'created_at': '2026-11-02T10:00:00+09:00'},
-    ];
+  testWidgets('채팅은 기존 메시지를 좌우로 나눠 보이고, 보내면 31번 뒤 29번을 다시 읽는다 (2.11, D-298)', (tester) async {
+    final messages = <Map<String, Object?>>[chatMsg(1, '영상을 올렸습니다', mine: false, at: '2026-11-02T10:00:00+09:00')];
+    Object? readBody;
     final backend = FakeBackend({
       'GET /api/videos': (_) => json([]),
       'GET /api/cases': (_) => json({
@@ -346,34 +368,40 @@ void main() {
           {...case3(), 'accepted_at': '2026-11-02T09:00:00+09:00'},
         ],
       }),
-      'GET /api/messages': (_) => json({'items': sent}),
-      'POST /api/cases/3/messages': (req) {
-        final m = {
-          'id': 2,
-          'case_id': 3,
-          'sender_role': 'victim',
-          'body': (jsonDecode(req.body) as Map)['body'],
-          'created_at': '2026-11-02T10:05:00+09:00',
-        };
-        sent.add(m);
+      'GET /api/chats': (_) => json({
+        'items': [chatPeer(1, 'parking_admin', last: messages.last)],
+        'unread_total': 0,
+      }),
+      'GET /api/chats/1/messages': (_) => json({'items': messages, 'has_more': false}),
+      'POST /api/chats/1/messages': (req) {
+        final m = chatMsg(2, (jsonDecode(req.body) as Map)['body'] as String, mine: true, at: '2026-11-02T10:05:00+09:00');
+        messages.add(m);
         return json(m, 201);
+      },
+      'PUT /api/chats/1/read': (req) {
+        readBody = jsonDecode(req.body);
+        return json(null, 204);
       },
     }, role: 'victim');
     await pumpApp(tester, backend, '/notifications');
     expect(find.text('영상을 올렸습니다'), findsOneWidget);
     // 상대 말풍선은 왼쪽에 있다
     expect(tester.getTopLeft(find.text('영상을 올렸습니다')).dx, lessThan(tester.view.physicalSize.width / 2));
+    expect(readBody, {'last_read_message_id': 1}); // 보인 메시지 중 가장 큰 id
 
+    final peersBefore = backend.count('GET /api/chats');
     await tester.enterText(find.byType(TextField), '확인했습니다');
     await tester.tap(find.widgetWithText(FilledButton, '보내기'));
     await settle(tester);
-    expect(backend.count('POST /api/cases/3/messages'), 1);
+    expect(backend.count('POST /api/chats/1/messages'), 1);
+    expect(backend.count('GET /api/chats'), greaterThan(peersBefore));
     expect(find.text('확인했습니다'), findsOneWidget);
     // 내 말풍선은 오른쪽에 있다
     expect(tester.getTopLeft(find.text('확인했습니다')).dx, greaterThan(tester.view.physicalSize.width / 2));
   });
 
   testWidgets('메시지가 많아도 입력칸은 화면 아래에 고정되어 보인다 (2.11, D-297)', (tester) async {
+    final all = [for (var i = 1; i <= 40; i++) chatMsg(i, '메시지 $i', mine: false, at: '2026-11-02T10:00:00+09:00')];
     final backend = FakeBackend({
       'GET /api/videos': (_) => json([]),
       'GET /api/cases': (_) => json({
@@ -381,12 +409,12 @@ void main() {
           {...case3(), 'accepted_at': '2026-11-02T09:00:00+09:00'},
         ],
       }),
-      'GET /api/messages': (_) => json({
-        'items': [
-          for (var i = 1; i <= 40; i++)
-            {'id': i, 'case_id': 3, 'sender_role': 'admin', 'body': '메시지 $i', 'created_at': '2026-11-02T10:00:00+09:00'},
-        ],
+      'GET /api/chats': (_) => json({
+        'items': [chatPeer(1, 'parking_admin', last: all.last)],
+        'unread_total': 0,
       }),
+      'GET /api/chats/1/messages': (_) => json({'items': all, 'has_more': true}),
+      'PUT /api/chats/1/read': (_) => json(null, 204),
     }, role: 'victim');
     await pumpApp(tester, backend, '/notifications');
     final screenHeight = tester.view.physicalSize.height / tester.view.devicePixelRatio;

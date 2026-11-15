@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
 import '../../core/api/api.dart';
+import '../../core/api/api_error.dart';
 import '../../core/format.dart';
 import '../../core/constants.dart';
 import '../../core/models/account.dart';
@@ -11,6 +12,7 @@ import '../../core/models/message.dart';
 import '../../core/models/video.dart';
 import '../../core/session.dart';
 import '../../core/widgets/common.dart';
+import 'chat_rules.dart';
 import 'notification_rules.dart';
 
 /// 2.11 채팅 (두 계정). 왼쪽은 상대 계정(관리자 화면은 피해자, 피해자 화면은 관리자),
@@ -25,25 +27,28 @@ class NotificationsPage extends ConsumerStatefulWidget {
   ConsumerState<NotificationsPage> createState() => _NotificationsPageState();
 }
 
-/// 한 상대 계정과 묶인 사건들. 22번에 상대 계정 ID가 없어 지금은 이름으로 묶는다.
+/// 한 상대 계정과 묶인 사건들. 22번에 상대 계정 ID가 없어 지금은 이름으로 묶고, 29번 대화 상대([peer])를 이름으로 짝짓는다.
+/// 사건을 모두 숨긴 상대는 [cases]가 비고 [peer]만 있다. 수락한 사건이 없어 29번에 없는 상대는 [peer]가 null이다 (D-298).
 class _Person {
-  _Person(this.name, this.cases);
+  _Person(this.name, this.cases, this.peer);
 
   final String name;
 
   /// 오래된 사건부터 (대화는 위에서 아래로 시간 순).
   final List<VideoCase> cases;
+  final ChatPeer? peer;
 
-  String get latestAt => cases.last.createdAt;
+  /// 목록에 보일 가장 최근 시각. 사건이 있으면 연결 시각, 없으면 마지막 메시지 시각이다.
+  String? get latestAt => cases.isNotEmpty ? cases.last.createdAt : peer?.lastMessage?.createdAt;
 }
 
 class _NotificationsPageState extends ConsumerState<NotificationsPage> {
-  List<_Person>? _people;
+  List<VideoCase>? _cases; // 22번. null이면 아직 읽는 중
+  List<ChatPeer> _peers = []; // 29번
   List<VideoSummary> _videos = [];
   bool _admin = false;
-  Me? _me;
-  final _chat = <ChatMessage>[]; // Todo 3에서 30번 결과로 바꾼다
-  final _sending = false; // Todo 3에서 31번 보내는 동안 true로 바꾼다
+  List<ChatMessage> _chat = []; // 고른 사람과의 최근 메시지 (30번)
+  bool _sending = false;
   final _input = TextEditingController();
   String? _selected;
   final _accepting = <int>{}; // [수락]을 누른 사건. 다시 누르지 못하게 막는다
@@ -60,8 +65,77 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     super.dispose();
   }
 
-  /// 메시지 보내기. 29~32번 연결은 Todo 3에서 붙인다 (임시 API는 지웠다).
-  Future<void> _send(VideoCase target) async {}
+  /// 29번 대화 목록. 못 읽으면(서버에 아직 없을 수 있다) 비워 두고 알림 카드는 그대로 보인다.
+  Future<void> _loadPeers() async {
+    var peers = <ChatPeer>[];
+    try {
+      peers = (await ref.read(apiProvider).chats()).items; // 29
+    } catch (_) {}
+    if (mounted) setState(() => _peers = peers);
+  }
+
+  /// 고른 사람의 최근 메시지를 읽고(30번), 화면에 그린 뒤 읽음으로 알린다(32번) (D-298).
+  Future<void> _openChat(String? name) async {
+    final peer = name == null ? null : peerOf(name, _peers);
+    if (peer == null) {
+      if (mounted) setState(() => _chat = []);
+      return;
+    }
+    try {
+      final messages = await ref.read(apiProvider).chatMessages(peer.peerUserId); // 30
+      if (!mounted || _selected != name) return; // 그 사이 다른 사람을 골랐다
+      setState(() => _chat = messages);
+      WidgetsBinding.instance.addPostFrameCallback((_) => _markRead(peer, messages));
+    } catch (e) {
+      if (!mounted) return;
+      if (e is ApiException && e.code == 'CHAT_NOT_FOUND') {
+        await _loadPeers(); // 없는 대화다. 목록을 새로 그린다 (D-287)
+      } else {
+        handleCommonError(context, e);
+      }
+    }
+  }
+
+  /// 보인 메시지 중 가장 큰 id까지 읽음으로 알린다. 실패하면 조용히 넘어간다(다음에 열 때 다시 처리, D-289).
+  Future<void> _markRead(ChatPeer peer, List<ChatMessage> shown) async {
+    if (shown.isEmpty) return;
+    final lastId = shown.map((m) => m.id).reduce((a, b) => a > b ? a : b);
+    try {
+      await ref.read(apiProvider).markChatRead(peer.peerUserId, lastId); // 32
+    } catch (_) {
+      return;
+    }
+    await _loadPeers();
+  }
+
+  void _select(_Person p) {
+    setState(() => _selected = p.name);
+    _openChat(p.name);
+  }
+
+  /// 메시지 보내기 (31번). 응답 메시지를 대화에 합치고, 목록 요약을 위해 29번을 다시 읽는다.
+  Future<void> _send(ChatPeer peer) async {
+    final text = _input.text.trim();
+    if (text.isEmpty || text.length > maxMessageLength || _sending) return;
+    setState(() => _sending = true);
+    try {
+      final sent = await ref.read(apiProvider).sendChat(peer.peerUserId, text); // 31
+      if (!mounted) return;
+      _input.clear();
+      final current = _selected == null ? null : peerOf(_selected!, _peers);
+      if (current?.peerUserId == peer.peerUserId) setState(() => _chat = mergeMessages(_chat, [sent]));
+      await _loadPeers();
+    } catch (e) {
+      if (!mounted) return;
+      if (e is ApiException && e.code == 'CHAT_NOT_FOUND') {
+        await _loadPeers();
+      } else {
+        handleCommonError(context, e);
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
 
   Future<void> _load() async {
     final api = ref.read(apiProvider);
@@ -73,19 +147,24 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       try {
         videos = await api.videos(); // 8. 못 읽으면 초대 알림만 보인다
       } catch (_) {}
+      var peers = <ChatPeer>[];
+      try {
+        peers = (await api.chats()).items; // 29. 못 읽으면 채팅 부분만 빈다
+      } catch (_) {}
       refreshSession(ref); // 메뉴 배지 수도 다시 센다
       if (!mounted) return;
       setState(() {
         _admin = admin;
-        _me = me;
         _videos = videos;
-        final people = _grouped(cases);
-        _people = people;
+        _cases = cases;
+        _peers = peers;
+        final people = _grouped();
         // 처음은 맨 위 사람이다(피해자는 수락할 초대가 있는 관리자가 맨 위에 온다)
         if (_selected == null || !people.any((p) => p.name == _selected)) {
           _selected = people.firstOrNull?.name;
         }
       });
+      await _openChat(_selected);
     } catch (e) {
       if (mounted) handleCommonError(context, e);
     }
@@ -97,19 +176,24 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   bool _needsAction(VideoCase c) =>
       _admin ? adminTodoCount(_videos.where((v) => v.caseId == c.id).toList()) > 0 : c.pending;
 
-  /// 상대 계정별로 묶는다. 할 일이 있는 사람이 먼저이고, 그다음 최근에 연결한 사람 순이다.
-  List<_Person> _grouped(List<VideoCase> cases) {
+  /// 상대 계정별로 묶는다. 할 일이 있는 사람이 먼저이고, 그다음 최근 시각 순이다.
+  /// 29번에만 있는 상대(사건을 모두 숨긴 경우)도 한 줄로 붙인다 (D-298).
+  List<_Person> _grouped() {
     final byName = <String, List<VideoCase>>{};
-    for (final c in cases) {
+    for (final c in _cases ?? <VideoCase>[]) {
       byName.putIfAbsent(_nameOf(c), () => []).add(c);
     }
+    for (final p in _peers) {
+      byName.putIfAbsent(p.peerName, () => []);
+    }
     final people = [
-      for (final e in byName.entries) _Person(e.key, e.value..sort((a, b) => a.createdAt.compareTo(b.createdAt))),
+      for (final e in byName.entries)
+        _Person(e.key, e.value..sort((a, b) => a.createdAt.compareTo(b.createdAt)), peerOf(e.key, _peers)),
     ];
     bool first(_Person p) => p.cases.any(_needsAction);
     return people..sort((a, b) {
       if (first(a) != first(b)) return first(a) ? -1 : 1;
-      return b.latestAt.compareTo(a.latestAt);
+      return (b.latestAt ?? '').compareTo(a.latestAt ?? '');
     });
   }
 
@@ -133,16 +217,16 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   List<NoticeMessage> _messagesOf(VideoCase c) => messagesOf(c, _videos, admin: _admin);
 
   /// 왼쪽 목록 한 줄의 요약: "가장 최근 알림 · 가장 최근 채팅" (D-297).
-  /// 알림은 가장 최근 사건의 마지막 알림을 짧은 상태 이름으로, 채팅은 내용 전부다. 채팅이 없으면 알림만.
+  /// 알림은 가장 최근 사건의 마지막 알림을 짧은 상태 이름으로, 채팅은 29번의 마지막 메시지 내용 전부다. 없는 쪽은 뺀다.
   String _summaryOf(_Person p) {
-    final notice = noticeLabel(_messagesOf(p.cases.last).last);
-    return notice; // 최근 채팅 요약은 Todo 3에서 29번으로 붙인다
+    final notice = p.cases.isEmpty ? null : noticeLabel(_messagesOf(p.cases.last).last);
+    final chat = p.peer?.lastMessage?.body;
+    return [?notice, ?chat].join(' · ');
   }
 
   @override
   Widget build(BuildContext context) {
-    final people = _people;
-    if (people == null) {
+    if (_cases == null) {
       return const PageFrame(
         current: NavItem.notifications,
         child: Padding(
@@ -151,6 +235,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         ),
       );
     }
+    final people = _grouped();
     if (people.isEmpty) {
       return const PageFrame(
         current: NavItem.notifications,
@@ -164,7 +249,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       people: people,
       selectedName: selected.name,
       summaryOf: _summaryOf,
-      onSelect: (p) => setState(() => _selected = p.name),
+      onSelect: _select,
     );
     final talk = _Conversation(
       person: selected,
@@ -173,8 +258,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       accepting: _accepting,
       onAccept: _accept,
       chat: _chat,
-      me: _me,
-      target: selected.cases.where((c) => !c.pending).lastOrNull,
+      peer: selected.peer,
       input: _input,
       sending: _sending,
       onSend: _send,
@@ -253,7 +337,7 @@ class _PersonList extends StatelessWidget {
                           Expanded(
                             child: Text(p.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                           ),
-                          SmallText(formatKstMinute(p.latestAt).substring(5)), // "MM-DD HH:mm"
+                          if (p.latestAt case final at?) SmallText(formatKstMinute(at).substring(5)), // "MM-DD HH:mm"
                         ],
                       ),
                       // 시간 아래까지 한 줄을 다 쓰고, 넘치면 "..."로 줄인다 (D-297)
@@ -283,8 +367,7 @@ class _Conversation extends StatelessWidget {
     required this.accepting,
     required this.onAccept,
     required this.chat,
-    required this.me,
-    required this.target,
+    required this.peer,
     required this.input,
     required this.sending,
     required this.onSend,
@@ -296,11 +379,12 @@ class _Conversation extends StatelessWidget {
   final Set<int> accepting;
   final ValueChanged<VideoCase> onAccept;
   final List<ChatMessage> chat;
-  final Me? me;
-  final VideoCase? target;
+
+  /// 29번의 이 사람. null이면 수락한 사건이 없어 보낼 수 없다.
+  final ChatPeer? peer;
   final TextEditingController input;
   final bool sending;
-  final ValueChanged<VideoCase> onSend;
+  final ValueChanged<ChatPeer> onSend;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -323,7 +407,7 @@ class _Conversation extends StatelessWidget {
           ),
         ),
       ),
-      _Composer(target: target, input: input, sending: sending, onSend: onSend),
+      _Composer(peer: peer, input: input, sending: sending, onSend: onSend),
     ],
   );
 
@@ -505,18 +589,18 @@ class _Bubble extends StatelessWidget {
   }
 }
 
-/// 메시지 입력칸 + [보내기]. 수락한 사건이 없으면([target]이 null) 막고 안내한다 (D-297).
+/// 메시지 입력칸 + [보내기]. 수락한 사건이 없으면([peer]가 null) 막고 안내한다 (D-297).
 class _Composer extends StatelessWidget {
-  const _Composer({required this.target, required this.input, required this.sending, required this.onSend});
+  const _Composer({required this.peer, required this.input, required this.sending, required this.onSend});
 
-  final VideoCase? target;
+  final ChatPeer? peer;
   final TextEditingController input;
   final bool sending;
-  final ValueChanged<VideoCase> onSend;
+  final ValueChanged<ChatPeer> onSend;
 
   @override
   Widget build(BuildContext context) {
-    final t = target;
+    final t = peer;
     if (t == null) return const SmallText('사건을 수락하면 메시지를 보낼 수 있습니다.');
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
