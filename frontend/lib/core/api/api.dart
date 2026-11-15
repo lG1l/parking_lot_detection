@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import '../config.dart';
 import '../models/account.dart';
 import '../models/analysis.dart';
+import '../models/message.dart';
 import '../models/video.dart';
 import 'api_client.dart';
 import 'demo_api.dart';
@@ -45,6 +46,16 @@ class Api {
 
   /// 피해자가 사건 초대를 수락한다. 피해자 계정만 부른다 (D-233 초안, 백엔드 미구현)
   Future<void> acceptCase(int caseId) => _c.post('/api/cases/$caseId/accept'); // 26
+
+  /// 채팅 메시지 전부, 오래된 순. 내가 볼 수 있는 사건의 것만 (D-290 초안, 백엔드 미구현)
+  Future<List<ChatMessage>> messages() async {
+    final j = await _c.get('/api/messages'); // 29
+    return [for (final e in j['items'] as List) ChatMessage.fromJson(e as Map<String, dynamic>)];
+  }
+
+  /// 수락한 사건에 메시지를 보낸다 (D-290 초안, 백엔드 미구현)
+  Future<ChatMessage> sendMessage(int caseId, String body) async =>
+      ChatMessage.fromJson(await _c.post('/api/cases/$caseId/messages', {'body': body})); // 30
 
   Future<void> agreeViewing(int videoId) =>
       _c.post('/api/videos/$videoId/viewing-agreement', {'confirm_supervision': true}); // 23

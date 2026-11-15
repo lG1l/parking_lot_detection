@@ -2,8 +2,10 @@ import 'dart:math' as math;
 
 import 'package:http/http.dart' as http;
 
+import '../constants.dart';
 import '../models/account.dart';
 import '../models/analysis.dart';
+import '../models/message.dart';
 import '../models/video.dart';
 import 'api.dart';
 import 'api_client.dart';
@@ -98,6 +100,17 @@ class DemoApi extends Api {
     });
     add(12, 4, '12_수락대기.mp4', VideoStatus.stage1Done);
 
+    // 사건 1에 예시 메시지 (D-290)
+    void say(String role, String body, int minutesAgo) => _messages.add({
+      'id': _messages.length + 1,
+      'case_id': 1,
+      'sender_role': role,
+      'body': body,
+      'created_at': _iso(DateTime.now().subtract(Duration(minutes: minutesAgo))),
+    });
+    say('admin', '안녕하세요, 영상을 올렸습니다. 차량과 파손 부위를 입력해 주세요.', 30);
+    say('victim', '확인했습니다. 곧 입력하겠습니다.', 20);
+
     _pins[3] = [_pinOf(_clip(3, 1)), _pinOf(_clip(3, 3))];
   }
 
@@ -108,6 +121,7 @@ class DemoApi extends Api {
   final _cases = <int, Map<String, Object?>>{};
   final _agreed = <int>{}; // 관리·감독 안내에 동의한 영상 (23번)
   final _pins = <int, List<Map<String, Object?>>>{};
+  final _messages = <Map<String, Object?>>[]; // 채팅 메시지 (D-290)
   final _mainBatch = <int, int>{}; // 영상별 지금 묶음 번호
   final _failedSeen = <int>{}; // 점수 미산출 탭을 넘긴 영상
   Me? _me;
@@ -272,6 +286,36 @@ class DemoApi extends Api {
     final c = _cases[caseId];
     if (c == null) throw ApiException(404, 'CASE_NOT_FOUND');
     c['accepted_at'] ??= _iso(DateTime.now()); // 이미 수락했으면 그대로 성공
+  }
+
+  /// 지금 계정에서 보이는(내가 지우지 않았고 수락된) 사건의 메시지만, 오래된 순 (D-239, D-290)
+  @override
+  Future<List<ChatMessage>> messages() async {
+    await _wait();
+    return [
+      for (final m in _messages)
+        if (!_caseHidden(_cases[m['case_id']]) && _cases[m['case_id']]!['accepted_at'] != null)
+          ChatMessage.fromJson(m.cast<String, dynamic>()),
+    ];
+  }
+
+  @override
+  Future<ChatMessage> sendMessage(int caseId, String body) async {
+    await _wait();
+    final c = _cases[caseId];
+    if (_caseHidden(c, pendingVisible: true)) throw ApiException(404, 'CASE_NOT_FOUND');
+    if (c!['accepted_at'] == null) throw ApiException(409, 'INVALID_STATE'); // 수락 뒤에만 (D-233)
+    final text = body.trim();
+    if (text.isEmpty || text.length > maxMessageLength) throw ApiException(422, 'VALIDATION_FAILED');
+    final m = <String, Object?>{
+      'id': _messages.length + 1,
+      'case_id': caseId,
+      'sender_role': _admin ? 'admin' : 'victim',
+      'body': text,
+      'created_at': _iso(DateTime.now()),
+    };
+    _messages.add(m);
+    return ChatMessage.fromJson(m.cast<String, dynamic>());
   }
 
   @override
