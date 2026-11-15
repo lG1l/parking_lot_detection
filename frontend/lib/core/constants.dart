@@ -22,8 +22,8 @@ const photoExtensions = ['jpg', 'jpeg', 'png', 'heic'];
 /// 파손 설명 최대 글자 수 (01장 1.6).
 const maxDescriptionLength = 500;
 
-/// 채팅 메시지 최대 글자 수 (01장 1.6, D-297).
-const maxMessageLength = 500;
+/// 채팅 메시지 최대 글자 수 (01장 1.6, 05장 31번 초안, D-290).
+const maxMessageLength = 1000;
 
 /// 사용자 재시도 최대 횟수 (D-112). 문구에만 쓰고 남은 횟수는 서버 값을 쓴다.
 const maxUserRetries = 3;
