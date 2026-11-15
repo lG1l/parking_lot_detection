@@ -1,7 +1,7 @@
 """카메라 쪽 변 판정, 바닥 띠, ROI 마스크 (D-194, D-244, D-284).
 
 ROI는 "파손 변 주변에서 접근하는 물체가 화면에 나타나는 자리"다.
-파손 변 바깥 바닥 띠를 화면 위로 차량 bbox 세로만큼 그대로 옮겨 쓸고 지나간 자리에, 파손 사각형 주변을 더한다 (D-284).
+파손 변 바깥 바닥 띠를 화면 위로 차체 높이만큼 그대로 옮겨 쓸고 지나간 자리에, 파손 사각형 주변을 더한다 (D-284).
 파손 변이 파손 사각형의 가로 범위에 못 미치면 변을 늘려 띠도 함께 늘린다.
 
 띠의 길이(m)는 찍은 변을 자로 써서 잰다: 앞·뒤 변은 CAR_WIDTH_M, 옆 변은 CAR_LENGTH_M이다.
@@ -22,9 +22,11 @@ CAR_LENGTH_M = 4.7
 
 # D-284 (시작값)
 STRIP_OUT_M = 0.8  # 파손 변 바깥 띠 폭 (m). 손이 닿는 구역과 같다
-TWO_EDGE_KEEP_RATIO = 2 / 3  # 파손 변 2개: 각 변을 만나는 모서리에서 이 비율만큼만 쓴다
+TWO_EDGE_KEEP_RATIO = 1 / 2  # 파손 변 2개: 각 변을 만나는 모서리에서 이 비율만큼만 쓴다
 # 띠의 차에 붙지 않은 끝은 실제 바닥에서 파손 변과 직각(이웃 변 방향)이다. 그 끝을 이 각도만큼 더 바깥으로 벌린다
-END_FLARE_DEG = 30
+END_FLARE_DEG = 15
+# 띠를 위로 옮기는 높이 = 화면 속 차체 높이 × 이 값. 사람이 차보다 큰 만큼(1.7m / 1.5m ≈ 1.13)에 여유를 더했다
+LIFT_RATIO = 1.3
 # 파손 사각형을 자기 폭의 이 배씩 좌우로 넓힌 자리는 꼭 ROI에 넣는다.
 # 파손 변이 그 가로 범위에 못 미치면 변을 그 끝까지 늘려 띠·ROI도 함께 늘린다 (세로는 띠를 쓸어 올린 높이를 따른다)
 DAMAGE_PAD_X_RATIO = 0.5 / 3
@@ -97,7 +99,7 @@ def _extend_end(end: np.ndarray, direction: np.ndarray, x_range: tuple[float, fl
 def _floor_strip(data: AnalysisInput) -> np.ndarray:
     """화면(원본 픽셀)의 띠 다각형. 앞쪽 꼭짓점들(변 1개 2개, 변 2개 3개)은 차에 붙은 파손 선 위의 점이다.
 
-    변 1개: 선 = [시작, 끝]. 변 2개: 선 = [p, 만나는 모서리, q]. p·q는 모서리에서 각 변의 2/3 지점이다.
+    변 1개: 선 = [시작, 끝]. 변 2개: 선 = [p, 만나는 모서리, q]. p·q는 모서리에서 각 변의 TWO_EDGE_KEEP_RATIO 지점이다.
     선의 두 끝을 파손 사각형(좌우 여백 포함)의 가로 범위까지 늘린 뒤, 바깥 STRIP_OUT_M로 띠를 만든다.
     차에 붙지 않은 두 끝은 바깥으로 갈수록 END_FLARE_DEG만큼 벌어진다.
     변 2개면 두 띠의 바깥 꼭짓점을 이어 L자 하나로 만든다 (만나는 모서리는 이어져 있어 벌릴 끝이 없다).
@@ -141,7 +143,7 @@ def _sweep_up(mask: np.ndarray, polygon: np.ndarray, lift: int) -> None:
     """polygon을 화면 위로 lift만큼 옮기며 지나간 자리 전체를 mask에 채운다.
 
     다각형, 옮긴 다각형, 각 변이 지나간 평행사변형의 합집합이다.
-    모든 꼭짓점을 같은 높이로 옮기므로 위 경계는 띠의 변과 화면에서 평행하다.
+    모든 꼭짓점을 같은 px로 옮기므로 위 경계는 띠의 변과 화면에서 평행하다.
     """
     up = polygon - [0, lift]
     parts = [polygon, up]
@@ -158,8 +160,10 @@ def _roi_mask_original(
     """원본 화면 크기의 ROI 마스크 (안쪽 255)와 바닥 띠. 화면 밖으로 나간 부분은 버려진다."""
     width, height = frame
     polygon = np.round(_floor_strip(data)).astype(np.int32)
-    # 띠를 화면 속 차 높이(bbox 세로)만큼 올린다. 차가 화면에서 크든 작든 같은 규칙이 된다
-    lift = data.vehicle_bbox[3] - data.vehicle_bbox[1]
+    # 화면 속 차체 높이 = 가장 먼(화면에서 가장 높은) 바닥 모서리 ~ bbox 위 변(먼 쪽 지붕).
+    # bbox 세로는 바닥 사각형의 앞뒤 깊이까지 들어 있어, 카메라가 높을수록 차 높이보다 훨씬 커진다
+    body_height = min(y for _, y in data.floor_corners) - data.vehicle_bbox[1]
+    lift = round(body_height * LIFT_RATIO)
 
     mask = np.zeros((height, width), np.uint8)
     _sweep_up(mask, polygon, lift)

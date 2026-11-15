@@ -6,7 +6,9 @@ from pipeline.candidates.roi import (
     CAR_LENGTH_M,
     CAR_WIDTH_M,
     END_FLARE_DEG,
+    LIFT_RATIO,
     STRIP_OUT_M,
+    TWO_EDGE_KEEP_RATIO,
     _floor_strip,
     _out_at,
     build_roi,
@@ -14,7 +16,8 @@ from pipeline.candidates.roi import (
 )
 
 CORNERS = np.array([(728, 726), (962, 746), (1284, 636), (1032, 630)], dtype=float)
-BBOX_HEIGHT = 728 - 448
+# 가장 먼 모서리 y 630 ~ bbox 위 변 448 = 화면 속 차체 높이 182
+LIFT = round((630 - 448) * LIFT_RATIO)
 # 바깥 끝이 변 방향으로 더 나가는 거리 (m)
 FLARE_M = STRIP_OUT_M * np.tan(np.radians(END_FLARE_DEG))
 
@@ -48,18 +51,18 @@ def _covered(roi, original):
 
 
 def test_건너편_변이_파손이면_지붕_위까지_덮지만_끝없이_높지는_않다():
-    # 띠 바깥 선이 x=880에서 y≈639. bbox 세로 280만큼 올리면 위 경계 ≈ 359
+    # 띠 바깥 선이 x=880에서 y≈639. 차체 높이 182 × 1.3 = 237만큼 올리면 위 경계 ≈ 402
     roi = _roi([3])
-    assert _covered(roi, (880, 400))  # 지붕(448)보다 48px 위
-    assert not _covered(roi, (880, 250))
+    assert _covered(roi, (880, 420))  # 지붕(448)보다 28px 위
+    assert not _covered(roi, (880, 380))
 
 
-def test_위_경계는_파손_변을_bbox_세로만큼_그대로_올린_선이다():
+def test_위_경계는_파손_변을_차체_높이의_1_3배만큼_그대로_올린_선이다():
     # 카메라 쪽 변 1이 파손이면 위 경계가 찍은 변 1과 화면에서 평행하다
     roi = _roi([1])
     a, b = CORNERS[1], CORNERS[2]
     for x in (1000, 1200):
-        top = a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0]) - BBOX_HEIGHT
+        top = a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0]) - LIFT
         assert _covered(roi, (x, top + 10))
         assert not _covered(roi, (x, top - 10))
 
@@ -84,7 +87,7 @@ def test_모서리가_조금_어긋나도_띠_폭이_부풀지_않는다():
 def test_파손_변_1개는_양_끝이_바깥으로_벌어진다():
     polygon = _floor_strip(_input([1]))
     along_1m = (CORNERS[2] - CORNERS[1]) / CAR_LENGTH_M
-    # 차에 붙은 선의 먼 끝은 그대로, 바깥 끝은 변 방향으로 0.8 × tan30° 더 나간다
+    # 차에 붙은 선의 먼 끝은 그대로, 바깥 끝은 변 방향으로 0.8 × tan15° 더 나간다
     assert np.allclose(polygon[1], CORNERS[2])
     assert np.allclose(polygon[2], CORNERS[2] + _out_at(CORNERS, 1, 1.0, 0) + FLARE_M * along_1m)
     assert np.allclose(polygon[3], polygon[0] + _out_at(CORNERS, 1, 0.0, 0) - FLARE_M * along_1m)
@@ -98,17 +101,19 @@ def test_파손_변이_파손_사각형에_못_미치면_변을_그만큼_늘린
     assert abs(ax * by - ay * bx) < 1e-6  # 변 1 직선 위
 
 
-def test_파손_변_2개는_만나는_모서리에서_2_3까지만_쓰고_바깥_꼭짓점을_잇는다():
+def test_파손_변_2개는_만나는_모서리에서_절반까지만_쓰고_바깥_꼭짓점을_잇는다():
     polygon = _floor_strip(_input([0, 1]))
     corner = CORNERS[1]  # 변 0의 끝 = 변 1의 시작
     assert np.allclose(polygon[1], corner)
-    assert np.allclose(polygon[2], corner + (CORNERS[2] - corner) * 2 / 3)
+    assert np.allclose(polygon[2], corner + (CORNERS[2] - corner) * TWO_EDGE_KEEP_RATIO)
     # 바깥 꼭짓점은 모서리에서 두 변을 각각 이어 간 방향으로 0.8m씩
     out = (corner - CORNERS[0]) / CAR_WIDTH_M + (corner - CORNERS[2]) / CAR_LENGTH_M
     assert np.allclose(polygon[4], corner + STRIP_OUT_M * out)
-    # 만나지 않는 끝은 벌어진다: 변 1의 2/3 끝 바깥은 변 방향으로 더 나간다
+    # 만나지 않는 끝은 벌어진다: 변 1의 절반 끝 바깥은 변 방향으로 더 나간다
     along_1m = (CORNERS[2] - corner) / CAR_LENGTH_M
-    assert np.allclose(polygon[3], polygon[2] + _out_at(CORNERS, 1, 2 / 3, 0) + FLARE_M * along_1m)
+    assert np.allclose(
+        polygon[3], polygon[2] + _out_at(CORNERS, 1, TWO_EDGE_KEEP_RATIO, 0) + FLARE_M * along_1m
+    )
 
 
 def test_파손_사각형_좌우_여백은_자기_폭의_6분의_1이다():
