@@ -46,6 +46,8 @@ users ──┬──< sessions        (로그인 세션)
         │
         ├──< chat_messages   (관리자·피해자 채팅, D-285)
         │
+        ├──< chat_reads      (채팅 읽은 위치, D-289)
+        │
 videos ──┬── upload_agreements  (위탁계약 동의 D-147)
         ├──< viewing_agreements  (관리·감독 안내 동의, D-204)
         └──1:1── analysis_jobs
@@ -445,6 +447,21 @@ ROI 안에서 움직임이 있던 시간대를 자른 클립 하나 (D-245). 2�
 | `created_at` | timestamptz | 보낸 시각 |
 
 - `case_id`가 없다. 같은 두 계정의 사건이 여러 개여도 대화는 하나다.
+- 보낸 지 30일이 지난 행은 주기 작업이 지운다. 조회 API도 30일이 지난 메시지는 주지 않는다 (D-288).
+
+### chat_reads
+
+계정이 상대와의 대화를 어디까지 읽었는지. 계정과 상대 한 쌍에 한 행이다. (D-289)
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `user_id` | bigint FK → users | 읽은 계정 |
+| `peer_user_id` | bigint FK → users | 대화 상대 계정 |
+| `last_read_message_id` | bigint | 마지막으로 읽은 `chat_messages.id`. 앞으로만 간다 |
+| `updated_at` | timestamptz | 마지막으로 바꾼 시각 |
+
+- 행이 없으면 하나도 읽지 않은 것이다.
+- `last_read_message_id`에는 FK를 걸지 않는다. 가리키는 메시지가 30일 뒤 지워져도(D-288) 읽은 위치는 남아야 한다.
 
 ### access_logs
 
@@ -916,6 +933,14 @@ CREATE TABLE chat_messages (                 -- D-285
   sender_user_id bigint      NOT NULL REFERENCES users(id),
   body           text        NOT NULL,
   created_at     timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE chat_reads (                    -- D-289
+  user_id              bigint      NOT NULL REFERENCES users(id),
+  peer_user_id         bigint      NOT NULL REFERENCES users(id),
+  last_read_message_id bigint      NOT NULL,          -- FK 없음. 메시지가 지워져도 남는다 (D-288)
+  updated_at           timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, peer_user_id)
 );
 
 -- 법정 기록. 지우지 않는다 (D-53)
