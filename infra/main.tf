@@ -201,6 +201,12 @@ variable "gpu_key_name" {
   type        = string
 }
 
+# 백엔드와 같은 팀 인스턴스 프로파일을 쓴다 (D-283)
+variable "gpu_instance_profile" {
+  description = "GPU EC2에 붙일 인스턴스 프로파일 이름. 값은 terraform.tfvars에만 둔다"
+  type        = string
+}
+
 variable "gpu_instance_name" {
   description = "콘솔 이름 칸에 보일 GPU EC2 이름(Name 태그). 값은 terraform.tfvars에만 둔다"
   type        = string
@@ -211,6 +217,7 @@ resource "aws_instance" "gpu" {
   instance_type          = "g4dn.xlarge"
   key_name               = var.gpu_key_name
   vpc_security_group_ids = [aws_security_group.gpu.id]
+  iam_instance_profile   = var.gpu_instance_profile
 
   # 워커가 OS를 종료하면 삭제가 아니라 "중지"된다 (D-15).
   # 생성 직후 provider가 이 값을 ModifyInstanceAttribute로 다시 설정하는데 계정 정책

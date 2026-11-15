@@ -334,11 +334,13 @@ GitHub Actions에는 AWS 권한이 필요 없다. 배포를 SSH로 하기 때문
 
 GPU EC2 역할
 
+GPU EC2는 별도 역할 없이 백엔드와 같은 팀 IAM role을 쓴다 (D-283). 아래 표는 그 role에 있어야 하는 GPU 쪽 권한이다.
+
 | 권한 | 대상 | 용도 |
 |---|---|---|
 | `s3:GetObject` | 원본 영역, 분석 결과 영역 | 원본 영상, 저장한 트랙 읽기 |
 | `s3:PutObject` | 분석 결과 영역, 마스킹본 영역 | 트랙·정지 장면·후보 클립 저장 |
-| `sqs:ReceiveMessage`, `sqs:DeleteMessage`, `sqs:ChangeMessageVisibility` | 작업 대기열 | 작업 꺼내기, 끝난 작업 지우기, 처리 시간 연장 |
+| `sqs:ReceiveMessage`, `sqs:DeleteMessage` | 작업 대기열 | 작업 꺼내기, 끝난 작업 지우기. 처리 시간 연장(`ChangeMessageVisibility`)은 하지 않는다 (D-283) |
 | `bedrock:InvokeModel` | **쓰지 않는다 (D-276).** 옛 내용: 사용할 추론 프로파일 ARN + 프로파일이 보내는 리전들의 모델 ARN | 2단계 VLM 1차·2차 (D-14, D-74). 교차 리전 호출은 프로파일과 대상 모델 양쪽에 권한이 있어야 한다 ⚠️ |
 
 ### GPU SSH 접속 (D-128, D-133)
