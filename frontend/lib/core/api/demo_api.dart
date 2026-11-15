@@ -589,7 +589,11 @@ class DemoApi extends Api {
     if (v['status'] != VideoStatus.finished && v['status'] != VideoStatus.exhausted) return [];
     return pinsFromJson([
       for (final p in _pins[id] ?? [])
-        {for (final e in p.entries) if (e.key != 'clip_url' && e.key != 'candidate_clip_id') e.key: e.value},
+        // 형을 적지 않으면 Map<dynamic, dynamic>이 되어 pinsFromJson의 형 변환에서 터진다
+        <String, Object?>{
+          for (final e in p.entries)
+            if (e.key != 'clip_url' && e.key != 'candidate_clip_id') e.key: e.value,
+        },
     ]);
   }
 

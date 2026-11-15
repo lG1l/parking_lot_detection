@@ -32,4 +32,12 @@ void main() {
     expect((await names()).containsKey(1), isTrue); // 상대 계정에는 그대로 보인다
     expect((await api.videos()).where((v) => v.caseId == 1).length, videos);
   });
+
+  test('데모 피해자 계정이 고정이 있는 끝난 영상의 사건 지점 시간을 읽는다 (25번, D-210)', () async {
+    final api = DemoApi();
+    await api.login('victim01', 'pw');
+    final times = await api.incidentTimes(3); // 03_결과.mp4: 고정 2개
+    expect(times, hasLength(2));
+    expect(times.every((t) => t.clipUrl == null && t.candidateClipId == null), isTrue); // 재생 URL·후보 번호 없음
+  });
 }
