@@ -210,14 +210,24 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       sending: _sending,
       onSend: _send,
     );
+    // 본문 전체를 스크롤하지 않고 창 높이에 맞춘다. 목록과 대화가 각자 스크롤하고, 입력칸은 아래에 고정된다 (D-294)
+    final scrollList = SingleChildScrollView(child: list);
     return PageFrame(
       current: NavItem.notifications,
+      scrollBody: false,
       child: isNarrow(context)
-          ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: 24, children: [list, talk])
-          : Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: 16,
               children: [
-                SizedBox(width: 340, child: list),
+                ConstrainedBox(constraints: const BoxConstraints(maxHeight: 180), child: scrollList),
+                Expanded(child: talk),
+              ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(width: 340, child: scrollList),
                 const SizedBox(width: 40),
                 Expanded(child: talk),
               ],
@@ -319,13 +329,25 @@ class _Conversation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
+    crossAxisAlignment: CrossAxisAlignment.stretch,
     spacing: 12,
     children: [
       Text(person.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
-      for (final c in person.cases) ..._caseMessages(context, c),
-      const Divider(color: lineColor),
-      for (final m in chat) _Bubble(message: m, mine: me != null && m.mine(me!)),
+      // 대화만 스크롤하고 입력칸은 아래에 고정한다. reverse라 처음부터 맨 아래(최근 메시지)가 보인다 (D-294)
+      Expanded(
+        child: SingleChildScrollView(
+          reverse: true,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 12,
+            children: [
+              for (final c in person.cases) ..._caseMessages(context, c),
+              const Divider(color: lineColor),
+              for (final m in chat) _Bubble(message: m, mine: me != null && m.mine(me!)),
+            ],
+          ),
+        ),
+      ),
       _Composer(target: target, input: input, sending: sending, onSend: onSend),
     ],
   );

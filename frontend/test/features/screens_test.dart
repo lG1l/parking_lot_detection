@@ -360,6 +360,30 @@ void main() {
     expect(tester.getTopLeft(find.text('확인했습니다')).dx, greaterThan(tester.view.physicalSize.width / 2));
   });
 
+  testWidgets('메시지가 많아도 입력칸은 화면 아래에 고정되어 보인다 (2.11, D-294)', (tester) async {
+    final backend = FakeBackend({
+      'GET /api/videos': (_) => json([]),
+      'GET /api/cases': (_) => json({
+        'items': [
+          {...case3(), 'accepted_at': '2026-11-02T09:00:00+09:00'},
+        ],
+      }),
+      'GET /api/messages': (_) => json({
+        'items': [
+          for (var i = 1; i <= 40; i++)
+            {'id': i, 'case_id': 3, 'sender_role': 'admin', 'body': '메시지 $i', 'created_at': '2026-11-02T10:00:00+09:00'},
+        ],
+      }),
+    }, role: 'victim');
+    await pumpApp(tester, backend, '/notifications');
+    final screenHeight = tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    final field = tester.getRect(find.byType(TextField));
+    expect(field.bottom, lessThanOrEqualTo(screenHeight)); // 화면 안에 있다
+    expect(field.bottom, greaterThan(screenHeight - 120)); // 화면 맨 아래 쪽이다
+    expect(find.text('메시지 40'), findsOneWidget); // 처음부터 최근 메시지가 보인다
+    expect(tester.getRect(find.text('메시지 40')).bottom, lessThan(field.top));
+  });
+
   testWidgets('수락한 사건이 없으면 입력칸 대신 안내를 보인다 (2.11, D-294)', (tester) async {
     final backend = FakeBackend({
       'GET /api/videos': (_) => json([]),
