@@ -505,37 +505,35 @@ class StateCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final icon = this.icon;
-    final leading = this.leading ?? (icon == null ? null : Icon(icon, size: 64, color: iconColor));
+    final leading = this.leading ?? (icon == null ? null : Icon(icon, size: 36, color: iconColor));
     final title = this.title;
-    return PageCard(
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 320),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            ?leading,
-            if (title != null) ...[
-              const SizedBox(height: 16),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
-              ),
+    // 캔버스 새 컨셉: 검은 윗선 아래 왼쪽 정렬 큰 문장 + 설명 + 알약 버튼 (D-305)
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.only(top: 28, bottom: 40),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: inkColor)),
+      ),
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 680),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (leading != null) ...[leading, const SizedBox(height: 16)],
+              if (title != null)
+                Text(title, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w600, height: 1.35)),
+              for (final m in messages) ...[
+                const SizedBox(height: 14),
+                Text(m, style: const TextStyle(fontSize: 16, height: 1.8, color: subColor)),
+              ],
+              if (actions.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                Wrap(spacing: 12, runSpacing: 8, children: actions),
+              ],
             ],
-            for (final m in messages) ...[
-              const SizedBox(height: 12),
-              Text(
-                m,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 16, height: 1.6, color: subColor),
-              ),
-            ],
-            if (actions.isNotEmpty) ...[
-              const SizedBox(height: 24),
-              Wrap(spacing: 12, runSpacing: 8, alignment: WrapAlignment.center, children: actions),
-            ],
-          ],
+          ),
         ),
       ),
     );

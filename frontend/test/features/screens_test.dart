@@ -1380,6 +1380,9 @@ void main() {
     expect(find.text('03:40:35 ~ 03:41:05'), findsOneWidget);
     expect(find.text('2026-09-17 03:40:35 ~ 03:41:05 (관리자 입력 기준 추정)'), findsOneWidget);
     expect(find.text('2026-11-19 10:00까지 열람 가능'), findsOneWidget);
+    // 다운로드 기능은 없다 (불변 조건 8)
+    expect(find.textContaining('다운로드'), findsNothing);
+    expect(find.byIcon(Icons.download), findsNothing);
   });
 
   testWidgets('피해자 계정 결과 화면은 클립 없이 고정한 시각만 보인다 (2.9, D-211)', (tester) async {
