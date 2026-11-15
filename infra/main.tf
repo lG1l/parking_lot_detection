@@ -212,7 +212,10 @@ resource "aws_instance" "gpu" {
   key_name               = var.gpu_key_name
   vpc_security_group_ids = [aws_security_group.gpu.id]
 
-  # 워커가 OS를 종료하면 삭제가 아니라 "중지"된다 (D-15)
+  # 워커가 OS를 종료하면 삭제가 아니라 "중지"된다 (D-15).
+  # 생성 직후 provider가 이 값을 ModifyInstanceAttribute로 다시 설정하는데 계정 정책
+  # (ControlOnlyOwnResources)이 거부한다. 값은 기본값 stop으로 이미 들어가 있으므로
+  # apply가 이 에러로 실패하면 terraform untaint aws_instance.gpu 후 plan으로 확인한다
   instance_initiated_shutdown_behavior = "stop"
 
   tags = {
