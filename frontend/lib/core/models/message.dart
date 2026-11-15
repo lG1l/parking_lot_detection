@@ -1,4 +1,4 @@
-// 29·30번 응답 (05장 29·30번 초안, D-294). 채팅 메시지 한 건.
+// 채팅 메시지 한 건 (D-284~D-287). 형식은 임시다. 팀원 2가 05장에 적으면 맞춘다 (04장 chat_messages에는 case_id가 없다).
 import 'account.dart';
 
 class ChatMessage {

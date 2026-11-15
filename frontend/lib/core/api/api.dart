@@ -47,15 +47,15 @@ class Api {
   /// 피해자가 사건 초대를 수락한다. 피해자 계정만 부른다 (D-233 초안, 백엔드 미구현)
   Future<void> acceptCase(int caseId) => _c.post('/api/cases/$caseId/accept'); // 26
 
-  /// 채팅 메시지 전부, 오래된 순. 내가 볼 수 있는 사건의 것만 (D-294 초안, 백엔드 미구현)
+  /// 채팅 메시지 전부, 오래된 순 (D-284~D-287). 주소·형식은 임시다. 팀원 2가 05장에 적으면 바꾼다 (백엔드 미구현)
   Future<List<ChatMessage>> messages() async {
-    final j = await _c.get('/api/messages'); // 29
+    final j = await _c.get('/api/messages'); // 05장 미정
     return [for (final e in j['items'] as List) ChatMessage.fromJson(e as Map<String, dynamic>)];
   }
 
-  /// 수락한 사건에 메시지를 보낸다 (D-294 초안, 백엔드 미구현)
+  /// 메시지 보내기 (D-284~D-287). 주소·형식은 임시다. 메시지는 두 계정 쌍에 붙으므로(D-285) 05장이 나오면 사건 번호 대신 상대 계정으로 바꾼다
   Future<ChatMessage> sendMessage(int caseId, String body) async =>
-      ChatMessage.fromJson(await _c.post('/api/cases/$caseId/messages', {'body': body})); // 30
+      ChatMessage.fromJson(await _c.post('/api/cases/$caseId/messages', {'body': body})); // 05장 미정
 
   Future<void> agreeViewing(int videoId) =>
       _c.post('/api/videos/$videoId/viewing-agreement', {'confirm_supervision': true}); // 23

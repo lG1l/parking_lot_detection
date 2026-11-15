@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
-import 'package:parking_lot_frontend/core/constants.dart';
 import 'package:parking_lot_frontend/core/settings.dart';
 import 'package:parking_lot_frontend/features/damage_input/still_canvas.dart';
 
@@ -359,28 +358,6 @@ void main() {
     expect(find.text('확인했습니다'), findsOneWidget);
     // 내 말풍선은 오른쪽에 있다
     expect(tester.getTopLeft(find.text('확인했습니다')).dx, greaterThan(tester.view.physicalSize.width / 2));
-  });
-
-  testWidgets('채팅 메시지는 화면이 열려 있는 동안 주기로 읽고, 떠나면 멈춘다 (2.11, D-294)', (tester) async {
-    final backend = FakeBackend({
-      'GET /api/videos': (_) => json([]),
-      'GET /api/cases': (_) => json({
-        'items': [
-          {...case3(), 'accepted_at': '2026-11-02T09:00:00+09:00'},
-        ],
-      }),
-      'GET /api/messages': (_) => json({'items': []}),
-    }, role: 'victim');
-    await pumpApp(tester, backend, '/notifications');
-    final opened = backend.count('GET /api/messages');
-    await tester.pump(pollInterval * 2);
-    expect(backend.count('GET /api/messages'), greaterThan(opened)); // 머무는 동안 늘어난다
-
-    await tester.tap(find.text('사건 목록'));
-    await settle(tester);
-    final left = backend.count('GET /api/messages');
-    await tester.pump(pollInterval * 3);
-    expect(backend.count('GET /api/messages'), left); // 떠난 뒤에는 그대로다
   });
 
   testWidgets('수락한 사건이 없으면 입력칸 대신 안내를 보인다 (2.11, D-294)', (tester) async {

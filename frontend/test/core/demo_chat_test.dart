@@ -13,14 +13,14 @@ void main() {
     );
   });
 
-  test('내가 지운 사건의 메시지는 내게만 숨는다 (D-239)', () async {
+  test('사건을 숨겨도 채팅 메시지는 그대로 보인다 (D-287)', () async {
     final api = DemoApi();
     await api.login('parking_admin', 'pw');
-    expect((await api.messages()).where((m) => m.caseId == 1), isNotEmpty);
     await api.deleteCase(1);
-    expect((await api.messages()).where((m) => m.caseId == 1), isEmpty);
-    await api.login('victim01', 'pw');
     expect((await api.messages()).where((m) => m.caseId == 1), isNotEmpty);
+    await api.sendMessage(1, '숨긴 뒤에도 보냄');
+    await api.login('victim01', 'pw');
+    expect((await api.messages()).last.body, '숨긴 뒤에도 보냄');
   });
 
   test('관리자가 보낸 메시지를 피해자로 로그인하면 본다', () async {

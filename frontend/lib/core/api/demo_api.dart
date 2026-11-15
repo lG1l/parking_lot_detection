@@ -288,13 +288,13 @@ class DemoApi extends Api {
     c['accepted_at'] ??= _iso(DateTime.now()); // 이미 수락했으면 그대로 성공
   }
 
-  /// 지금 계정에서 보이는(내가 지우지 않았고 수락된) 사건의 메시지만, 오래된 순 (D-239, D-294)
+  /// 수락된 사건의 메시지만, 오래된 순. 사건을 숨겨도 채팅은 그대로다 (D-287)
   @override
   Future<List<ChatMessage>> messages() async {
     await _wait();
     return [
       for (final m in _messages)
-        if (!_caseHidden(_cases[m['case_id']]) && _cases[m['case_id']]!['accepted_at'] != null)
+        if (_cases[m['case_id']]?['accepted_at'] != null)
           ChatMessage.fromJson(m.cast<String, dynamic>()),
     ];
   }
@@ -303,8 +303,8 @@ class DemoApi extends Api {
   Future<ChatMessage> sendMessage(int caseId, String body) async {
     await _wait();
     final c = _cases[caseId];
-    if (_caseHidden(c, pendingVisible: true)) throw ApiException(404, 'CASE_NOT_FOUND');
-    if (c!['accepted_at'] == null) throw ApiException(409, 'INVALID_STATE'); // 수락 뒤에만 (D-233)
+    if (c == null) throw ApiException(404, 'CASE_NOT_FOUND');
+    if (c['accepted_at'] == null) throw ApiException(409, 'INVALID_STATE'); // 수락 뒤에만 (D-287). 숨김은 보지 않는다
     final text = body.trim();
     if (text.isEmpty || text.length > maxMessageLength) throw ApiException(422, 'VALIDATION_FAILED');
     final m = <String, Object?>{
