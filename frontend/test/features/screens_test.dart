@@ -259,6 +259,7 @@ void main() {
     expect(find.widgetWithText(FilledButton, '수락'), findsNothing);
     expect(find.text('연결을 수락했어요!'), findsOneWidget);
     expect(find.text('내 차량을 입력해 주세요!'), findsOneWidget); // 수락하면 영상 상태 알림이 붙는다 (D-237)
+    expect(find.widgetWithText(FilledButton, '차량 입력'), findsOneWidget); // 할 일은 카드가 아니라 버튼으로 (D-304)
     // 피해자 기준: 관리자가 보낸 요청·영상 알림은 왼쪽, 내가 한 수락은 오른쪽 (D-297)
     final middle = tester.view.physicalSize.width / tester.view.devicePixelRatio / 2;
     final talkLeft = tester.getTopLeft(find.text('연결 요청이 왔어요!')).dx;
@@ -293,7 +294,7 @@ void main() {
     expect(find.text('사전 입력 필요'), findsNothing);
   });
 
-  testWidgets('관리자 알림은 수락·후보 선택 가능·분석 실패를 보이고 [수락] 버튼이 없다 (2.11, D-243)', (tester) async {
+  testWidgets('관리자 알림은 수락·후보 선택 가능·분석 실패를 보이고 [수락] 버튼이 없다. 상태 화면은 카드가 아니라 버튼으로 간다 (2.11, D-243, D-304)', (tester) async {
     final backend = FakeBackend({
       'GET /api/videos': (_) => json([
         video('ready'),
@@ -318,7 +319,11 @@ void main() {
 
     await tester.tap(find.text('후보를 고를 수 있어요!'));
     await settle(tester);
-    expect(backend.count('GET /api/videos/7'), greaterThan(0)); // 그 영상의 상태 화면
+    expect(backend.count('GET /api/videos/7'), 0); // 카드는 눌러도 넘어가지 않는다 (D-304)
+
+    await tester.tap(find.widgetWithText(FilledButton, '후보 선택'));
+    await settle(tester);
+    expect(backend.count('GET /api/videos/7'), greaterThan(0)); // 버튼을 누르면 그 영상의 상태 화면
   });
 
   testWidgets('관리자 채팅은 피해자별로 묶고, 같은 피해자의 사건은 한 대화에 잇는다 (2.11)', (tester) async {

@@ -560,23 +560,19 @@ class _Conversation extends StatelessWidget {
             at: c.createdAt,
             // 수락하면 오른쪽에 수락 카드가 따로 붙으므로, 요청 카드에는 수락 전 [수락]만 둔다
             footer: !admin && c.pending
-                ? FilledButton(
-                    onPressed: accepting.contains(c.id) ? null : () => onAccept(c),
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size(0, 38),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                    ),
-                    child: const Text('수락'),
-                  )
+                ? _NoticeButton(label: '수락', onPressed: accepting.contains(c.id) ? null : () => onAccept(c))
                 : null,
           ),
-          NoticeStatus(:final video, title: final noticeTitle, :final emoji, :final problem) => _NoticeCard(
+          NoticeStatus(:final video, title: final noticeTitle, :final emoji, :final problem, :final action) => _NoticeCard(
             title: noticeTitle,
             emoji: emoji,
             problem: problem,
             caseLine: title, // 작은 글씨는 사건 이름만 (D-297)
             mine: noticeIsMine(m, admin: admin),
-            onTap: () => context.go('/videos/${video.videoId}'),
+            // 카드는 누를 수 없고, 할 일이 남은 알림만 [수락]처럼 버튼으로 그 영상의 상태 화면에 간다 (D-304)
+            footer: action == null
+                ? null
+                : _NoticeButton(label: action, onPressed: () => context.go('/videos/${video.videoId}')),
           ),
         },
     ];
@@ -585,7 +581,7 @@ class _Conversation extends StatelessWidget {
 
 /// 알림 카드. 제목과 오른쪽 이모지, 아래 작은 글씨로 사건 이름만 적는다.
 /// [problem]이면 제목을 실패 색으로 그린다. [mine]이면(내가 한 일) 오른쪽, 아니면 왼쪽에 둔다 (D-297).
-/// [at]이 있으면 카드 바깥 안쪽 옆에 시각(HH:mm)만 보인다.
+/// [at]이 있으면 카드 바깥 안쪽 옆에 시각(HH:mm)만 보인다. 카드 자체는 누를 수 없고, 할 일은 [footer] 버튼으로 한다 (D-304).
 class _NoticeCard extends StatelessWidget {
   const _NoticeCard({
     required this.title,
@@ -593,7 +589,6 @@ class _NoticeCard extends StatelessWidget {
     required this.caseLine,
     this.problem = false,
     this.footer,
-    this.onTap,
     this.at,
     required this.mine,
   });
@@ -604,7 +599,6 @@ class _NoticeCard extends StatelessWidget {
   final bool mine;
   final bool problem;
   final Widget? footer;
-  final VoidCallback? onTap;
   final String? at;
 
   @override
@@ -631,44 +625,56 @@ class _NoticeCard extends StatelessWidget {
       shadowColor: const Color(0x0F2D3748),
       elevation: 1,
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: 2, // 제목과 사건 이름을 붙인다 (D-297)
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                spacing: 10,
-                children: [
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        height: 1.35,
-                        color: problem ? failChipColor : null, // 실패 알림은 제목을 실패 색으로
-                      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: 2, // 제목과 사건 이름을 붙인다 (D-297)
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              spacing: 10,
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      height: 1.35,
+                      color: problem ? failChipColor : null, // 실패 알림은 제목을 실패 색으로
                     ),
                   ),
-                  ExcludeSemantics(child: Text(emoji, style: const TextStyle(fontSize: 20, height: 1.2))),
-                ],
-              ),
-              Text(
-                caseLine,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13, color: noteColor),
-              ),
-              if (footer case final f?) Padding(padding: const EdgeInsets.only(top: 8), child: f), // [수락]은 조금 띄운다
-            ],
-          ),
+                ),
+                ExcludeSemantics(child: Text(emoji, style: const TextStyle(fontSize: 20, height: 1.2))),
+              ],
+            ),
+            Text(
+              caseLine,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13, color: noteColor),
+            ),
+            if (footer case final f?) Padding(padding: const EdgeInsets.only(top: 8), child: f), // 버튼은 조금 띄운다
+          ],
         ),
       ),
     ),
+  );
+}
+
+/// 알림 카드 아래 버튼. [수락]과 영상 상태 알림의 버튼이 같은 모양이다 (D-304).
+class _NoticeButton extends StatelessWidget {
+  const _NoticeButton({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => FilledButton(
+    onPressed: onPressed,
+    style: FilledButton.styleFrom(minimumSize: const Size(0, 38), padding: const EdgeInsets.symmetric(horizontal: 16)),
+    child: Text(label),
   );
 }
 

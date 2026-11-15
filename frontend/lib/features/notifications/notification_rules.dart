@@ -23,14 +23,16 @@ class NoticeAccepted extends NoticeMessage {
 
 /// 영상 상태 알림. 카드에 [title]과 [emoji]를 그리고, [chip]은 왼쪽 목록 요약에 쓴다.
 /// [problem]이면 제목을 실패 색으로 그린다 (D-243).
+/// [action]은 카드 아래 버튼 문구로, 누르면 그 영상의 상태 화면으로 간다. 진행이 끝난 알림은 null이라 버튼이 없다 (D-304).
 class NoticeStatus extends NoticeMessage {
-  const NoticeStatus(this.video, this.chip, this.title, this.emoji, {this.problem = false});
+  const NoticeStatus(this.video, this.chip, this.title, this.emoji, {this.problem = false, this.action});
 
   final VideoSummary video;
   final String chip;
   final String title;
   final String emoji;
   final bool problem;
+  final String? action;
 }
 
 /// 연결 요청·수락 카드 문구 (상황별 문구를 이 파일에 모은다).
@@ -59,16 +61,17 @@ NoticeStatus? statusNoticeOf(VideoSummary v, {required bool admin}) {
   if (v.maskedDeleted) return null; // 보관 기간이 끝난 영상은 뺀다
   if (admin) {
     return switch (v.status) {
-      VideoStatus.stage2Running => NoticeStatus(v, '분석 시작', '영상 분석을 시작했어요!', '🔍'),
-      VideoStatus.ready || VideoStatus.batchRunning => NoticeStatus(v, '후보 선정', '후보를 고를 수 있어요!', '🎯'),
-      VideoStatus.failed => NoticeStatus(v, '분석 실패', '영상 분석에 실패했어요', '⚠️', problem: true),
-      VideoStatus.uploadFailed => NoticeStatus(v, '업로드 실패', '업로드를 확인하지 못했어요', '📤', problem: true),
+      VideoStatus.stage2Running => NoticeStatus(v, '분석 시작', '영상 분석을 시작했어요!', '🔍', action: '진행 상황'),
+      VideoStatus.ready || VideoStatus.batchRunning => NoticeStatus(v, '후보 선정', '후보를 고를 수 있어요!', '🎯', action: '후보 선택'),
+      VideoStatus.failed => NoticeStatus(v, '분석 실패', '영상 분석에 실패했어요', '⚠️', problem: true, action: '상태 확인'),
+      VideoStatus.uploadFailed => NoticeStatus(v, '업로드 실패', '업로드를 확인하지 못했어요', '📤', problem: true, action: '상태 확인'),
       _ => null,
     };
   }
   return switch (v.status) {
-    VideoStatus.stage1Done => NoticeStatus(v, '입력 필요', '내 차량을 입력해 주세요!', '✏️'),
-    VideoStatus.ready || VideoStatus.batchRunning => NoticeStatus(v, '분석 완료', '영상 분석이 끝났어요!', '📊'),
+    VideoStatus.stage1Done => NoticeStatus(v, '입력 필요', '내 차량을 입력해 주세요!', '✏️', action: '차량 입력'),
+    VideoStatus.ready || VideoStatus.batchRunning => NoticeStatus(v, '분석 완료', '영상 분석이 끝났어요!', '📊', action: '결과 확인'),
+    // 최종 완료·분석 실패는 피해자가 이어서 할 일이 없어 버튼이 없다 (D-304)
     VideoStatus.finished || VideoStatus.exhausted => NoticeStatus(v, '최종 완료', '사건 시각을 확인했어요!', '🕒'),
     VideoStatus.failed => NoticeStatus(v, '분석 실패', '영상 분석에 실패했어요', '⚠️', problem: true),
     _ => null,
