@@ -460,7 +460,7 @@ class _NoticeCard extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: 6,
+            spacing: 2, // 제목과 사건 이름을 붙인다 (D-294)
             children: [
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -477,7 +477,7 @@ class _NoticeCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  ExcludeSemantics(child: Text(emoji, style: const TextStyle(fontSize: 30))),
+                  ExcludeSemantics(child: Text(emoji, style: const TextStyle(fontSize: 20, height: 1.2))),
                 ],
               ),
               Text(
@@ -486,7 +486,7 @@ class _NoticeCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 13, color: noteColor),
               ),
-              ?footer,
+              if (footer case final f?) Padding(padding: const EdgeInsets.only(top: 8), child: f), // [수락]은 조금 띄운다
             ],
           ),
         ),
