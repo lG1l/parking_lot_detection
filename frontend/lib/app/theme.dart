@@ -45,6 +45,7 @@ const _fontFamily = 'Pretendard';
 const pillRadius = 999.0; // 알약 버튼
 const _dialogRadius = 12.0;
 const cardRadius = 16.0;
+const stillRadius = 24.0; // 정지 장면·영상 상자 (D-305)
 
 /// 카드 아래 옅은 그림자 (캔버스 `box-shadow`).
 const cardShadow = [

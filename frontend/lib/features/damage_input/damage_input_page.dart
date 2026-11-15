@@ -399,6 +399,11 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
 
   Widget _canvas() {
     final drag = _step == InputStep.damage;
+    // 정지 장면 상자는 모서리를 크게 둥글린다 (D-305)
+    return ClipRRect(borderRadius: BorderRadius.circular(stillRadius), child: _stillCanvas(drag));
+  }
+
+  StillCanvas _stillCanvas(bool drag) {
     return StillCanvas(
       imageUrl: _still!.imageUrl,
       natural: _natural!,
@@ -432,24 +437,19 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _StepBar(current: _step),
-        const SizedBox(height: 20),
-        // 파일 이름 | 관리자 ○○ | 열람기한 (캔버스 2.6)
-        if (_filename != null)
-          Wrap(
-            spacing: 12,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(_filename!, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: subColor)),
-              for (final note in [...counterpartNote(ref, _id), viewExpiresText(_viewExpiresAt)]) ...[
-                const Text('|', style: TextStyle(fontSize: 13, color: noteColor)),
-                Text(note, style: const TextStyle(fontSize: 13, color: noteColor)),
-              ],
-            ],
-          ),
-        const SizedBox(height: 10),
-        Text(title, style: pageTitleStyle),
-        const SizedBox(height: 20),
+        // 소제목 "입력 N / 8 · 단계 이름" + 파일 이름 | 상대 계정 | 열람기한, 8칸 막대, 큰 제목 (D-305)
+        PageHeading(
+          kicker: '입력 ${_step.index + 1} / ${_stepLabels.length} · ${_stepLabels[_step.index]}',
+          notes: [?_filename, ...counterpartNote(ref, _id), viewExpiresText(_viewExpiresAt)],
+        ),
+        const SizedBox(height: 16),
+        Semantics(
+          label: '입력 단계 ${_step.index + 1} / ${_stepLabels.length}',
+          child: StepBar(steps: _stepLabels, current: _step.index),
+        ),
+        const SizedBox(height: 28),
+        PageHeading(title: title, titleSize: 36),
+        const SizedBox(height: 28),
         LayoutBuilder(
           builder: (context, c) => c.maxWidth >= 900
               ? Row(
@@ -739,60 +739,5 @@ class _DamageInputPageState extends ConsumerState<DamageInputPage> {
   }
 }
 
-/// 입력 여덟 단계 표시줄. 지금 단계만 남색 동그라미 (캔버스 2.6).
-class _StepBar extends StatelessWidget {
-  const _StepBar({required this.current});
-
-  final InputStep current;
-
-  static const _labels = ['차량 고르기', '파손이 보이나요?', '파손 부위 드래그', '바닥 네 모서리', '앞쪽 변 고르기', '파손 변 고르기', '사진·설명 (선택)', '확인 후 저장'];
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: '입력 단계 ${current.index + 1} / ${_labels.length}',
-      child: PageCard(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        child: Wrap(
-          spacing: 32,
-          runSpacing: 12,
-          children: [
-            for (final (i, label) in _labels.indexed)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 24,
-                    height: 24,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: i == current.index ? pointColor : null,
-                      border: Border.all(color: i == current.index ? pointColor : const Color(0xFF8F8F8B), width: 1.5),
-                    ),
-                    child: Text(
-                      '${i + 1}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: i == current.index ? offWhiteColor : noteColor,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: i == current.index ? FontWeight.w600 : FontWeight.w400,
-                      color: i == current.index ? inkColor : noteColor,
-                    ),
-                  ),
-                ],
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+/// 입력 여덟 단계 이름 (07장 2.6). 소제목과 단계 막대가 같이 쓴다.
+const _stepLabels = ['차량 고르기', '파손이 보이나요?', '파손 부위 드래그', '바닥 네 모서리', '앞쪽 변 고르기', '파손 변 고르기', '사진·설명 (선택)', '확인 후 저장'];

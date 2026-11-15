@@ -249,7 +249,15 @@ class PageGlow extends StatelessWidget {
 /// 본문 머리: 작은 소제목(있을 때만) + 큰 제목 (캔버스 새 컨셉, D-305). 글자는 07장 그대로 호출하는 쪽이 넘긴다.
 /// [strong]이 제목 안에 있으면 그 부분만 굵게 하고 나머지는 얇게 쓴다. 없으면 제목 전체를 굵게 둔다.
 class PageHeading extends StatelessWidget {
-  const PageHeading({super.key, this.title, this.kicker, this.notes = const [], this.strong, this.actions = const []});
+  const PageHeading({
+    super.key,
+    this.title,
+    this.kicker,
+    this.notes = const [],
+    this.strong,
+    this.actions = const [],
+    this.titleSize,
+  });
 
   final String? title;
   final String? kicker;
@@ -261,11 +269,14 @@ class PageHeading extends StatelessWidget {
   /// 제목 줄 오른쪽 버튼.
   final List<Widget> actions;
 
+  /// 넓은 화면의 제목 글자 크기. 문장이 긴 제목(입력 단계 안내)은 줄이 바뀌어 아래 화면이 밀리지 않게 작게 쓴다.
+  final double? titleSize;
+
   @override
   Widget build(BuildContext context) {
     final title = this.title;
     final kicker = this.kicker;
-    final size = isNarrow(context) ? 34.0 : 56.0;
+    final size = isNarrow(context) ? 34.0 : (titleSize ?? 56.0);
     TextStyle style(FontWeight w) =>
         TextStyle(fontSize: size, fontWeight: w, color: inkColor, height: 1.15, letterSpacing: 0);
     Widget titleText(String title) {
