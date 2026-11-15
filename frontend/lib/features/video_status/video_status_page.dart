@@ -192,7 +192,7 @@ class _VideoStatusPageState extends ConsumerState<VideoStatusPage> {
         _ => [...counterpartNote(ref, _id), if (d.viewExpiresAt != null) viewExpiresText(d.viewExpiresAt)],
       },
       title: d?.originalFilename ?? '영상 상태',
-      titleStrong: d == null ? null : _withoutExtension(d.originalFilename),
+      titleStrong: d == null ? null : withoutExtension(d.originalFilename),
       child: d == null || screen == null ? const Center(child: CircularProgressIndicator()) : _body(context, d, screen),
     );
   }
@@ -294,8 +294,8 @@ class _VideoStatusPageState extends ConsumerState<VideoStatusPage> {
   }
 }
 
-/// 파일 이름에서 확장자를 뺀 부분. 제목에서 이 부분만 굵게 쓴다 (확장자는 얇게).
-String? _withoutExtension(String? name) {
+/// 파일 이름에서 확장자를 뺀 부분 (후보 확인 화면도 같이 쓴다). 제목에서 이 부분만 굵게 쓴다 (확장자는 얇게).
+String? withoutExtension(String? name) {
   if (name == null) return null;
   final dot = name.lastIndexOf('.');
   return dot > 0 ? name.substring(0, dot) : name;
