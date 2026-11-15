@@ -332,7 +332,7 @@ void main() {
           {...case3(), 'id': 5, 'victim_name': 'victim03', 'created_at': '2026-11-03T09:00:00+09:00', 'accepted_at': null},
         ],
       }),
-      // 22번에는 상대 계정 ID가 없어 이름으로 29번과 짝짓는다 (D-298). victim03은 수락한 사건이 없어 29번에 없다
+      // 22번에는 상대 계정 ID가 없어 이름으로 29번과 짝짓는다 (D-303). victim03은 수락한 사건이 없어 29번에 없다
       'GET /api/chats': (_) => json({
         'items': [chatPeer(12, 'victim02', last: first)],
         'unread_total': 0,
@@ -361,7 +361,7 @@ void main() {
     expect(backend.screenCalls.where((c) => c.contains('/api/chats/') && c.contains('/messages')).length, 1);
   });
 
-  testWidgets('채팅은 기존 메시지를 좌우로 나눠 보이고, 보내면 31번 뒤 29번을 다시 읽는다 (2.11, D-298)', (tester) async {
+  testWidgets('채팅은 기존 메시지를 좌우로 나눠 보이고, 보내면 31번 뒤 29번을 다시 읽는다 (2.11, D-303)', (tester) async {
     final messages = <Map<String, Object?>>[chatMsg(1, '영상을 올렸습니다', mine: false, at: '2026-11-02T10:00:00+09:00')];
     Object? readBody;
     final backend = FakeBackend({
@@ -403,7 +403,7 @@ void main() {
     expect(tester.getTopLeft(find.text('확인했습니다')).dx, greaterThan(tester.view.physicalSize.width / 2));
   });
 
-  testWidgets('안 읽은 수는 목록 줄 숫자와 합친 메뉴 배지로 보이고, 대화를 열면 읽음 처리로 사라진다. 30일 안내가 목록 위에 있다 (2.11, D-298)', (tester) async {
+  testWidgets('안 읽은 수는 목록 줄 숫자와 합친 메뉴 배지로 보이고, 대화를 열면 읽음 처리로 사라진다. 30일 안내가 목록 위에 있다 (2.11, D-303)', (tester) async {
     var unread02 = 2; // 처음 열리는 대화. 32번을 부르면 0이 된다
     var unread03 = 3;
     final backend = FakeBackend({
@@ -448,7 +448,7 @@ void main() {
     expect(find.text('3'), findsNothing); // 읽으면 목록 숫자와 메뉴 배지가 함께 사라진다
   });
 
-  testWidgets('33번으로 온 새 메시지는 고른 상대면 대화에 붙고 읽음 처리, 다른 상대면 29번을 다시 읽는다. 같은 id는 버리고 화면을 떠나면 닫는다 (2.11, D-298)', (tester) async {
+  testWidgets('33번으로 온 새 메시지는 고른 상대면 대화에 붙고 읽음 처리, 다른 상대면 29번을 다시 읽는다. 같은 id는 버리고 화면을 떠나면 닫는다 (2.11, D-303)', (tester) async {
     var unread03 = 0;
     final backend = FakeBackend({
       'GET /api/videos': (_) => json([]),
@@ -503,7 +503,7 @@ void main() {
     expect(socket.closed, isTrue); // 화면을 떠나면 닫는다
   });
 
-  testWidgets('33번이 그 밖의 이유로 끊기면 다시 연결해 빠진 메시지를 채우고, 4408이면 안내만 하고 다시 연결하지 않는다. 다른 메뉴로 가면 닫는다 (2.11, D-298)', (tester) async {
+  testWidgets('33번이 그 밖의 이유로 끊기면 다시 연결해 빠진 메시지를 채우고, 4408이면 안내만 하고 다시 연결하지 않는다. 다른 메뉴로 가면 닫는다 (2.11, D-303)', (tester) async {
     final backend = FakeBackend({
       'GET /api/videos': (_) => json([]),
       'GET /api/cases': (_) => json({

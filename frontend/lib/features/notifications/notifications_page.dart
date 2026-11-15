@@ -23,7 +23,7 @@ import 'notification_rules.dart';
 /// 대기 중인 사건 초대는 피해자가 [수락]하면 그 사건이 묶인다 (D-233). 관리자는 [수락]이 없고 할 일을 본다 (D-243).
 /// 거절은 없다. 대화 아래에 메시지 흐름과 입력칸이 있고, 수락한 사건이 있는 상대에게만 보낸다 (D-297).
 /// 22번·8번·메시지는 열 때와 [수락]·보내기 뒤에만 읽고, 새 메시지는 33번 WebSocket으로 받는다.
-/// 화면이 열려 있는 동안만 연결하고 떠나면 닫는다 (D-286, D-298).
+/// 화면이 열려 있는 동안만 연결하고 떠나면 닫는다 (D-286, D-303).
 class NotificationsPage extends ConsumerStatefulWidget {
   const NotificationsPage({super.key});
 
@@ -32,7 +32,7 @@ class NotificationsPage extends ConsumerStatefulWidget {
 }
 
 /// 한 상대 계정과 묶인 사건들. 22번에 상대 계정 ID가 없어 지금은 이름으로 묶고, 29번 대화 상대([peer])를 이름으로 짝짓는다.
-/// 사건을 모두 숨긴 상대는 [cases]가 비고 [peer]만 있다. 수락한 사건이 없어 29번에 없는 상대는 [peer]가 null이다 (D-298).
+/// 사건을 모두 숨긴 상대는 [cases]가 비고 [peer]만 있다. 수락한 사건이 없어 29번에 없는 상대는 [peer]가 null이다 (D-303).
 class _Person {
   _Person(this.name, this.cases, this.peer);
 
@@ -92,7 +92,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     }
   }
 
-  /// 닫는 코드별 처리 (05장 33번, D-298). 4401은 로그인 화면으로, 4403은 조용히 멈추고,
+  /// 닫는 코드별 처리 (05장 33번, D-303). 4401은 로그인 화면으로, 4403은 조용히 멈추고,
   /// 4408은 멈추고 안내한다. 이 셋은 다시 연결하지 않는다. 그 밖의 끊김은 [pollInterval] 뒤 다시 연결한다.
   void _onSocketClosed(int code) {
     if (!mounted) return;
@@ -133,7 +133,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   }
 
   /// 받은 메시지를 반영한다. 같은 `id`는 버린다. 지금 고른 상대면 대화에 붙이고(상대가 보낸 것이면 읽음 처리),
-  /// 그 밖의 상대이거나 모르는 상대면 29번을 다시 읽어 목록 요약과 안 읽은 수를 맞춘다 (D-298).
+  /// 그 밖의 상대이거나 모르는 상대면 29번을 다시 읽어 목록 요약과 안 읽은 수를 맞춘다 (D-303).
   Future<void> _onSocketMessage(ChatMessageEvent e) async {
     if (!mounted) return;
     final current = _selected == null ? null : peerOf(_selected!, _peers);
@@ -162,7 +162,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     if (mounted) setState(() => _peers = peers);
   }
 
-  /// 고른 사람의 최근 메시지를 읽고(30번), 화면에 그린 뒤 읽음으로 알린다(32번) (D-298).
+  /// 고른 사람의 최근 메시지를 읽고(30번), 화면에 그린 뒤 읽음으로 알린다(32번) (D-303).
   Future<void> _openChat(String? name) async {
     final peer = name == null ? null : peerOf(name, _peers);
     if (peer == null) {
@@ -194,7 +194,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       return;
     }
     await _loadPeers();
-    if (mounted) ref.invalidate(notificationBadgeProvider); // 읽음 처리 뒤 메뉴 배지를 다시 센다 (D-298)
+    if (mounted) ref.invalidate(notificationBadgeProvider); // 읽음 처리 뒤 메뉴 배지를 다시 센다 (D-303)
   }
 
   void _select(_Person p) {
@@ -266,7 +266,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       _admin ? adminTodoCount(_videos.where((v) => v.caseId == c.id).toList()) > 0 : c.pending;
 
   /// 상대 계정별로 묶는다. 할 일이 있는 사람이 먼저이고, 그다음 최근 시각 순이다.
-  /// 29번에만 있는 상대(사건을 모두 숨긴 경우)도 한 줄로 붙인다 (D-298).
+  /// 29번에만 있는 상대(사건을 모두 숨긴 경우)도 한 줄로 붙인다 (D-303).
   List<_Person> _grouped() {
     final byName = <String, List<VideoCase>>{};
     for (final c in _cases ?? <VideoCase>[]) {
@@ -404,7 +404,7 @@ class _PersonList extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: 6,
         children: [
-          // 어느 상대를 골라도 항상 보이게 목록 위에 둔다 (D-288, D-298)
+          // 어느 상대를 골라도 항상 보이게 목록 위에 둔다 (D-288, D-303)
           const Padding(padding: EdgeInsets.only(bottom: 4), child: SmallText('메시지는 보낸 지 30일이 지나면 지워집니다.')),
           for (final p in people)
             Material(
@@ -431,7 +431,7 @@ class _PersonList extends StatelessWidget {
                           if (p.latestAt case final at?) SmallText(formatKstMinute(at).substring(5)), // "MM-DD HH:mm"
                         ],
                       ),
-                      // 시간 아래까지 한 줄을 쓰고, 넘치면 "..."로 줄인다. 안 읽은 수는 그 줄 오른쪽 끝에 둔다 (D-297, D-298)
+                      // 시간 아래까지 한 줄을 쓰고, 넘치면 "..."로 줄인다. 안 읽은 수는 그 줄 오른쪽 끝에 둔다 (D-297, D-303)
                       Row(
                         spacing: 8,
                         children: [
@@ -457,7 +457,7 @@ class _PersonList extends StatelessWidget {
   }
 }
 
-/// 안 읽은 메시지 수를 보이는 빨간 숫자 동그라미 (D-298).
+/// 안 읽은 메시지 수를 보이는 빨간 숫자 동그라미 (D-303).
 class _UnreadDot extends StatelessWidget {
   const _UnreadDot(this.count);
 

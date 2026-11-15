@@ -5,7 +5,7 @@ import 'package:parking_lot_frontend/features/notifications/chat_rules.dart';
 ChatMessage _m(int id) => ChatMessage(id: id, mine: false, body: '$id', createdAt: '2026-11-15T10:00:00Z');
 
 void main() {
-  test('메뉴 배지는 기존 수에 안 읽은 채팅 수를 더하고, 29번이 실패해도 기존 수는 남는다 (D-298)', () {
+  test('메뉴 배지는 기존 수에 안 읽은 채팅 수를 더하고, 29번이 실패해도 기존 수는 남는다 (D-303)', () {
     expect(chatBadgeCount(2, 3), 5);
     expect(chatBadgeCount(2, null), 2);
   });

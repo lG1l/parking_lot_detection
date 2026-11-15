@@ -41,7 +41,7 @@ abstract class ChatSocket {
 /// 만들 때 연결하는 [ChatSocket]을 돌려주는 함수. 테스트는 가짜로 바꿔 끼운다.
 typedef ChatSocketFactory = ChatSocket Function();
 
-// 백엔드 연결 필요: 데모는 같은 탭 하나라 상대 메시지가 실시간으로 올 일이 없어 연결을 만들지 않는다 (D-298)
+// 백엔드 연결 필요: 데모는 같은 탭 하나라 상대 메시지가 실시간으로 올 일이 없어 연결을 만들지 않는다 (D-303)
 final chatSocketProvider = Provider<ChatSocketFactory>((ref) => useBackend ? createChatSocket : IdleChatSocket.new);
 
 /// 아무것도 오지 않고 닫히지도 않는 연결. 데모와 웹이 아닌 곳(테스트 VM)에서 쓴다.
