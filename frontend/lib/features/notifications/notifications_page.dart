@@ -156,18 +156,12 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   /// 사건의 알림 (규칙은 notification_rules.dart).
   List<NoticeMessage> _messagesOf(VideoCase c) => messagesOf(c, _videos, admin: _admin);
 
-  /// 사건 한 건의 요약. 마지막 알림을 짧게 보인다 (캔버스 "사전 입력 필요 · …").
-  String _caseSummary(VideoCase c) => switch (_messagesOf(c).last) {
-    NoticeInvite() => c.pending ? (_admin ? '연결 요청 · 수락을 기다립니다' : '연결 요청 · 수락이 필요합니다') : '연결 수락 · 수락했습니다.',
-    NoticeAccepted() => '연결 수락 · 수락했습니다.',
-    NoticeStatus(:final chip, :final title) => '$chip · $title',
-  };
-
-  /// 왼쪽 목록 한 줄의 요약. 할 일이 있는 최근 사건, 없으면 최근 사건의 마지막 알림이다.
+  /// 왼쪽 목록 한 줄의 요약: "가장 최근 알림 · 가장 최근 채팅" (D-294).
+  /// 알림은 가장 최근 사건의 마지막 알림을 짧은 상태 이름으로, 채팅은 내용 전부다. 채팅이 없으면 알림만.
   String _summaryOf(_Person p) {
-    final c = p.cases.reversed.firstWhere(_needsAction, orElse: () => p.cases.last);
-    final summary = _caseSummary(c);
-    return p.cases.length > 1 ? '사건 ${p.cases.length}건 · $summary' : summary;
+    final notice = noticeLabel(_messagesOf(p.cases.last).last);
+    final chat = messagesOfPerson(p.cases, _chat).lastOrNull;
+    return chat == null ? notice : '$notice · ${chat.body}';
   }
 
   @override
@@ -287,7 +281,13 @@ class _PersonList extends StatelessWidget {
                           SmallText(formatKstMinute(p.latestAt).substring(5)), // "MM-DD HH:mm"
                         ],
                       ),
-                      Text(summaryOf(p), style: const TextStyle(fontSize: 13, color: subColor, height: 1.5)),
+                      // 시간 아래까지 한 줄을 다 쓰고, 넘치면 "..."로 줄인다 (D-294)
+                      Text(
+                        summaryOf(p),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 13, color: subColor, height: 1.5),
+                      ),
                     ],
                   ),
                 ),

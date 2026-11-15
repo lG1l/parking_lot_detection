@@ -39,6 +39,13 @@ const acceptedEmoji = '✅';
 String inviteTitle({required bool admin}) => admin ? '연결을 요청했어요' : '연결 요청이 왔어요!';
 String acceptedTitle({required bool admin}) => admin ? '연결이 수락되었어요!' : '연결을 수락했어요!';
 
+/// 왼쪽 목록 요약에 쓰는 짧은 상태 이름 ("연결 요청", "분석 실패" 등, D-294).
+String noticeLabel(NoticeMessage m) => switch (m) {
+  NoticeInvite() => '연결 요청',
+  NoticeAccepted() => '연결 수락',
+  NoticeStatus(:final chip) => chip,
+};
+
 /// 내 쪽(오른쪽)에 둘 알림인지. 연결 요청은 관리자가, 연결 수락은 피해자가 한 일이다.
 /// 영상 상태 알림은 내게 오는 소식이라 상대 쪽(왼쪽)이다 (D-294).
 bool noticeIsMine(NoticeMessage m, {required bool admin}) => switch (m) {
@@ -53,16 +60,16 @@ NoticeStatus? statusNoticeOf(VideoSummary v, {required bool admin}) {
   if (admin) {
     return switch (v.status) {
       VideoStatus.stage2Running => NoticeStatus(v, '분석 시작', '영상 분석을 시작했어요!', '🔍'),
-      VideoStatus.ready || VideoStatus.batchRunning => NoticeStatus(v, '후보 선택 가능', '후보를 고를 수 있어요!', '🎯'),
+      VideoStatus.ready || VideoStatus.batchRunning => NoticeStatus(v, '후보 선정', '후보를 고를 수 있어요!', '🎯'),
       VideoStatus.failed => NoticeStatus(v, '분석 실패', '영상 분석에 실패했어요', '⚠️', problem: true),
-      VideoStatus.uploadFailed => NoticeStatus(v, '업로드 확인 안 됨', '업로드를 확인하지 못했어요', '📤', problem: true),
+      VideoStatus.uploadFailed => NoticeStatus(v, '업로드 실패', '업로드를 확인하지 못했어요', '📤', problem: true),
       _ => null,
     };
   }
   return switch (v.status) {
-    VideoStatus.stage1Done => NoticeStatus(v, '사전 입력 필요', '내 차량을 입력해 주세요!', '✏️'),
+    VideoStatus.stage1Done => NoticeStatus(v, '입력 필요', '내 차량을 입력해 주세요!', '✏️'),
     VideoStatus.ready || VideoStatus.batchRunning => NoticeStatus(v, '분석 완료', '영상 분석이 끝났어요!', '📊'),
-    VideoStatus.finished || VideoStatus.exhausted => NoticeStatus(v, '확인 완료', '사건 시각을 확인했어요!', '🕒'),
+    VideoStatus.finished || VideoStatus.exhausted => NoticeStatus(v, '최종 완료', '사건 시각을 확인했어요!', '🕒'),
     VideoStatus.failed => NoticeStatus(v, '분석 실패', '영상 분석에 실패했어요', '⚠️', problem: true),
     _ => null,
   };

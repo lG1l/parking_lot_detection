@@ -312,11 +312,18 @@ void main() {
           {...case3(), 'id': 5, 'victim_name': 'victim03', 'created_at': '2026-11-03T09:00:00+09:00', 'accepted_at': null},
         ],
       }),
+      'GET /api/messages': (_) => json({
+        'items': [
+          {'id': 1, 'case_id': 3, 'sender_role': 'victim', 'body': '언제 올라오나요?', 'created_at': '2026-11-02T11:00:00+09:00'},
+        ],
+      }),
     });
     await pumpApp(tester, backend, '/notifications');
     expect(find.text('victim03'), findsOneWidget);
     expect(find.text('victim02'), findsNWidgets(2)); // 왼쪽 한 줄 + 오른쪽 대화 제목 (최근 사람이 먼저)
-    expect(find.textContaining('사건 2건 · '), findsOneWidget);
+    // 목록 요약은 "가장 최근 알림 · 가장 최근 채팅", 채팅이 없으면 알림만 (D-294)
+    expect(find.text('연결 요청 · 언제 올라오나요?'), findsOneWidget);
+    expect(find.text('연결 요청'), findsOneWidget);
     expect(find.text('2026-11-01'), findsOneWidget); // 사건 구분선은 날짜만
     expect(find.text('2026-11-05'), findsOneWidget);
     expect(find.text('첫 사건'), findsNWidgets(2)); // 연결 요청·연결 수락 카드의 작은 글씨는 사건 이름만

@@ -36,16 +36,16 @@ void main() {
     // 관리자, 수락한 사건 + 분석 중
     expect(kinds(messagesOf(_case(), [_video(VideoStatus.stage2Running)], admin: true)), '연결,수락함,분석 시작');
     // 관리자, 수락 전 사건 + ready: 수락 전이어도 영상 알림이 붙고 수락함은 없다
-    expect(kinds(messagesOf(_case(pending: true), [_video(VideoStatus.ready)], admin: true)), '연결,후보 선택 가능');
+    expect(kinds(messagesOf(_case(pending: true), [_video(VideoStatus.ready)], admin: true)), '연결,후보 선정');
     // 피해자, 수락 전 사건: 초대만 (영상 정보를 보이지 않는다, D-233·D-238)
     expect(kinds(messagesOf(_case(pending: true), [_video(VideoStatus.stage1Done)], admin: false)), '연결');
     // 피해자, 수락한 사건: 요청·수락(내 쪽)·영상 알림 (D-294)
-    expect(kinds(messagesOf(_case(), [_video(VideoStatus.stage1Done)], admin: false)), '연결,수락함,사전 입력 필요');
+    expect(kinds(messagesOf(_case(), [_video(VideoStatus.stage1Done)], admin: false)), '연결,수락함,입력 필요');
     // 보관 기간이 끝난 영상은 알림이 없다
     expect(kinds(messagesOf(_case(), [_video(VideoStatus.ready, expired: true)], admin: true)), '연결,수락함');
     // 업로드 확인 안 됨은 실패 칩 색
     final failed = statusNoticeOf(_video(VideoStatus.uploadFailed), admin: true)!;
-    expect((failed.chip, failed.problem), ('업로드 확인 안 됨', true));
+    expect((failed.chip, failed.problem), ('업로드 실패', true));
 
     // 할 일 수: ready·batch_running·failed·upload_failed만 센다 (분석 중·확인 완료·만료는 제외)
     expect(
