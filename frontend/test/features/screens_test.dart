@@ -240,7 +240,7 @@ void main() {
     expect(find.widgetWithText(FilledButton, '수락'), findsNothing);
     expect(find.text('연결을 수락했어요!'), findsOneWidget);
     expect(find.text('내 차량을 입력해 주세요!'), findsOneWidget); // 수락하면 영상 상태 알림이 붙는다 (D-237)
-    // 피해자 기준: 관리자가 보낸 요청·영상 알림은 왼쪽, 내가 한 수락은 오른쪽 (D-294)
+    // 피해자 기준: 관리자가 보낸 요청·영상 알림은 왼쪽, 내가 한 수락은 오른쪽 (D-297)
     final middle = tester.view.physicalSize.width / tester.view.devicePixelRatio / 2;
     final talkLeft = tester.getTopLeft(find.text('연결 요청이 왔어요!')).dx;
     expect(tester.getTopLeft(find.text('연결을 수락했어요!')).dx, greaterThan(middle));
@@ -321,7 +321,7 @@ void main() {
     await pumpApp(tester, backend, '/notifications');
     expect(find.text('victim03'), findsOneWidget);
     expect(find.text('victim02'), findsNWidgets(2)); // 왼쪽 한 줄 + 오른쪽 대화 제목 (최근 사람이 먼저)
-    // 목록 요약은 "가장 최근 알림 · 가장 최근 채팅", 채팅이 없으면 알림만 (D-294)
+    // 목록 요약은 "가장 최근 알림 · 가장 최근 채팅", 채팅이 없으면 알림만 (D-297)
     expect(find.text('연결 요청 · 언제 올라오나요?'), findsOneWidget);
     expect(find.text('연결 요청'), findsOneWidget);
     expect(find.text('2026-11-01'), findsOneWidget); // 사건 구분선은 날짜만
@@ -335,7 +335,7 @@ void main() {
     expect(find.text('연결을 요청했어요'), findsOneWidget);
   });
 
-  testWidgets('채팅은 기존 메시지를 좌우로 나눠 보이고, 보내면 30번 뒤 29번을 다시 읽는다 (2.11, D-294)', (tester) async {
+  testWidgets('채팅은 기존 메시지를 좌우로 나눠 보이고, 보내면 30번 뒤 29번을 다시 읽는다 (2.11, D-297)', (tester) async {
     final sent = <Map<String, Object?>>[
       {'id': 1, 'case_id': 3, 'sender_role': 'admin', 'body': '영상을 올렸습니다', 'created_at': '2026-11-02T10:00:00+09:00'},
     ];
@@ -373,7 +373,7 @@ void main() {
     expect(tester.getTopLeft(find.text('확인했습니다')).dx, greaterThan(tester.view.physicalSize.width / 2));
   });
 
-  testWidgets('메시지가 많아도 입력칸은 화면 아래에 고정되어 보인다 (2.11, D-294)', (tester) async {
+  testWidgets('메시지가 많아도 입력칸은 화면 아래에 고정되어 보인다 (2.11, D-297)', (tester) async {
     final backend = FakeBackend({
       'GET /api/videos': (_) => json([]),
       'GET /api/cases': (_) => json({
@@ -397,7 +397,7 @@ void main() {
     expect(tester.getRect(find.text('메시지 40')).bottom, lessThan(field.top));
   });
 
-  testWidgets('수락한 사건이 없으면 입력칸 대신 안내를 보인다 (2.11, D-294)', (tester) async {
+  testWidgets('수락한 사건이 없으면 입력칸 대신 안내를 보인다 (2.11, D-297)', (tester) async {
     final backend = FakeBackend({
       'GET /api/videos': (_) => json([]),
       'GET /api/cases': (_) => json({
@@ -411,7 +411,7 @@ void main() {
     expect(find.byType(TextField), findsNothing);
   });
 
-  testWidgets('관리자 메뉴 5개는 글자 [크게]에서도 상단 바가 넘치지 않는다 (3.8, D-236, D-243, D-288)', (tester) async {
+  testWidgets('관리자 메뉴 5개는 글자 [크게]에서도 상단 바가 넘치지 않는다 (3.8, D-236, D-243, D-291)', (tester) async {
     final browser = FakeBrowser()..local[textSizeStorageKey] = 'large';
     await pumpApp(tester, FakeBackend({}), '/notifications', browser: browser);
     for (final width in [1000.0, 1200.0, 1400.0, 999.0, 800.0]) {
@@ -421,7 +421,7 @@ void main() {
     }
   });
 
-  testWidgets('설정은 내 계정·보안 설정·환경 설정·서비스를 보이고, 로그아웃·글자 크기 말고는 안내 창만 띄운다 (D-288)', (tester) async {
+  testWidgets('설정은 내 계정·보안 설정·환경 설정·서비스를 보이고, 로그아웃·글자 크기 말고는 안내 창만 띄운다 (D-291)', (tester) async {
     final backend = FakeBackend({
       'GET /api/videos': (_) => json([video('stage1_done')]),
     }, role: 'victim');
@@ -464,7 +464,7 @@ void main() {
     expect(backend.calls.where((c) => !c.startsWith('GET ')), isEmpty);
   });
 
-  testWidgets('설정의 [로그아웃]은 2번을 부르고 로그인 화면으로 간다 (D-288)', (tester) async {
+  testWidgets('설정의 [로그아웃]은 2번을 부르고 로그인 화면으로 간다 (D-291)', (tester) async {
     final backend = FakeBackend({'POST /api/auth/logout': (_) => json(null, 204)});
     await pumpApp(tester, backend, '/settings');
     await tester.tap(find.widgetWithText(OutlinedButton, '로그아웃'));
@@ -473,7 +473,7 @@ void main() {
     expect(find.widgetWithText(OutlinedButton, '로그아웃'), findsNothing);
   });
 
-  testWidgets('관리자 계정 설정은 "관리자"를 보이고, 옛 마이페이지 주소는 설정으로 간다 (D-234, D-288)', (tester) async {
+  testWidgets('관리자 계정 설정은 "관리자"를 보이고, 옛 마이페이지 주소는 설정으로 간다 (D-234, D-291)', (tester) async {
     await pumpApp(tester, FakeBackend({}), '/mypage');
     expect(find.text('parking_admin'), findsOneWidget);
     expect(find.text('관리자'), findsOneWidget);
@@ -485,7 +485,7 @@ void main() {
     );
   });
 
-  testWidgets('관리자 이용 안내는 캔버스 Info 전체 구성이고, 창 폭이 바뀌어도 넘치지 않는다 (2.13, D-289)', (tester) async {
+  testWidgets('관리자 이용 안내는 캔버스 Info 전체 구성이고, 창 폭이 바뀌어도 넘치지 않는다 (2.13, D-292)', (tester) async {
     await pumpApp(tester, FakeBackend({}), '/info');
     for (final text in ['주차장 관리자 안내', 'CANDIDATE', 'SCREENING', 'CCTV', '5단계로 끝나는 사건 처리', '01', '05', '관리·감독 안내']) {
       expect(find.text(text), findsWidgets, reason: text);
@@ -514,7 +514,7 @@ void main() {
     expect(backend.calls.where((c) => !c.startsWith('GET ')), isEmpty);
   });
 
-  testWidgets('설정에서 글자 크기 [크게]를 고르면 앱 전체 글자가 커지고 브라우저에 저장된다 (D-236, D-288)', (tester) async {
+  testWidgets('설정에서 글자 크기 [크게]를 고르면 앱 전체 글자가 커지고 브라우저에 저장된다 (D-236, D-291)', (tester) async {
     final backend = FakeBackend({});
     final browser = FakeBrowser();
     await pumpApp(tester, backend, '/settings', browser: browser);
@@ -1301,7 +1301,7 @@ void main() {
     await tester.pump();
     await tapNext();
     await tapNext(); // ⑦ 사진·설명 없이
-    expect(find.text('초록 선'), findsOneWidget); // ⑧ 확인표 (D-292)
+    expect(find.text('초록 선'), findsOneWidget); // ⑧ 확인표 (D-295)
 
     await tester.tap(find.widgetWithText(FilledButton, '저장'));
     await tester.pump();
@@ -1352,7 +1352,7 @@ void main() {
     await unmount(tester);
   });
 
-  testWidgets('돋보기 [+]로 사진만 확대되고 크기는 그대로이며, 드래그로 옮긴 뒤에도 누른 곳이 원본 좌표로 맞는다 (2.6, D-290)', (tester) async {
+  testWidgets('돋보기 [+]로 사진만 확대되고 크기는 그대로이며, 드래그로 옮긴 뒤에도 누른 곳이 원본 좌표로 맞는다 (2.6, D-293)', (tester) async {
     final backend = FakeBackend({
       'GET /api/videos/7': (_) => json(video('stage1_done')),
       'GET /api/videos/7/still': (_) => json({

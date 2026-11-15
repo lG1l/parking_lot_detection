@@ -1,7 +1,7 @@
 import '../../core/models/account.dart';
 import '../../core/models/message.dart';
 
-/// 채팅 규칙 (07장 2.11, D-294). 위젯이 없는 순수 규칙이라 단위 테스트로 확인한다.
+/// 채팅 규칙 (07장 2.11, D-297). 위젯이 없는 순수 규칙이라 단위 테스트로 확인한다.
 
 /// 한 상대와 묶인 [cases]에 속한 메시지만 시간순(오래된 것이 먼저)으로 모은다.
 List<ChatMessage> messagesOfPerson(List<VideoCase> cases, List<ChatMessage> messages) {

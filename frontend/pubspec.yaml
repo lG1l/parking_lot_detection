@@ -77,7 +77,7 @@ flutter:
         weight: 500
       - asset: assets/fonts/pretendard/Pretendard-SemiBold.otf
         weight: 600
-      # Light·ExtraBold는 이용 안내 화면의 큰 영문 글자에만 쓴다 (D-289)
+      # Light·ExtraBold는 이용 안내 화면의 큰 영문 글자에만 쓴다 (D-292)
       - asset: assets/fonts/pretendard/Pretendard-ExtraBold.otf
         weight: 800
 

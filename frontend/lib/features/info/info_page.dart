@@ -74,7 +74,7 @@ const List<_Tip> _victimTips = [
 const _accent = cornerColor; // 캔버스의 밝은 파랑 #3D8BFF
 
 /// 2.13 이용 안내 (두 계정). 로그인 뒤 첫 화면이며 계정에 맞는 사용법만 보인다 (D-235).
-/// 모양은 캔버스 "Info 전체 (레이아웃 + 서비스 정보)"를 따른다 (D-289):
+/// 모양은 캔버스 "Info 전체 (레이아웃 + 서비스 정보)"를 따른다 (D-292):
 /// 큰 영문 제목 히어로 · 기능 세 줄 · 소개 문장 · 사용 방법 카드 · 주요 기능 · 안내 · 맨 아래 큰 글자.
 /// 3번(`meProvider`)만 부르고 새 API는 없다.
 class InfoPage extends ConsumerWidget {

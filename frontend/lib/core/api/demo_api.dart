@@ -100,7 +100,7 @@ class DemoApi extends Api {
     });
     add(12, 4, '12_수락대기.mp4', VideoStatus.stage1Done);
 
-    // 사건 1에 예시 메시지 (D-294)
+    // 사건 1에 예시 메시지 (D-297)
     void say(String role, String body, int minutesAgo) => _messages.add({
       'id': _messages.length + 1,
       'case_id': 1,
@@ -121,7 +121,7 @@ class DemoApi extends Api {
   final _cases = <int, Map<String, Object?>>{};
   final _agreed = <int>{}; // 관리·감독 안내에 동의한 영상 (23번)
   final _pins = <int, List<Map<String, Object?>>>{};
-  final _messages = <Map<String, Object?>>[]; // 채팅 메시지 (D-294)
+  final _messages = <Map<String, Object?>>[]; // 채팅 메시지 (D-297)
   final _mainBatch = <int, int>{}; // 영상별 지금 묶음 번호
   final _failedSeen = <int>{}; // 점수 미산출 탭을 넘긴 영상
   Me? _me;

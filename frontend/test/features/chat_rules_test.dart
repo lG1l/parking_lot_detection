@@ -12,7 +12,7 @@ VideoCase _case(int id, {String? acceptedAt, bool pending = false}) => VideoCase
 );
 
 void main() {
-  test('보낼 사건은 가장 최근에 수락한 사건이고, 수락한 사건이 없으면 null이다 (D-294)', () {
+  test('보낼 사건은 가장 최근에 수락한 사건이고, 수락한 사건이 없으면 null이다 (D-297)', () {
     final cases = [
       _case(1, acceptedAt: '2026-11-02T00:00:00Z'),
       _case(2, acceptedAt: '2026-11-05T00:00:00Z'),

@@ -14,7 +14,7 @@ class NoticeInvite extends NoticeMessage {
   final VideoCase videoCase;
 }
 
-/// 피해자가 연결을 수락했다. 관리자에게는 상대가 한 일, 피해자에게는 내가 한 일이다 (D-243, D-294).
+/// 피해자가 연결을 수락했다. 관리자에게는 상대가 한 일, 피해자에게는 내가 한 일이다 (D-243, D-297).
 class NoticeAccepted extends NoticeMessage {
   const NoticeAccepted(this.videoCase);
 
@@ -39,7 +39,7 @@ const acceptedEmoji = '✅';
 String inviteTitle({required bool admin}) => admin ? '연결을 요청했어요' : '연결 요청이 왔어요!';
 String acceptedTitle({required bool admin}) => admin ? '연결이 수락되었어요!' : '연결을 수락했어요!';
 
-/// 왼쪽 목록 요약에 쓰는 짧은 상태 이름 ("연결 요청", "분석 실패" 등, D-294).
+/// 왼쪽 목록 요약에 쓰는 짧은 상태 이름 ("연결 요청", "분석 실패" 등, D-297).
 String noticeLabel(NoticeMessage m) => switch (m) {
   NoticeInvite() => '연결 요청',
   NoticeAccepted() => '연결 수락',
@@ -47,7 +47,7 @@ String noticeLabel(NoticeMessage m) => switch (m) {
 };
 
 /// 내 쪽(오른쪽)에 둘 알림인지. 연결 요청은 관리자가, 연결 수락은 피해자가 한 일이다.
-/// 영상 상태 알림은 내게 오는 소식이라 상대 쪽(왼쪽)이다 (D-294).
+/// 영상 상태 알림은 내게 오는 소식이라 상대 쪽(왼쪽)이다 (D-297).
 bool noticeIsMine(NoticeMessage m, {required bool admin}) => switch (m) {
   NoticeInvite() => admin,
   NoticeAccepted() => !admin,

@@ -17,7 +17,7 @@ import 'notification_rules.dart';
 /// 2.11 채팅 (두 계정). 왼쪽은 상대 계정(관리자 화면은 피해자, 피해자 화면은 관리자),
 /// 오른쪽은 고른 사람과의 대화로, 사건마다 구분선 아래에 그 사건의 알림을 잇는다.
 /// 대기 중인 사건 초대는 피해자가 [수락]하면 그 사건이 묶인다 (D-233). 관리자는 [수락]이 없고 할 일을 본다 (D-243).
-/// 거절은 없다. 대화 아래에 메시지 흐름과 입력칸이 있고, 수락한 사건이 있는 상대에게만 보낸다 (D-294).
+/// 거절은 없다. 대화 아래에 메시지 흐름과 입력칸이 있고, 수락한 사건이 있는 상대에게만 보낸다 (D-297).
 /// 22번·8번·메시지는 열 때와 [수락]·보내기 뒤에만 읽는다. 새 메시지 받기(WebSocket, D-286)는 05장 주소가 나오면 붙인다.
 class NotificationsPage extends ConsumerStatefulWidget {
   const NotificationsPage({super.key});
@@ -156,7 +156,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   /// 사건의 알림 (규칙은 notification_rules.dart).
   List<NoticeMessage> _messagesOf(VideoCase c) => messagesOf(c, _videos, admin: _admin);
 
-  /// 왼쪽 목록 한 줄의 요약: "가장 최근 알림 · 가장 최근 채팅" (D-294).
+  /// 왼쪽 목록 한 줄의 요약: "가장 최근 알림 · 가장 최근 채팅" (D-297).
   /// 알림은 가장 최근 사건의 마지막 알림을 짧은 상태 이름으로, 채팅은 내용 전부다. 채팅이 없으면 알림만.
   String _summaryOf(_Person p) {
     final notice = noticeLabel(_messagesOf(p.cases.last).last);
@@ -204,7 +204,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       sending: _sending,
       onSend: _send,
     );
-    // 본문 전체를 스크롤하지 않고 창 높이에 맞춘다. 목록과 대화가 각자 스크롤하고, 입력칸은 아래에 고정된다 (D-294)
+    // 본문 전체를 스크롤하지 않고 창 높이에 맞춘다. 목록과 대화가 각자 스크롤하고, 입력칸은 아래에 고정된다 (D-297)
     final scrollList = SingleChildScrollView(child: list);
     return PageFrame(
       current: NavItem.notifications,
@@ -281,7 +281,7 @@ class _PersonList extends StatelessWidget {
                           SmallText(formatKstMinute(p.latestAt).substring(5)), // "MM-DD HH:mm"
                         ],
                       ),
-                      // 시간 아래까지 한 줄을 다 쓰고, 넘치면 "..."로 줄인다 (D-294)
+                      // 시간 아래까지 한 줄을 다 쓰고, 넘치면 "..."로 줄인다 (D-297)
                       Text(
                         summaryOf(p),
                         maxLines: 1,
@@ -333,7 +333,7 @@ class _Conversation extends StatelessWidget {
     spacing: 12,
     children: [
       Text(person.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
-      // 대화만 스크롤하고 입력칸은 아래에 고정한다. reverse라 처음부터 맨 아래(최근 메시지)가 보인다 (D-294)
+      // 대화만 스크롤하고 입력칸은 아래에 고정한다. reverse라 처음부터 맨 아래(최근 메시지)가 보인다 (D-297)
       Expanded(
         child: SingleChildScrollView(
           reverse: true,
@@ -397,7 +397,7 @@ class _Conversation extends StatelessWidget {
             title: noticeTitle,
             emoji: emoji,
             problem: problem,
-            caseLine: title, // 작은 글씨는 사건 이름만 (D-294)
+            caseLine: title, // 작은 글씨는 사건 이름만 (D-297)
             mine: noticeIsMine(m, admin: admin),
             onTap: () => context.go('/videos/${video.videoId}'),
           ),
@@ -407,7 +407,7 @@ class _Conversation extends StatelessWidget {
 }
 
 /// 알림 카드. 제목과 오른쪽 이모지, 아래 작은 글씨로 사건 이름만 적는다.
-/// [problem]이면 제목을 실패 색으로 그린다. [mine]이면(내가 한 일) 오른쪽, 아니면 왼쪽에 둔다 (D-294).
+/// [problem]이면 제목을 실패 색으로 그린다. [mine]이면(내가 한 일) 오른쪽, 아니면 왼쪽에 둔다 (D-297).
 /// [at]이 있으면 카드 바깥 안쪽 옆에 시각(HH:mm)만 보인다.
 class _NoticeCard extends StatelessWidget {
   const _NoticeCard({
@@ -460,7 +460,7 @@ class _NoticeCard extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: 2, // 제목과 사건 이름을 붙인다 (D-294)
+            spacing: 2, // 제목과 사건 이름을 붙인다 (D-297)
             children: [
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -495,7 +495,7 @@ class _NoticeCard extends StatelessWidget {
   );
 }
 
-/// 메시지 말풍선. 내 것은 오른쪽, 상대 것은 왼쪽이고 시각(HH:mm)을 옆에 붙인다 (D-294).
+/// 메시지 말풍선. 내 것은 오른쪽, 상대 것은 왼쪽이고 시각(HH:mm)을 옆에 붙인다 (D-297).
 class _Bubble extends StatelessWidget {
   const _Bubble({required this.message, required this.mine});
 
@@ -510,7 +510,7 @@ class _Bubble extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 420),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: mine ? pointLightColor : offWhiteColor, // 내 것은 연한 포인트색 (D-294)
+            color: mine ? pointLightColor : offWhiteColor, // 내 것은 연한 포인트색 (D-297)
             borderRadius: BorderRadius.circular(cardRadius),
             border: Border.all(color: mine ? pointLightColor : lineColor),
           ),
@@ -530,7 +530,7 @@ class _Bubble extends StatelessWidget {
   }
 }
 
-/// 메시지 입력칸 + [보내기]. 수락한 사건이 없으면([target]이 null) 막고 안내한다 (D-294).
+/// 메시지 입력칸 + [보내기]. 수락한 사건이 없으면([target]이 null) 막고 안내한다 (D-297).
 class _Composer extends StatelessWidget {
   const _Composer({required this.target, required this.input, required this.sending, required this.onSend});
 

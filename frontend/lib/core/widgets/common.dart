@@ -29,7 +29,7 @@ Future<void> backendNotice(BuildContext context, WidgetRef ref, String action) a
 /// 지금 기록을 바꿔, 뒤로 가기가 사용자가 연 이전 화면으로 가게 한다 (D-185).
 void redirectTo(BuildContext context, String path) => Router.neglect(context, () => context.go(path));
 
-/// 로그아웃(2번)하고 로그인 화면으로 간다. 로그아웃은 [설정]의 보안 설정에만 있다 (D-288).
+/// 로그아웃(2번)하고 로그인 화면으로 간다. 로그아웃은 [설정]의 보안 설정에만 있다 (D-291).
 Future<void> logout(BuildContext context, WidgetRef ref) async {
   // 백엔드 연결 필요: 2번 로그아웃
   await backendNotice(context, ref, '로그아웃');
@@ -95,17 +95,17 @@ const narrowWidth = 720.0;
 
 bool isNarrow(BuildContext context) => MediaQuery.sizeOf(context).width < narrowWidth;
 
-/// 이 폭보다 좁으면 상단 바 가운데 메뉴가 넘치지 않게 줄여 보인다. 메뉴가 4개(관리자는 5개)라 넓은 배치는 이 폭부터 쓴다 (D-236, D-243, D-288).
+/// 이 폭보다 좁으면 상단 바 가운데 메뉴가 넘치지 않게 줄여 보인다. 메뉴가 4개(관리자는 5개)라 넓은 배치는 이 폭부터 쓴다 (D-236, D-243, D-291).
 const topBarWideWidth = 1000.0;
 
 /// 상단 바 가운데 메뉴 (D-190, D-211). [link]는 관리자 계정에만 있고, [notifications]는 두 계정에 있다 (D-233, D-243).
-/// [settings]는 마이페이지와 환경설정을 합친 [설정]이다 (D-288).
+/// [settings]는 마이페이지와 환경설정을 합친 [설정]이다 (D-291).
 enum NavItem { info, videos, link, notifications, settings }
 
 /// 화면 공통 틀. PC 브라우저 기준이라 가운데 최대 폭을 둔다.
 /// 상단 바는 왼쪽 로고 · 가운데 메뉴 · 오른쪽 "관리자 계정"(관리자만)이고, 화면 제목은 본문 맨 위에 둔다 (D-190).
-/// 로그아웃은 상단 바에 두지 않고 [설정]에 둔다 (D-288).
-/// 메뉴는 두 계정 모두 [Info.]·[사건 목록]·[채팅]·[설정]이고, 관리자 계정은 [사건 관계자 연결]이 더 있다 (D-211, D-243, D-288, D-294).
+/// 로그아웃은 상단 바에 두지 않고 [설정]에 둔다 (D-291).
+/// 메뉴는 두 계정 모두 [Info.]·[사건 목록]·[채팅]·[설정]이고, 관리자 계정은 [사건 관계자 연결]이 더 있다 (D-211, D-243, D-291, D-297).
 class PageFrame extends StatelessWidget {
   const PageFrame({
     super.key,
@@ -306,7 +306,7 @@ class _TopBar extends ConsumerWidget {
         if (me != null) menu(NavItem.settings, '설정', '/settings'),
       ],
     );
-    // 관리자 계정이면 오른쪽에 "관리자 계정"을 보인다 (캔버스). 로그아웃은 [설정]에 있다 (D-288)
+    // 관리자 계정이면 오른쪽에 "관리자 계정"을 보인다 (캔버스). 로그아웃은 [설정]에 있다 (D-291)
     final account = admin && !isNarrow(context)
         ? const Text('관리자 계정', style: TextStyle(fontSize: 14, color: subColor))
         : null;
