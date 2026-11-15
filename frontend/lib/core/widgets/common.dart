@@ -204,7 +204,7 @@ class PageFrame extends StatelessWidget {
     }
     // 흰 바탕 + 파란 빛 번짐 두 개가 맨 뒤에 깔린다 (D-305)
     return Scaffold(
-      body: Stack(children: [const Positioned.fill(child: _PageGlow()), body]),
+      body: Stack(children: [const Positioned.fill(child: PageGlow()), body]),
     );
   }
 
@@ -213,8 +213,8 @@ class PageFrame extends StatelessWidget {
 }
 
 /// 바탕의 파란 빛 번짐 두 개: 오른쪽 위 · 왼쪽 아래 (캔버스 새 컨셉, D-305).
-class _PageGlow extends StatelessWidget {
-  const _PageGlow();
+class PageGlow extends StatelessWidget {
+  const PageGlow({super.key});
 
   @override
   Widget build(BuildContext context) {
