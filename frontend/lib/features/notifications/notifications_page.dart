@@ -5,16 +5,19 @@ import 'package:go_router/go_router.dart';
 import '../../app/theme.dart';
 import '../../core/api/api.dart';
 import '../../core/format.dart';
+import '../../core/constants.dart';
 import '../../core/models/account.dart';
+import '../../core/models/message.dart';
 import '../../core/models/video.dart';
 import '../../core/session.dart';
 import '../../core/widgets/common.dart';
+import 'chat_rules.dart';
 import 'notification_rules.dart';
 
 /// 2.11 채팅 (두 계정). 왼쪽은 상대 계정(관리자 화면은 피해자, 피해자 화면은 관리자),
 /// 오른쪽은 고른 사람과의 대화로, 사건마다 구분선 아래에 그 사건의 알림을 잇는다.
 /// 대기 중인 사건 초대는 피해자가 [수락]하면 그 사건이 묶인다 (D-233). 관리자는 [수락]이 없고 할 일을 본다 (D-243).
-/// 거절과 메시지 보내기는 없다.
+/// 거절은 없다. 대화 아래에 메시지 흐름과 입력칸이 있고, 수락한 사건이 있는 상대에게만 보낸다 (D-290).
 /// 22번·8번은 열 때와 [수락] 뒤에만 부른다. 주기적으로 부르지 않는다.
 class NotificationsPage extends ConsumerStatefulWidget {
   const NotificationsPage({super.key});
@@ -39,6 +42,10 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   List<_Person>? _people;
   List<VideoSummary> _videos = [];
   bool _admin = false;
+  Me? _me;
+  List<ChatMessage> _chat = [];
+  bool _sending = false;
+  final _input = TextEditingController();
   String? _selected;
   final _accepting = <int>{}; // [수락]을 누른 사건. 다시 누르지 못하게 막는다
 
@@ -48,19 +55,53 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _input.dispose();
+    super.dispose();
+  }
+
+  /// 29번 메시지 읽기 (D-290 초안). 못 읽으면 조용히 비워 둔다(서버에 아직 없을 수 있다).
+  Future<void> _loadMessages() async {
+    try {
+      final chat = await ref.read(apiProvider).messages(); // 29
+      if (mounted) setState(() => _chat = chat);
+    } catch (_) {}
+  }
+
+  /// 30번 메시지 보내기. 보낼 사건은 그 사람과의 가장 최근 수락 사건이다 (D-290).
+  Future<void> _send(VideoCase target) async {
+    final text = _input.text.trim();
+    if (text.isEmpty || text.length > maxMessageLength || _sending) return;
+    setState(() => _sending = true);
+    try {
+      await ref.read(apiProvider).sendMessage(target.id, text); // 30
+      if (!mounted) return;
+      _input.clear();
+      await _loadMessages();
+    } catch (e) {
+      if (mounted) handleCommonError(context, e);
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
   Future<void> _load() async {
     final api = ref.read(apiProvider);
     try {
-      final admin = (await ref.read(meProvider.future)).isAdmin;
+      final me = await ref.read(meProvider.future);
+      final admin = me.isAdmin;
       final cases = await api.cases(); // 22
       var videos = <VideoSummary>[];
       try {
         videos = await api.videos(); // 8. 못 읽으면 초대 알림만 보인다
       } catch (_) {}
       refreshSession(ref); // 메뉴 배지 수도 다시 센다
+      await _loadMessages();
       if (!mounted) return;
       setState(() {
         _admin = admin;
+        _me = me;
         _videos = videos;
         final people = _grouped(cases);
         _people = people;
@@ -162,6 +203,12 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       messagesOf: _messagesOf,
       accepting: _accepting,
       onAccept: _accept,
+      chat: messagesOfPerson(selected.cases, _chat),
+      me: _me,
+      target: sendTargetOf(selected.cases),
+      input: _input,
+      sending: _sending,
+      onSend: _send,
     );
     return PageFrame(
       current: NavItem.notifications,
@@ -250,6 +297,12 @@ class _Conversation extends StatelessWidget {
     required this.messagesOf,
     required this.accepting,
     required this.onAccept,
+    required this.chat,
+    required this.me,
+    required this.target,
+    required this.input,
+    required this.sending,
+    required this.onSend,
   });
 
   final _Person person;
@@ -257,6 +310,12 @@ class _Conversation extends StatelessWidget {
   final List<NoticeMessage> Function(VideoCase) messagesOf;
   final Set<int> accepting;
   final ValueChanged<VideoCase> onAccept;
+  final List<ChatMessage> chat;
+  final Me? me;
+  final VideoCase? target;
+  final TextEditingController input;
+  final bool sending;
+  final ValueChanged<VideoCase> onSend;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -265,6 +324,9 @@ class _Conversation extends StatelessWidget {
     children: [
       Text(person.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
       for (final c in person.cases) ..._caseMessages(context, c),
+      const Divider(color: lineColor),
+      for (final m in chat) _Bubble(message: m, mine: me != null && m.mine(me!)),
+      _Composer(target: target, input: input, sending: sending, onSend: onSend),
     ],
   );
 
@@ -405,4 +467,75 @@ class _NoticeCard extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// 메시지 말풍선. 내 것은 오른쪽, 상대 것은 왼쪽이고 시각(HH:mm)을 옆에 붙인다 (D-290).
+class _Bubble extends StatelessWidget {
+  const _Bubble({required this.message, required this.mine});
+
+  final ChatMessage message;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) {
+    final time = SmallText(formatKstMinute(message.createdAt).substring(11)); // "HH:mm"
+    final box = Flexible(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: mine ? pointColor : offWhiteColor,
+            borderRadius: BorderRadius.circular(cardRadius),
+            border: Border.all(color: mine ? pointColor : lineColor),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Text(message.body, style: TextStyle(fontSize: 16, color: mine ? offWhiteColor : inkColor)),
+          ),
+        ),
+      ),
+    );
+    return Row(
+      mainAxisAlignment: mine ? MainAxisAlignment.end : MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      spacing: 8,
+      children: mine ? [time, box] : [box, time],
+    );
+  }
+}
+
+/// 메시지 입력칸 + [보내기]. 수락한 사건이 없으면([target]이 null) 막고 안내한다 (D-290).
+class _Composer extends StatelessWidget {
+  const _Composer({required this.target, required this.input, required this.sending, required this.onSend});
+
+  final VideoCase? target;
+  final TextEditingController input;
+  final bool sending;
+  final ValueChanged<VideoCase> onSend;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = target;
+    if (t == null) return const SmallText('사건을 수락하면 메시지를 보낼 수 있습니다.');
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 8,
+      children: [
+        Expanded(
+          child: TextField(
+            controller: input,
+            maxLength: maxMessageLength,
+            textInputAction: TextInputAction.send,
+            onSubmitted: (_) => onSend(t), // Enter로 보내기
+            decoration: const InputDecoration(hintText: '메시지를 입력하세요'),
+          ),
+        ),
+        FilledButton(
+          onPressed: sending ? null : () => onSend(t),
+          style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+          child: const Text('보내기'),
+        ),
+      ],
+    );
+  }
 }

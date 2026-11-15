@@ -322,6 +322,58 @@ void main() {
     expect(find.text('연결을 요청했어요'), findsOneWidget);
   });
 
+  testWidgets('채팅은 기존 메시지를 좌우로 나눠 보이고, 보내면 30번 뒤 29번을 다시 읽는다 (2.11, D-290)', (tester) async {
+    final sent = <Map<String, Object?>>[
+      {'id': 1, 'case_id': 3, 'sender_role': 'admin', 'body': '영상을 올렸습니다', 'created_at': '2026-11-02T10:00:00+09:00'},
+    ];
+    final backend = FakeBackend({
+      'GET /api/videos': (_) => json([]),
+      'GET /api/cases': (_) => json({
+        'items': [
+          {...case3(), 'accepted_at': '2026-11-02T09:00:00+09:00'},
+        ],
+      }),
+      'GET /api/messages': (_) => json({'items': sent}),
+      'POST /api/cases/3/messages': (req) {
+        final m = {
+          'id': 2,
+          'case_id': 3,
+          'sender_role': 'victim',
+          'body': (jsonDecode(req.body) as Map)['body'],
+          'created_at': '2026-11-02T10:05:00+09:00',
+        };
+        sent.add(m);
+        return json(m, 201);
+      },
+    }, role: 'victim');
+    await pumpApp(tester, backend, '/notifications');
+    expect(find.text('영상을 올렸습니다'), findsOneWidget);
+    // 상대 말풍선은 왼쪽에 있다
+    expect(tester.getTopLeft(find.text('영상을 올렸습니다')).dx, lessThan(tester.view.physicalSize.width / 2));
+
+    await tester.enterText(find.byType(TextField), '확인했습니다');
+    await tester.tap(find.widgetWithText(FilledButton, '보내기'));
+    await settle(tester);
+    expect(backend.count('POST /api/cases/3/messages'), 1);
+    expect(find.text('확인했습니다'), findsOneWidget);
+    // 내 말풍선은 오른쪽에 있다
+    expect(tester.getTopLeft(find.text('확인했습니다')).dx, greaterThan(tester.view.physicalSize.width / 2));
+  });
+
+  testWidgets('수락한 사건이 없으면 입력칸 대신 안내를 보인다 (2.11, D-290)', (tester) async {
+    final backend = FakeBackend({
+      'GET /api/videos': (_) => json([]),
+      'GET /api/cases': (_) => json({
+        'items': [
+          {...case3(), 'accepted_at': null},
+        ],
+      }),
+    }, role: 'victim');
+    await pumpApp(tester, backend, '/notifications');
+    expect(find.text('사건을 수락하면 메시지를 보낼 수 있습니다.'), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
+  });
+
   testWidgets('관리자 메뉴 5개는 글자 [크게]에서도 상단 바가 넘치지 않는다 (3.8, D-236, D-243, D-284)', (tester) async {
     final browser = FakeBrowser()..local[textSizeStorageKey] = 'large';
     await pumpApp(tester, FakeBackend({}), '/notifications', browser: browser);
