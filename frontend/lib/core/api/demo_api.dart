@@ -100,11 +100,11 @@ class DemoApi extends Api {
     });
     add(12, 4, '12_수락대기.mp4', VideoStatus.stage1Done);
 
-    // 사건 1에 예시 메시지 (D-297)
-    void say(String role, String body, int minutesAgo) => _messages.add({
+    // 관리자와 victim01의 예시 메시지 (D-297)
+    void say(String from, String body, int minutesAgo) => _messages.add({
       'id': _messages.length + 1,
-      'case_id': 1,
-      'sender_role': role,
+      'victim': 'victim01',
+      'from': from,
       'body': body,
       'created_at': _iso(DateTime.now().subtract(Duration(minutes: minutesAgo))),
     });
@@ -121,7 +121,8 @@ class DemoApi extends Api {
   final _cases = <int, Map<String, Object?>>{};
   final _agreed = <int>{}; // 관리·감독 안내에 동의한 영상 (23번)
   final _pins = <int, List<Map<String, Object?>>>{};
-  final _messages = <Map<String, Object?>>[]; // 채팅 메시지 (D-297)
+  final _messages = <Map<String, Object?>>[]; // 채팅 메시지. 관리자와 피해자(`victim` 이름) 쌍에 붙는다 (D-285)
+  final _reads = <String, int>{}; // 읽은 위치: '역할|피해자 이름' → 메시지 id (D-289)
   final _mainBatch = <int, int>{}; // 영상별 지금 묶음 번호
   final _failedSeen = <int>{}; // 점수 미산출 탭을 넘긴 영상
   Me? _me;
@@ -288,34 +289,113 @@ class DemoApi extends Api {
     c['accepted_at'] ??= _iso(DateTime.now()); // 이미 수락했으면 그대로 성공
   }
 
-  /// 수락된 사건의 메시지만, 오래된 순. 사건을 숨겨도 채팅은 그대로다 (D-287)
+  // 채팅 29~32번 (05장 5.12). 데모의 관리자는 계정 번호 1 하나이고, 피해자 `victimNN`은 100+NN이다.
+  // 대화는 (관리자, 피해자) 쌍에 붙는다. 그 피해자와 수락한 사건이 하나라도 있어야 한다 (사건을 숨겨도 그대로, D-287).
+  static const _adminUserId = 1;
+
+  static int _victimUserId(String name) => 100 + (int.tryParse(name.replaceAll(RegExp(r'\D'), '')) ?? 0);
+
+  bool _hasAccepted(String victim) =>
+      _cases.values.any((c) => c['victim_name'] == victim && c['accepted_at'] != null);
+
+  /// 상대 계정 번호로 대화의 피해자 이름을 찾는다. 수락한 사건이 없으면 404 (D-287)
+  String _chatVictim(int peerUserId) {
+    final String? victim;
+    if (_admin) {
+      victim = _cases.values
+          .map((c) => c['victim_name'] as String)
+          .where((v) => _victimUserId(v) == peerUserId)
+          .firstOrNull;
+    } else {
+      victim = peerUserId == _adminUserId ? _me?.name : null;
+    }
+    if (victim == null || !_hasAccepted(victim)) throw ApiException(404, 'CHAT_NOT_FOUND');
+    return victim;
+  }
+
+  String get _role => _admin ? 'admin' : 'victim';
+
+  ChatMessage _chatMessage(Map<String, Object?> m) => ChatMessage(
+    id: m['id'] as int,
+    mine: m['from'] == _role,
+    body: m['body'] as String,
+    createdAt: m['created_at'] as String,
+  );
+
+  List<Map<String, Object?>> _pairMessages(String victim) => [
+    for (final m in _messages)
+      if (m['victim'] == victim) m,
+  ];
+
+  int _unread(String victim) {
+    final read = _reads['$_role|$victim'] ?? 0;
+    return _pairMessages(victim).where((m) => m['from'] != _role && (m['id'] as int) > read).length;
+  }
+
   @override
-  Future<List<ChatMessage>> messages() async {
+  Future<ChatList> chats() async {
     await _wait();
+    final victims = _admin
+        ? ({for (final c in _cases.values) c['victim_name'] as String}.where(_hasAccepted).toList())
+        : [if (_me != null && _hasAccepted(_me!.name)) _me!.name];
+    final peers = <({ChatPeer peer, int lastId})>[];
+    for (final v in victims) {
+      final msgs = _pairMessages(v);
+      final String name;
+      if (_admin) {
+        name = v;
+      } else {
+        name = _cases.values.firstWhere((c) => c['victim_name'] == v && c['accepted_at'] != null)['admin_name'] as String;
+      }
+      peers.add((
+        peer: ChatPeer(
+          peerUserId: _admin ? _victimUserId(v) : _adminUserId,
+          peerName: name,
+          lastMessage: msgs.isEmpty ? null : _chatMessage(msgs.last),
+          unread: _unread(v),
+        ),
+        lastId: msgs.isEmpty ? 0 : msgs.last['id'] as int,
+      ));
+    }
+    peers.sort((a, b) => b.lastId.compareTo(a.lastId)); // 마지막 메시지가 최근인 순, 메시지 없는 상대는 뒤
+    final items = [for (final p in peers) p.peer];
+    return ChatList(items: items, unreadTotal: items.fold(0, (sum, p) => sum + p.unread));
+  }
+
+  @override
+  Future<List<ChatMessage>> chatMessages(int peerUserId, {int? afterId}) async {
+    await _wait();
+    final msgs = _pairMessages(_chatVictim(peerUserId));
     return [
-      for (final m in _messages)
-        if (_cases[m['case_id']]?['accepted_at'] != null)
-          ChatMessage.fromJson(m.cast<String, dynamic>()),
+      for (final m in msgs)
+        if (afterId == null || (m['id'] as int) > afterId) _chatMessage(m),
     ];
   }
 
   @override
-  Future<ChatMessage> sendMessage(int caseId, String body) async {
+  Future<ChatMessage> sendChat(int peerUserId, String body) async {
     await _wait();
-    final c = _cases[caseId];
-    if (c == null) throw ApiException(404, 'CASE_NOT_FOUND');
-    if (c['accepted_at'] == null) throw ApiException(409, 'INVALID_STATE'); // 수락 뒤에만 (D-287). 숨김은 보지 않는다
+    final victim = _chatVictim(peerUserId);
     final text = body.trim();
     if (text.isEmpty || text.length > maxMessageLength) throw ApiException(422, 'VALIDATION_FAILED');
     final m = <String, Object?>{
       'id': _messages.length + 1,
-      'case_id': caseId,
-      'sender_role': _admin ? 'admin' : 'victim',
+      'victim': victim,
+      'from': _role,
       'body': text,
       'created_at': _iso(DateTime.now()),
     };
     _messages.add(m);
-    return ChatMessage.fromJson(m.cast<String, dynamic>());
+    return _chatMessage(m);
+  }
+
+  /// 읽은 위치는 앞으로만 간다. 지금 값보다 작거나 같으면 바꾸지 않는다 (D-289)
+  @override
+  Future<void> markChatRead(int peerUserId, int lastReadMessageId) async {
+    await _wait();
+    final victim = _chatVictim(peerUserId);
+    final key = '$_role|$victim';
+    if (lastReadMessageId > (_reads[key] ?? 0)) _reads[key] = lastReadMessageId;
   }
 
   @override

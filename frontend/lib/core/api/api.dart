@@ -47,15 +47,24 @@ class Api {
   /// 피해자가 사건 초대를 수락한다. 피해자 계정만 부른다 (D-233)
   Future<void> acceptCase(int caseId) => _c.post('/api/cases/$caseId/accept'); // 26
 
-  /// 채팅 메시지 전부, 오래된 순 (D-284~D-287). 주소·형식은 임시다. 팀원 2가 05장에 적으면 바꾼다 (백엔드 미구현)
-  Future<List<ChatMessage>> messages() async {
-    final j = await _c.get('/api/messages'); // 05장 미정
+  // 채팅 (5.12, 초안). 상대는 계정 번호(`peer_user_id`)로 부른다. 29번에서 받는다 (D-290)
+  Future<ChatList> chats() async => ChatList.fromJson(await _c.get('/api/chats')); // 29
+
+  /// 메시지 조회. 없으면 최근 메시지, [afterId]를 주면 그보다 큰 `id`를 앞에서부터 (33번이 끊겼다 이어진 뒤 채울 때)
+  Future<List<ChatMessage>> chatMessages(int peerUserId, {int? afterId}) async {
+    final j = await _c.get(
+      '/api/chats/$peerUserId/messages',
+      query: afterId == null ? null : {'after_id': '$afterId'},
+    ); // 30
     return [for (final e in j['items'] as List) ChatMessage.fromJson(e as Map<String, dynamic>)];
   }
 
-  /// 메시지 보내기 (D-284~D-287). 주소·형식은 임시다. 메시지는 두 계정 쌍에 붙으므로(D-285) 05장이 나오면 사건 번호 대신 상대 계정으로 바꾼다
-  Future<ChatMessage> sendMessage(int caseId, String body) async =>
-      ChatMessage.fromJson(await _c.post('/api/cases/$caseId/messages', {'body': body})); // 05장 미정
+  Future<ChatMessage> sendChat(int peerUserId, String body) async =>
+      ChatMessage.fromJson(await _c.post('/api/chats/$peerUserId/messages', {'body': body})); // 31
+
+  /// 화면에 보인 메시지 중 가장 큰 `id`까지 읽음으로 알린다 (D-289)
+  Future<void> markChatRead(int peerUserId, int lastReadMessageId) =>
+      _c.put('/api/chats/$peerUserId/read', {'last_read_message_id': lastReadMessageId}); // 32
 
   Future<void> agreeViewing(int videoId) =>
       _c.post('/api/videos/$videoId/viewing-agreement', {'confirm_supervision': true}); // 23

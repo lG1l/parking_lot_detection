@@ -11,7 +11,6 @@ import '../../core/models/message.dart';
 import '../../core/models/video.dart';
 import '../../core/session.dart';
 import '../../core/widgets/common.dart';
-import 'chat_rules.dart';
 import 'notification_rules.dart';
 
 /// 2.11 채팅 (두 계정). 왼쪽은 상대 계정(관리자 화면은 피해자, 피해자 화면은 관리자),
@@ -43,8 +42,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   List<VideoSummary> _videos = [];
   bool _admin = false;
   Me? _me;
-  List<ChatMessage> _chat = [];
-  bool _sending = false;
+  final _chat = <ChatMessage>[]; // Todo 3에서 30번 결과로 바꾼다
+  final _sending = false; // Todo 3에서 31번 보내는 동안 true로 바꾼다
   final _input = TextEditingController();
   String? _selected;
   final _accepting = <int>{}; // [수락]을 누른 사건. 다시 누르지 못하게 막는다
@@ -61,30 +60,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     super.dispose();
   }
 
-  /// 채팅 메시지 읽기 (D-286 지난 메시지 조회, 주소는 05장 미정). 못 읽으면 조용히 비워 둔다(서버에 아직 없을 수 있다).
-  Future<void> _loadMessages() async {
-    try {
-      final chat = await ref.read(apiProvider).messages();
-      if (mounted) setState(() => _chat = chat);
-    } catch (_) {}
-  }
-
-  /// 메시지 보내기 (D-286). 지금 임시 API가 사건 번호를 받아 그 사람과의 최근 수락 사건 번호를 넘긴다.
-  Future<void> _send(VideoCase target) async {
-    final text = _input.text.trim();
-    if (text.isEmpty || text.length > maxMessageLength || _sending) return;
-    setState(() => _sending = true);
-    try {
-      await ref.read(apiProvider).sendMessage(target.id, text);
-      if (!mounted) return;
-      _input.clear();
-      await _loadMessages();
-    } catch (e) {
-      if (mounted) handleCommonError(context, e);
-    } finally {
-      if (mounted) setState(() => _sending = false);
-    }
-  }
+  /// 메시지 보내기. 29~32번 연결은 Todo 3에서 붙인다 (임시 API는 지웠다).
+  Future<void> _send(VideoCase target) async {}
 
   Future<void> _load() async {
     final api = ref.read(apiProvider);
@@ -97,7 +74,6 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         videos = await api.videos(); // 8. 못 읽으면 초대 알림만 보인다
       } catch (_) {}
       refreshSession(ref); // 메뉴 배지 수도 다시 센다
-      await _loadMessages();
       if (!mounted) return;
       setState(() {
         _admin = admin;
@@ -160,8 +136,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   /// 알림은 가장 최근 사건의 마지막 알림을 짧은 상태 이름으로, 채팅은 내용 전부다. 채팅이 없으면 알림만.
   String _summaryOf(_Person p) {
     final notice = noticeLabel(_messagesOf(p.cases.last).last);
-    final chat = messagesOfPerson(p.cases, _chat).lastOrNull;
-    return chat == null ? notice : '$notice · ${chat.body}';
+    return notice; // 최근 채팅 요약은 Todo 3에서 29번으로 붙인다
   }
 
   @override
@@ -197,9 +172,9 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       messagesOf: _messagesOf,
       accepting: _accepting,
       onAccept: _accept,
-      chat: messagesOfPerson(selected.cases, _chat),
+      chat: _chat,
       me: _me,
-      target: sendTargetOf(selected.cases),
+      target: selected.cases.where((c) => !c.pending).lastOrNull,
       input: _input,
       sending: _sending,
       onSend: _send,
@@ -343,7 +318,7 @@ class _Conversation extends StatelessWidget {
             children: [
               for (final c in person.cases) ..._caseMessages(context, c),
               const Divider(color: lineColor),
-              for (final m in chat) _Bubble(message: m, mine: me != null && m.mine(me!)),
+              for (final m in chat) _Bubble(message: m, mine: m.mine),
             ],
           ),
         ),
