@@ -114,9 +114,7 @@ class _InfoBody extends StatelessWidget {
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        // 배경의 옅은 빛 번짐 두 개 (캔버스). 글자 뒤에 깔린다
-        const Positioned(left: -200, top: 0, child: _Glow(size: 640, color: _accent, alpha: 0.20)),
-        const Positioned(right: -180, top: 480, child: _Glow(size: 560, color: progressColor, alpha: 0.35)),
+        // 배경의 빛 번짐은 PageFrame이 모든 화면에 깐다 (D-305)
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

@@ -661,10 +661,10 @@ void main() {
     expect(find.text('parking_admin'), findsOneWidget);
     expect(find.text('관리자'), findsOneWidget);
     expect(find.text('사건 관계자'), findsNothing);
-    // 메뉴의 [설정]이 지금 화면으로 굵게 보인다 (22px)
+    // 메뉴의 [설정]이 지금 화면으로 굵게 보인다 (800 굵기, D-305)
     expect(
-      tester.widget<TextButton>(find.widgetWithText(TextButton, '설정')).style?.textStyle?.resolve({})?.fontSize,
-      22,
+      tester.widget<TextButton>(find.widgetWithText(TextButton, '설정')).style?.textStyle?.resolve({})?.fontWeight,
+      FontWeight.w800,
     );
   });
 
@@ -688,10 +688,10 @@ void main() {
     expect(find.text('사건 관계자 계정 사용법'), findsOneWidget);
     expect(find.text('[채팅]에서 관리자의 사건 초대를 [수락]합니다.'), findsOneWidget);
     expect(find.text('관리자 계정 사용법'), findsNothing);
-    // 메뉴의 [Info.]가 지금 화면으로 굵게 보인다 (22px)
+    // 메뉴의 [Info.]가 지금 화면으로 굵게 보인다 (800 굵기, D-305)
     expect(
-      tester.widget<TextButton>(find.widgetWithText(TextButton, 'Info.')).style?.textStyle?.resolve({})?.fontSize,
-      22,
+      tester.widget<TextButton>(find.widgetWithText(TextButton, 'Info.')).style?.textStyle?.resolve({})?.fontWeight,
+      FontWeight.w800,
     );
     // 서버에는 읽기만 했고, 바꾸는 호출은 없다
     expect(backend.calls.where((c) => !c.startsWith('GET ')), isEmpty);
