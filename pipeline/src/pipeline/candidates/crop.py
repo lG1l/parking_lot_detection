@@ -5,6 +5,9 @@
 
 from dataclasses import dataclass
 
+import cv2
+import numpy as np
+
 # 분석 크롭 폭 = 본인 차량 bbox 폭 × 이 값. 01장 1.6 "분석 크롭 크기" (시작값)
 CROP_WIDTH_RATIO = 2
 
@@ -110,6 +113,19 @@ def display_crop(region: Rect, frame: tuple[int, int], margin_ratio: float) -> C
     width, height = _fit_16x9(rx2 - rx1 + 2 * pad_x, ry2 - ry1 + 2 * pad_y)
     rect = _place((rx1 + rx2) / 2, (ry1 + ry2) / 2, width, height, frame)
     return Crop(rect, reduced_size_for(width, height))
+
+
+def crop_frame(image: np.ndarray, crop: Crop) -> np.ndarray:
+    """원본 프레임에서 분석 크롭을 잘라 줄인 프레임 크기로 만든다 (D-201).
+
+    ROI 마스크와 같은 INTER_AREA로 줄여 두 그림의 픽셀 자리가 맞게 한다.
+    크기가 같으면 줄이지 않고 잘라낸 것을 그대로 쓴다.
+    """
+    x1, y1, x2, y2 = crop.rect
+    part = image[y1:y2, x1:x2]
+    if (crop.width, crop.height) == crop.reduced_size:
+        return part
+    return cv2.resize(part, crop.reduced_size, interpolation=cv2.INTER_AREA)
 
 
 def _scales(crop: Crop) -> tuple[float, float]:

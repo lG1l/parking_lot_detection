@@ -1,8 +1,11 @@
+import numpy as np
 import pytest
 
 from pipeline.candidates.crop import (
+    Crop,
     CropError,
     analysis_crop,
+    crop_frame,
     expand_to_contain,
     to_original,
     to_reduced,
@@ -48,3 +51,10 @@ def test_roi가_크롭_밖으로_나가면_둘을_모두_담는_16대9로_넓힌
     x1, y1, x2, y2 = wide.rect
     assert x1 <= 500 and y1 <= 361 and x2 >= 1260 and y2 >= 800
     assert abs((x2 - x1) * 9 - (y2 - y1) * 16) <= 16  # 반올림 안의 16:9
+
+
+def test_프레임을_잘라_줄이면_크롭의_줄인_크기가_된다():
+    # 1280×720 크롭은 긴 변이 640보다 커서 640×360으로 줄인다
+    image = np.zeros((1080, 1920, 3), np.uint8)
+    crop = Crop((100, 50, 1380, 770), (640, 360))
+    assert crop_frame(image, crop).shape == (360, 640, 3)
