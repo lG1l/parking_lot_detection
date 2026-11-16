@@ -61,4 +61,15 @@ void main() {
       4,
     );
   });
+
+  test('할 일이 남은 영상 상태 알림만 버튼 문구가 있고, 진행이 끝난 알림은 없다 (D-304)', () {
+    String? action(String status, {required bool admin}) => statusNoticeOf(_video(status), admin: admin)?.action;
+
+    expect(action(VideoStatus.stage1Done, admin: false), '차량 입력');
+    expect(action(VideoStatus.ready, admin: false), '결과 확인');
+    expect(action(VideoStatus.finished, admin: false), isNull); // 최종 완료는 버튼이 없다
+    expect(action(VideoStatus.failed, admin: false), isNull);
+    expect(action(VideoStatus.ready, admin: true), '후보 선택');
+    expect(action(VideoStatus.uploadFailed, admin: true), '상태 확인');
+  });
 }

@@ -7,6 +7,7 @@ import boto3
 from sqlalchemy import text
 
 from app import jobs
+from app.chats import CHAT_DAYS
 from app.config import get_settings
 from app.db import get_engine
 from app.videos import VIEW_DAYS
@@ -45,6 +46,15 @@ def delete_old_agreements() -> None:
                 "DELETE FROM upload_agreements WHERE agreed_at < now() - make_interval(days => :d)"
             ),
             {"d": AGREEMENT_DAYS},
+        )
+
+
+def delete_old_chat_messages() -> None:
+    """보낸 지 30일이 지난 채팅 메시지를 지운다 (D-288)."""
+    with get_engine().begin() as conn:
+        conn.execute(
+            text("DELETE FROM chat_messages WHERE created_at < now() - make_interval(days => :d)"),
+            {"d": CHAT_DAYS},
         )
 
 
@@ -138,6 +148,7 @@ def run() -> None:
             last_hourly = now
             _safely(mark_expired)
             _safely(delete_old_agreements)
+            _safely(delete_old_chat_messages)
         _safely(requeue_stalled)
         _safely(gpu.tick)
         time.sleep(TICK_SECONDS)

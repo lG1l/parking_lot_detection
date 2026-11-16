@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
+import 'package:parking_lot_frontend/core/api/chat_socket.dart';
+import 'package:parking_lot_frontend/core/constants.dart';
+import 'package:parking_lot_frontend/core/models/message.dart';
 import 'package:parking_lot_frontend/core/settings.dart';
 import 'package:parking_lot_frontend/features/damage_input/still_canvas.dart';
 
@@ -35,6 +38,22 @@ Map<String, Object?> case3() => {
   'admin_name': 'parking_admin',
   'victim_name': 'victim02',
   'created_at': '2026-11-01T14:03:00+09:00',
+};
+
+/// 29·30·31번의 메시지 한 건 (05장 5.12).
+Map<String, Object?> chatMsg(int id, String body, {required bool mine, String at = '2026-11-02T11:00:00+09:00'}) => {
+  'id': id,
+  'mine': mine,
+  'body': body,
+  'created_at': at,
+};
+
+/// 29번의 대화 상대 한 줄.
+Map<String, Object?> chatPeer(int userId, String name, {Map<String, Object?>? last, int unread = 0}) => {
+  'peer_user_id': userId,
+  'peer_name': name,
+  'last_message': last,
+  'unread': unread,
 };
 
 /// 위탁계약 체크 3개를 하고 [동의하고 영상 선택하기]를 누른다 (2.4).
@@ -240,6 +259,7 @@ void main() {
     expect(find.widgetWithText(FilledButton, '수락'), findsNothing);
     expect(find.text('연결을 수락했어요!'), findsOneWidget);
     expect(find.text('내 차량을 입력해 주세요!'), findsOneWidget); // 수락하면 영상 상태 알림이 붙는다 (D-237)
+    expect(find.widgetWithText(FilledButton, '차량 입력'), findsOneWidget); // 할 일은 카드가 아니라 버튼으로 (D-304)
     // 피해자 기준: 관리자가 보낸 요청·영상 알림은 왼쪽, 내가 한 수락은 오른쪽 (D-297)
     final middle = tester.view.physicalSize.width / tester.view.devicePixelRatio / 2;
     final talkLeft = tester.getTopLeft(find.text('연결 요청이 왔어요!')).dx;
@@ -274,7 +294,7 @@ void main() {
     expect(find.text('사전 입력 필요'), findsNothing);
   });
 
-  testWidgets('관리자 알림은 수락·후보 선택 가능·분석 실패를 보이고 [수락] 버튼이 없다 (2.11, D-243)', (tester) async {
+  testWidgets('관리자 알림은 수락·후보 선택 가능·분석 실패를 보이고 [수락] 버튼이 없다. 상태 화면은 카드가 아니라 버튼으로 간다 (2.11, D-243, D-304)', (tester) async {
     final backend = FakeBackend({
       'GET /api/videos': (_) => json([
         video('ready'),
@@ -299,10 +319,15 @@ void main() {
 
     await tester.tap(find.text('후보를 고를 수 있어요!'));
     await settle(tester);
-    expect(backend.count('GET /api/videos/7'), greaterThan(0)); // 그 영상의 상태 화면
+    expect(backend.count('GET /api/videos/7'), 0); // 카드는 눌러도 넘어가지 않는다 (D-304)
+
+    await tester.tap(find.widgetWithText(FilledButton, '후보 선택'));
+    await settle(tester);
+    expect(backend.count('GET /api/videos/7'), greaterThan(0)); // 버튼을 누르면 그 영상의 상태 화면
   });
 
   testWidgets('관리자 채팅은 피해자별로 묶고, 같은 피해자의 사건은 한 대화에 잇는다 (2.11)', (tester) async {
+    final first = chatMsg(1, '언제 올라오나요?', mine: false);
     final backend = FakeBackend({
       'GET /api/videos': (_) => json([]),
       'GET /api/cases': (_) => json({
@@ -312,33 +337,38 @@ void main() {
           {...case3(), 'id': 5, 'victim_name': 'victim03', 'created_at': '2026-11-03T09:00:00+09:00', 'accepted_at': null},
         ],
       }),
-      'GET /api/messages': (_) => json({
-        'items': [
-          {'id': 1, 'case_id': 3, 'sender_role': 'victim', 'body': '언제 올라오나요?', 'created_at': '2026-11-02T11:00:00+09:00'},
-        ],
+      // 22번에는 상대 계정 ID가 없어 이름으로 29번과 짝짓는다 (D-303). victim03은 수락한 사건이 없어 29번에 없다
+      'GET /api/chats': (_) => json({
+        'items': [chatPeer(12, 'victim02', last: first)],
+        'unread_total': 0,
       }),
+      'GET /api/chats/12/messages': (_) => json({'items': [first], 'has_more': false}),
+      'PUT /api/chats/12/read': (_) => json(null, 204),
     });
     await pumpApp(tester, backend, '/notifications');
     expect(find.text('victim03'), findsOneWidget);
     expect(find.text('victim02'), findsNWidgets(2)); // 왼쪽 한 줄 + 오른쪽 대화 제목 (최근 사람이 먼저)
     // 목록 요약은 "가장 최근 알림 · 가장 최근 채팅", 채팅이 없으면 알림만 (D-297)
     expect(find.text('연결 요청 · 언제 올라오나요?'), findsOneWidget);
+    expect(find.text('언제 올라오나요?'), findsOneWidget); // 30번 메시지가 대화에 보인다
     expect(find.text('연결 요청'), findsOneWidget);
     expect(find.text('2026-11-01'), findsOneWidget); // 사건 구분선은 날짜만
     expect(find.text('2026-11-05'), findsOneWidget);
     expect(find.text('첫 사건'), findsNWidgets(2)); // 연결 요청·연결 수락 카드의 작은 글씨는 사건 이름만
     expect(find.text('수락 대기 중'), findsNothing);
+    expect(backend.count('PUT /api/chats/12/read'), 1); // 그린 뒤 읽음으로 알린다
 
     await tester.tap(find.text('victim03'));
     await settle(tester);
     expect(find.text('첫 사건'), findsNothing);
     expect(find.text('연결을 요청했어요'), findsOneWidget);
+    expect(find.text('사건을 수락하면 메시지를 보낼 수 있습니다.'), findsOneWidget); // 29번에 없는 상대
+    expect(backend.screenCalls.where((c) => c.contains('/api/chats/') && c.contains('/messages')).length, 1);
   });
 
-  testWidgets('채팅은 기존 메시지를 좌우로 나눠 보이고, 보내면 30번 뒤 29번을 다시 읽는다 (2.11, D-297)', (tester) async {
-    final sent = <Map<String, Object?>>[
-      {'id': 1, 'case_id': 3, 'sender_role': 'admin', 'body': '영상을 올렸습니다', 'created_at': '2026-11-02T10:00:00+09:00'},
-    ];
+  testWidgets('채팅은 기존 메시지를 좌우로 나눠 보이고, 보내면 31번 뒤 29번을 다시 읽는다 (2.11, D-303)', (tester) async {
+    final messages = <Map<String, Object?>>[chatMsg(1, '영상을 올렸습니다', mine: false, at: '2026-11-02T10:00:00+09:00')];
+    Object? readBody;
     final backend = FakeBackend({
       'GET /api/videos': (_) => json([]),
       'GET /api/cases': (_) => json({
@@ -346,34 +376,187 @@ void main() {
           {...case3(), 'accepted_at': '2026-11-02T09:00:00+09:00'},
         ],
       }),
-      'GET /api/messages': (_) => json({'items': sent}),
-      'POST /api/cases/3/messages': (req) {
-        final m = {
-          'id': 2,
-          'case_id': 3,
-          'sender_role': 'victim',
-          'body': (jsonDecode(req.body) as Map)['body'],
-          'created_at': '2026-11-02T10:05:00+09:00',
-        };
-        sent.add(m);
+      'GET /api/chats': (_) => json({
+        'items': [chatPeer(1, 'parking_admin', last: messages.last)],
+        'unread_total': 0,
+      }),
+      'GET /api/chats/1/messages': (_) => json({'items': messages, 'has_more': false}),
+      'POST /api/chats/1/messages': (req) {
+        final m = chatMsg(2, (jsonDecode(req.body) as Map)['body'] as String, mine: true, at: '2026-11-02T10:05:00+09:00');
+        messages.add(m);
         return json(m, 201);
+      },
+      'PUT /api/chats/1/read': (req) {
+        readBody = jsonDecode(req.body);
+        return json(null, 204);
       },
     }, role: 'victim');
     await pumpApp(tester, backend, '/notifications');
     expect(find.text('영상을 올렸습니다'), findsOneWidget);
     // 상대 말풍선은 왼쪽에 있다
     expect(tester.getTopLeft(find.text('영상을 올렸습니다')).dx, lessThan(tester.view.physicalSize.width / 2));
+    expect(readBody, {'last_read_message_id': 1}); // 보인 메시지 중 가장 큰 id
 
+    final peersBefore = backend.count('GET /api/chats');
     await tester.enterText(find.byType(TextField), '확인했습니다');
     await tester.tap(find.widgetWithText(FilledButton, '보내기'));
     await settle(tester);
-    expect(backend.count('POST /api/cases/3/messages'), 1);
+    expect(backend.count('POST /api/chats/1/messages'), 1);
+    expect(backend.count('GET /api/chats'), greaterThan(peersBefore));
     expect(find.text('확인했습니다'), findsOneWidget);
     // 내 말풍선은 오른쪽에 있다
     expect(tester.getTopLeft(find.text('확인했습니다')).dx, greaterThan(tester.view.physicalSize.width / 2));
   });
 
+  testWidgets('안 읽은 수는 목록 줄 숫자와 합친 메뉴 배지로 보이고, 대화를 열면 읽음 처리로 사라진다. 30일 안내가 목록 위에 있다 (2.11, D-303)', (tester) async {
+    var unread02 = 2; // 처음 열리는 대화. 32번을 부르면 0이 된다
+    var unread03 = 3;
+    final backend = FakeBackend({
+      'GET /api/videos': (_) => json([]),
+      'GET /api/cases': (_) => json({
+        'items': [
+          {...case3(), 'accepted_at': '2026-11-02T10:00:00+09:00'},
+          {...case3(), 'id': 5, 'victim_name': 'victim03', 'created_at': '2026-10-20T09:00:00+09:00', 'accepted_at': '2026-10-20T10:00:00+09:00'},
+        ],
+      }),
+      'GET /api/chats': (_) => json({
+        'items': [
+          chatPeer(12, 'victim02', last: chatMsg(2, '둘째 메시지', mine: false), unread: unread02),
+          chatPeer(13, 'victim03', last: chatMsg(5, '셋째 사람 메시지', mine: false), unread: unread03),
+        ],
+        'unread_total': unread02 + unread03,
+      }),
+      'GET /api/chats/12/messages': (_) => json({
+        'items': [chatMsg(1, '첫 메시지', mine: false), chatMsg(2, '둘째 메시지', mine: false)],
+        'has_more': false,
+      }),
+      'GET /api/chats/13/messages': (_) => json({'items': [chatMsg(5, '셋째 사람 메시지', mine: false)], 'has_more': false}),
+      'PUT /api/chats/12/read': (_) {
+        unread02 = 0;
+        return json(null, 204);
+      },
+      'PUT /api/chats/13/read': (_) {
+        unread03 = 0;
+        return json(null, 204);
+      },
+    });
+    await pumpApp(tester, backend, '/notifications');
+    expect(find.text('메시지는 보낸 지 30일이 지나면 지워집니다.'), findsOneWidget);
+    expect(backend.count('PUT /api/chats/12/read'), 1); // 처음 고른 사람은 그린 뒤 바로 읽음 처리
+    // 고른 사람 숫자는 사라지고, 안 읽은 victim03의 숫자 3이 목록 줄과 메뉴 배지(기존 수 0 + 3)에 하나씩 보인다
+    expect(find.text('3'), findsNWidgets(2));
+    expect(find.text('2'), findsNothing);
+
+    await tester.tap(find.text('victim03'));
+    await settle(tester);
+    expect(backend.count('PUT /api/chats/13/read'), 1);
+    expect(find.text('3'), findsNothing); // 읽으면 목록 숫자와 메뉴 배지가 함께 사라진다
+  });
+
+  testWidgets('33번으로 온 새 메시지는 고른 상대면 대화에 붙고 읽음 처리, 다른 상대면 29번을 다시 읽는다. 같은 id는 버리고 화면을 떠나면 닫는다 (2.11, D-303)', (tester) async {
+    var unread03 = 0;
+    final backend = FakeBackend({
+      'GET /api/videos': (_) => json([]),
+      'GET /api/cases': (_) => json({
+        'items': [
+          {...case3(), 'accepted_at': '2026-11-02T10:00:00+09:00'},
+          {...case3(), 'id': 5, 'victim_name': 'victim03', 'created_at': '2026-10-20T09:00:00+09:00', 'accepted_at': '2026-10-20T10:00:00+09:00'},
+        ],
+      }),
+      'GET /api/chats': (_) => json({
+        'items': [
+          chatPeer(12, 'victim02', last: chatMsg(1, '첫 메시지', mine: false)),
+          chatPeer(13, 'victim03', last: chatMsg(5, '셋째 사람 메시지', mine: false), unread: unread03),
+        ],
+        'unread_total': unread03,
+      }),
+      'GET /api/chats/12/messages': (_) => json({'items': [chatMsg(1, '첫 메시지', mine: false)], 'has_more': false}),
+      'PUT /api/chats/12/read': (_) => json(null, 204),
+    });
+    final sockets = FakeChatSockets();
+    await pumpApp(tester, backend, '/notifications', sockets: sockets);
+    expect(sockets.opened.length, 1); // 화면을 열 때 연결 한 번
+    final socket = sockets.opened.single;
+    expect(backend.count('PUT /api/chats/12/read'), 1);
+
+    // 지금 고른 victim02의 새 메시지: 대화에 붙고 가장 큰 id(2)로 다시 읽음 처리
+    final incoming = ChatMessage.fromJson(chatMsg(2, '새로 온 메시지', mine: false));
+    socket.emit(ChatMessageEvent(12, incoming));
+    await settle(tester);
+    expect(find.text('새로 온 메시지'), findsOneWidget);
+    expect(backend.count('PUT /api/chats/12/read'), 2);
+
+    // 같은 id가 또 오면 버린다(말풍선도 읽음 처리도 늘지 않는다)
+    socket.emit(ChatMessageEvent(12, incoming));
+    await settle(tester);
+    expect(find.text('새로 온 메시지'), findsOneWidget);
+    expect(backend.count('PUT /api/chats/12/read'), 2);
+
+    // 고르지 않은 victim03의 새 메시지: 대화를 읽지 않고 29번만 다시 읽어 목록 숫자가 늘어난다
+    unread03 = 1;
+    final peersBefore = backend.count('GET /api/chats');
+    socket.emit(ChatMessageEvent(13, ChatMessage.fromJson(chatMsg(6, '다른 상대 메시지', mine: false))));
+    await settle(tester);
+    expect(backend.count('GET /api/chats'), greaterThan(peersBefore));
+    expect(backend.count('GET /api/chats/13/messages'), 0);
+    expect(find.text('1'), findsWidgets);
+
+    // 모르는 type의 줄은 이벤트가 되지 않는다
+    expect(parseChatEvent('{"type":"typing","peer_user_id":12}'), isNull);
+    expect(socket.closed, isFalse);
+    await unmount(tester);
+    expect(socket.closed, isTrue); // 화면을 떠나면 닫는다
+  });
+
+  testWidgets('33번이 그 밖의 이유로 끊기면 다시 연결해 빠진 메시지를 채우고, 4408이면 안내만 하고 다시 연결하지 않는다. 다른 메뉴로 가면 닫는다 (2.11, D-303)', (tester) async {
+    final backend = FakeBackend({
+      'GET /api/videos': (_) => json([]),
+      'GET /api/cases': (_) => json({
+        'items': [
+          {...case3(), 'accepted_at': '2026-11-02T10:00:00+09:00'},
+        ],
+      }),
+      'GET /api/chats': (_) => json({
+        'items': [chatPeer(12, 'victim02', last: chatMsg(1, '첫 메시지', mine: false))],
+        'unread_total': 0,
+      }),
+      'GET /api/chats/12/messages': (req) => json({
+        // 끊겨 있는 동안 상대가 id 2를 보냈다. after_id=1이면 그것만 온다
+        'items': req.url.queryParameters['after_id'] == '1'
+            ? [chatMsg(2, '끊긴 동안 온 메시지', mine: false)]
+            : [chatMsg(1, '첫 메시지', mine: false)],
+        'has_more': false,
+      }),
+      'PUT /api/chats/12/read': (_) => json(null, 204),
+    });
+    final sockets = FakeChatSockets();
+    await pumpApp(tester, backend, '/notifications', sockets: sockets);
+    expect(sockets.opened.length, 1);
+
+    sockets.opened[0].emit(ChatClosedEvent(1006)); // 네트워크 끊김
+    await tester.pump(pollInterval - const Duration(seconds: 1));
+    expect(sockets.opened.length, 1); // 아직 기다린다
+    await tester.pump(const Duration(seconds: 1));
+    await settle(tester);
+    expect(sockets.opened.length, 2); // pollInterval 뒤 다시 연결
+    expect(backend.count('GET /api/chats/12/messages?after_id=1'), 1); // 마지막으로 받은 id 뒤부터 채운다
+    expect(find.text('끊긴 동안 온 메시지'), findsOneWidget);
+    expect(backend.count('PUT /api/chats/12/read'), 2); // 채운 메시지도 읽음 처리
+
+    sockets.opened[1].emit(ChatClosedEvent(chatCloseTooMany));
+    await settle(tester);
+    expect(find.textContaining('다른 창에서 채팅을 열어'), findsOneWidget);
+    await tester.pump(pollInterval * 2);
+    await settle(tester);
+    expect(sockets.opened.length, 2); // 4408은 다시 연결하지 않는다
+
+    await tester.tap(find.text('사건 목록'));
+    await settle(tester);
+    expect(sockets.opened[1].closed, isTrue); // 채팅을 떠나면 닫는다
+  });
+
   testWidgets('메시지가 많아도 입력칸은 화면 아래에 고정되어 보인다 (2.11, D-297)', (tester) async {
+    final all = [for (var i = 1; i <= 40; i++) chatMsg(i, '메시지 $i', mine: false, at: '2026-11-02T10:00:00+09:00')];
     final backend = FakeBackend({
       'GET /api/videos': (_) => json([]),
       'GET /api/cases': (_) => json({
@@ -381,12 +564,12 @@ void main() {
           {...case3(), 'accepted_at': '2026-11-02T09:00:00+09:00'},
         ],
       }),
-      'GET /api/messages': (_) => json({
-        'items': [
-          for (var i = 1; i <= 40; i++)
-            {'id': i, 'case_id': 3, 'sender_role': 'admin', 'body': '메시지 $i', 'created_at': '2026-11-02T10:00:00+09:00'},
-        ],
+      'GET /api/chats': (_) => json({
+        'items': [chatPeer(1, 'parking_admin', last: all.last)],
+        'unread_total': 0,
       }),
+      'GET /api/chats/1/messages': (_) => json({'items': all, 'has_more': true}),
+      'PUT /api/chats/1/read': (_) => json(null, 204),
     }, role: 'victim');
     await pumpApp(tester, backend, '/notifications');
     final screenHeight = tester.view.physicalSize.height / tester.view.devicePixelRatio;
@@ -478,10 +661,10 @@ void main() {
     expect(find.text('parking_admin'), findsOneWidget);
     expect(find.text('관리자'), findsOneWidget);
     expect(find.text('사건 관계자'), findsNothing);
-    // 메뉴의 [설정]이 지금 화면으로 굵게 보인다 (22px)
+    // 메뉴의 [설정]이 지금 화면으로 굵게 보인다 (800 굵기, D-305)
     expect(
-      tester.widget<TextButton>(find.widgetWithText(TextButton, '설정')).style?.textStyle?.resolve({})?.fontSize,
-      22,
+      tester.widget<TextButton>(find.widgetWithText(TextButton, '설정')).style?.textStyle?.resolve({})?.fontWeight,
+      FontWeight.w800,
     );
   });
 
@@ -505,10 +688,14 @@ void main() {
     expect(find.text('사건 관계자 계정 사용법'), findsOneWidget);
     expect(find.text('[채팅]에서 관리자의 사건 초대를 [수락]합니다.'), findsOneWidget);
     expect(find.text('관리자 계정 사용법'), findsNothing);
-    // 메뉴의 [Info.]가 지금 화면으로 굵게 보인다 (22px)
+    // 관리자 일을 설명하는 공통 문구 대신 피해자용 문구가 보인다 (D-306)
+    expect(find.text('관리자 최종 확인'), findsNothing);
+    expect(find.textContaining('최종 판단은 관리자가'), findsNothing);
+    expect(find.text('사건 지점 시간'), findsWidgets);
+    // 메뉴의 [Info.]가 지금 화면으로 굵게 보인다 (800 굵기, D-305)
     expect(
-      tester.widget<TextButton>(find.widgetWithText(TextButton, 'Info.')).style?.textStyle?.resolve({})?.fontSize,
-      22,
+      tester.widget<TextButton>(find.widgetWithText(TextButton, 'Info.')).style?.textStyle?.resolve({})?.fontWeight,
+      FontWeight.w800,
     );
     // 서버에는 읽기만 했고, 바꾸는 호출은 없다
     expect(backend.calls.where((c) => !c.startsWith('GET ')), isEmpty);
@@ -783,7 +970,7 @@ void main() {
     });
     await pumpApp(tester, backend, '/videos/7');
     expect(find.text('처리를 대기중입니다. 앞에 2건이 있습니다.'), findsOneWidget);
-    expect(find.text('사용자 입력 중'), findsOneWidget); // 진행도 4단계
+    expect(find.textContaining('사용자 입력 중'), findsOneWidget); // 진행도 4단계
     expect(backend.count('GET /api/videos/7'), 1);
 
     await tester.pump(const Duration(seconds: 5));
@@ -1197,6 +1384,9 @@ void main() {
     expect(find.text('03:40:35 ~ 03:41:05'), findsOneWidget);
     expect(find.text('2026-09-17 03:40:35 ~ 03:41:05 (관리자 입력 기준 추정)'), findsOneWidget);
     expect(find.text('2026-11-19 10:00까지 열람 가능'), findsOneWidget);
+    // 다운로드 기능은 없다 (불변 조건 8)
+    expect(find.textContaining('다운로드'), findsNothing);
+    expect(find.byIcon(Icons.download), findsNothing);
   });
 
   testWidgets('피해자 계정 결과 화면은 클립 없이 고정한 시각만 보인다 (2.9, D-211)', (tester) async {
@@ -1214,6 +1404,27 @@ void main() {
     expect(find.textContaining('고정된 장면의 시각만 볼 수 있습니다.'), findsOneWidget);
     expect(backend.calls, isNot(contains('POST /api/videos/7/viewing-agreement')));
     expect(backend.calls, isNot(contains('GET /api/videos/7/pin')));
+  });
+
+  testWidgets('피해자가 목록에서 확인 완료 영상을 누르면 상태 화면을 거치지 않고 결과 화면을 연다 (2.2, 2.9)', (tester) async {
+    final backend = FakeBackend({
+      'GET /api/videos': (_) => json([video('finished')]),
+      'GET /api/cases': (_) => json({
+        'items': [case3()],
+      }),
+      'GET /api/videos/7': (_) => json(video('finished')),
+      'GET /api/videos/7/incident-times': (_) => json([
+        {...pinnedWithTime(clipUrl: null)}
+          ..remove('clip_url')
+          ..remove('candidate_clip_id'),
+      ]),
+    }, role: 'victim');
+    await pumpApp(tester, backend, '/videos');
+    await tester.tap(find.text('CH01.mp4'));
+    await settle(tester);
+    expect(find.text('03:40:35 ~ 03:41:05'), findsOneWidget);
+    // 상태 화면을 거쳤다면 25번을 두 번 부른다
+    expect(backend.count('GET /api/videos/7/incident-times'), 1);
   });
 
   testWidgets('열람기한이 지나 MASKED_EXPIRED를 받으면 보관 기간 종료 안내로 간다 (2.10)', (tester) async {

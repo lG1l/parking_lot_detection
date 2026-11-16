@@ -312,8 +312,9 @@ class _AdminUploadPageState extends ConsumerState<AdminUploadPage> {
   Widget _uploadStep(BuildContext context) {
     final file = _file;
     final progress = _progress;
-    const label = TextStyle(fontSize: 14, fontWeight: FontWeight.w600);
-    return PageCard(
+    const label = kickerStyle;
+    final main = ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 600),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -409,6 +410,16 @@ class _AdminUploadPageState extends ConsumerState<AdminUploadPage> {
         ],
       ),
     );
+    return SideLayout(
+      main: main,
+      side: const SideSteps(
+        items: [
+          (title: '영상 파일 고르기', text: '.mp4 · .avi · .mkv · .mov, 5GB 이하'),
+          (title: '시작 시각 적기', text: '영상 첫 장면의 실제 날짜·시각입니다. 비워도 됩니다.'),
+          (title: '업로드', text: '끊기면 같은 사건에 다시 올려 주세요.'),
+        ],
+      ),
+    );
   }
 }
 
@@ -474,8 +485,10 @@ class _TimeDialogState extends State<_TimeDialog> {
     return Duration(hours: h % 12 + (_pm ? 12 : 0), minutes: m, seconds: sec);
   }
 
-  Widget _label(String text) =>
-      Text(text, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: subColor));
+  Widget _label(String text) => Text(
+    text,
+    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: subColor),
+  );
 
   Widget _number(String label, TextEditingController c, int max, {required String hint}) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -538,10 +551,7 @@ class _TimeDialogState extends State<_TimeDialog> {
             ],
           ),
           if (value == null)
-            const Text(
-              '시는 1~12, 분과 초는 00~59 사이로 입력해 주세요.',
-              style: TextStyle(fontSize: 13, color: failColor),
-            ),
+            const Text('시는 1~12, 분과 초는 00~59 사이로 입력해 주세요.', style: TextStyle(fontSize: 13, color: failColor)),
         ],
       ),
       actions: [

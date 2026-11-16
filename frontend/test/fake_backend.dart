@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/widgets.dart';
@@ -7,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:parking_lot_frontend/core/api/api.dart';
 import 'package:parking_lot_frontend/core/api/api_client.dart';
+import 'package:parking_lot_frontend/core/api/chat_socket.dart';
 import 'package:parking_lot_frontend/core/browser/browser.dart';
 import 'package:parking_lot_frontend/core/widgets/common.dart';
 import 'package:parking_lot_frontend/main.dart';
@@ -116,8 +118,42 @@ class FakeBrowser implements Browser {
   void writeLocal(String key, String value) => local[key] = value;
 }
 
+/// 33번 연결 하나의 가짜. 테스트가 [emit]으로 서버가 보낸 것처럼 이벤트를 넣는다.
+class FakeChatSocket implements ChatSocket {
+  final _controller = StreamController<ChatEvent>();
+  bool closed = false;
+
+  @override
+  Stream<ChatEvent> get events => _controller.stream;
+
+  void emit(ChatEvent event) => _controller.add(event);
+
+  @override
+  void close() {
+    closed = true;
+    _controller.close();
+  }
+}
+
+/// 화면이 연결할 때마다 가짜 연결을 하나씩 만들어 [opened]에 남긴다.
+class FakeChatSockets {
+  final opened = <FakeChatSocket>[];
+
+  ChatSocket open() {
+    final s = FakeChatSocket();
+    opened.add(s);
+    return s;
+  }
+}
+
 /// 넓은 PC 화면으로 앱을 띄운다.
-Future<void> pumpApp(WidgetTester tester, FakeBackend backend, String location, {FakeBrowser? browser}) async {
+Future<void> pumpApp(
+  WidgetTester tester,
+  FakeBackend backend,
+  String location, {
+  FakeBrowser? browser,
+  FakeChatSockets? sockets,
+}) async {
   tester.view.physicalSize = const Size(1400, 1000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -127,6 +163,7 @@ Future<void> pumpApp(WidgetTester tester, FakeBackend backend, String location, 
         apiProvider.overrideWithValue(Api(ApiClient(backend.client))),
         browserProvider.overrideWithValue(browser ?? FakeBrowser()),
         backendNoticeProvider.overrideWithValue(false),
+        chatSocketProvider.overrideWithValue((sockets ?? FakeChatSockets()).open),
       ],
       child: App(initialLocation: location),
     ),

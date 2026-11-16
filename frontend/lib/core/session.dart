@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'api/api.dart';
+import '../features/notifications/chat_rules.dart';
 import '../features/notifications/notification_rules.dart';
 import 'models/account.dart';
 
@@ -26,13 +27,18 @@ final caseOfVideoProvider = FutureProvider<Map<int, VideoCase>>((ref) async {
 });
 
 /// 상단 메뉴 [채팅] 옆 배지 수. 피해자는 아직 수락하지 않은 사건 초대 수(22번의 `pending`, D-233),
-/// 관리자는 할 일 수(8번에서 후보 선택 가능·분석 실패·업로드 확인 안 됨, D-243)다.
+/// 관리자는 할 일 수(8번에서 후보 선택 가능·분석 실패·업로드 확인 안 됨, D-243)에
+/// 안 읽은 채팅 수(29번 `unread_total`)를 더한 숫자 하나다 (D-303).
 /// 주기적으로 다시 읽지 않고 [refreshSession]·메뉴 이동 때만 다시 읽는다.
 final notificationBadgeProvider = FutureProvider<int>((ref) async {
   final me = await ref.watch(meProvider.future);
   final api = ref.read(apiProvider);
-  if (me.isAdmin) return adminTodoCount(await api.videos());
-  return (await api.cases()).where((c) => c.pending).length;
+  final base = me.isAdmin ? adminTodoCount(await api.videos()) : (await api.cases()).where((c) => c.pending).length;
+  int? unread;
+  try {
+    unread = (await api.chats()).unreadTotal; // 29. 못 읽으면 채팅 수는 0으로 친다
+  } catch (_) {}
+  return chatBadgeCount(base, unread);
 });
 
 /// 계정이 바뀌거나 사건·영상이 늘었을 때 다시 읽게 한다.

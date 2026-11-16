@@ -191,7 +191,9 @@ class _VideoStatusPageState extends ConsumerState<VideoStatusPage> {
         // 열람기한은 업로드가 끝나 정해진 뒤에만 보인다 (D-211)
         _ => [...counterpartNote(ref, _id), if (d.viewExpiresAt != null) viewExpiresText(d.viewExpiresAt)],
       },
-      title: d?.originalFilename ?? '영상 상태',
+      // 불러오는 동안은 제목을 비워 둔다. 임시 제목이 보였다가 바뀌지 않게 한다
+      title: d?.originalFilename,
+      titleStrong: d == null ? null : withoutExtension(d.originalFilename),
       child: d == null || screen == null ? const Center(child: CircularProgressIndicator()) : _body(context, d, screen),
     );
   }
@@ -202,7 +204,7 @@ class _VideoStatusPageState extends ConsumerState<VideoStatusPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (withSteps) ...[_ProgressSteps(current: step), const SizedBox(height: 16)],
+        if (withSteps) ...[StepBar(steps: progressSteps, current: step), const SizedBox(height: 32)],
         switch (screen) {
           StatusScreen.expired => const ExpiredView(),
           StatusScreen.exhausted => _completion(context, d),
@@ -225,25 +227,25 @@ class _VideoStatusPageState extends ConsumerState<VideoStatusPage> {
     );
   }
 
-  /// 대기·분석 중: 진행 표시(또는 아이콘) 아래 첫 문구를 크게, 나머지를 보통 크기로 (D-190).
+  /// 대기·분석 중: 윗선 아래에 진행 표시(또는 아이콘) + 첫 문구를 크게, 나머지를 작게 (D-190, D-305).
   Widget _waiting(List<String> messages, {IconData? icon, Widget? action}) {
     return PageCard(
-      padding: const EdgeInsets.all(32),
+      padding: const EdgeInsets.symmetric(vertical: 48),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 380),
+        constraints: const BoxConstraints(minHeight: 320),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (icon == null) const BigSpinner() else Icon(icon, size: 64, color: progressColor),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             Text(
               messages.first,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, height: 1.5),
+              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w300, height: 1.4),
             ),
             for (final m in messages.skip(1)) ...[
-              const SizedBox(height: 16),
-              Text(m, textAlign: TextAlign.center, style: const TextStyle(fontSize: 15, height: 1.6)),
+              const SizedBox(height: 12),
+              Text(m, textAlign: TextAlign.center, style: const TextStyle(fontSize: 15, height: 1.6, color: subColor)),
             ],
             if (action != null) ...[const SizedBox(height: 24), action],
           ],
@@ -293,72 +295,9 @@ class _VideoStatusPageState extends ConsumerState<VideoStatusPage> {
   }
 }
 
-/// 진행도 4단계 표시줄 (07장 2.5, D-204). 지난 단계는 체크, 지금 단계는 진하게.
-class _ProgressSteps extends StatelessWidget {
-  const _ProgressSteps({required this.current});
-
-  final int current;
-
-  @override
-  Widget build(BuildContext context) {
-    Widget step(int i) {
-      final done = i < current;
-      final on = i == current;
-      return Semantics(
-        selected: on,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          spacing: 8,
-          children: [
-            Container(
-              width: 28,
-              height: 28,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: on || done ? pointColor : offWhiteColor,
-                border: Border.all(color: on || done ? pointColor : progressColor, width: 1.5),
-              ),
-              child: done
-                  ? const Icon(Icons.check, size: 16, color: offWhiteColor)
-                  : Text(
-                      '${i + 1}',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: on ? offWhiteColor : subColor),
-                    ),
-            ),
-            Text(
-              progressSteps[i],
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: on ? FontWeight.w700 : FontWeight.w500,
-                color: on ? pointColor : (done ? inkColor : subColor),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final narrow = isNarrow(context);
-    return PageCard(
-      padding: EdgeInsets.symmetric(horizontal: narrow ? 16 : 28, vertical: 18),
-      child: narrow
-          ? Wrap(spacing: 16, runSpacing: 10, children: [for (var i = 0; i < progressSteps.length; i++) step(i)])
-          : Row(
-              children: [
-                for (var i = 0; i < progressSteps.length; i++) ...[
-                  if (i > 0)
-                    Expanded(
-                      child: Container(
-                        height: 2,
-                        margin: const EdgeInsets.symmetric(horizontal: 16),
-                        color: i <= current ? pointColor : lineColor,
-                      ),
-                    ),
-                  step(i),
-                ],
-              ],
-            ),
-    );
-  }
+/// 파일 이름에서 확장자를 뺀 부분 (후보 확인 화면도 같이 쓴다). 제목에서 이 부분만 굵게 쓴다 (확장자는 얇게).
+String? withoutExtension(String? name) {
+  if (name == null) return null;
+  final dot = name.lastIndexOf('.');
+  return dot > 0 ? name.substring(0, dot) : name;
 }

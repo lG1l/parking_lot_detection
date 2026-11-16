@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
 import '../../core/api/api.dart';
+import '../../core/api/api_error.dart';
+import '../../core/api/chat_socket.dart';
 import '../../core/format.dart';
 import '../../core/constants.dart';
 import '../../core/models/account.dart';
@@ -18,7 +22,8 @@ import 'notification_rules.dart';
 /// 오른쪽은 고른 사람과의 대화로, 사건마다 구분선 아래에 그 사건의 알림을 잇는다.
 /// 대기 중인 사건 초대는 피해자가 [수락]하면 그 사건이 묶인다 (D-233). 관리자는 [수락]이 없고 할 일을 본다 (D-243).
 /// 거절은 없다. 대화 아래에 메시지 흐름과 입력칸이 있고, 수락한 사건이 있는 상대에게만 보낸다 (D-297).
-/// 22번·8번·메시지는 열 때와 [수락]·보내기 뒤에만 읽는다. 새 메시지 받기(WebSocket, D-286)는 05장 주소가 나오면 붙인다.
+/// 22번·8번·메시지는 열 때와 [수락]·보내기 뒤에만 읽고, 새 메시지는 33번 WebSocket으로 받는다.
+/// 화면이 열려 있는 동안만 연결하고 떠나면 닫는다 (D-286, D-303).
 class NotificationsPage extends ConsumerStatefulWidget {
   const NotificationsPage({super.key});
 
@@ -26,61 +31,196 @@ class NotificationsPage extends ConsumerStatefulWidget {
   ConsumerState<NotificationsPage> createState() => _NotificationsPageState();
 }
 
-/// 한 상대 계정과 묶인 사건들. 22번에 상대 계정 ID가 없어 지금은 이름으로 묶는다.
+/// 한 상대 계정과 묶인 사건들. 22번에 상대 계정 ID가 없어 지금은 이름으로 묶고, 29번 대화 상대([peer])를 이름으로 짝짓는다.
+/// 사건을 모두 숨긴 상대는 [cases]가 비고 [peer]만 있다. 수락한 사건이 없어 29번에 없는 상대는 [peer]가 null이다 (D-303).
 class _Person {
-  _Person(this.name, this.cases);
+  _Person(this.name, this.cases, this.peer);
 
   final String name;
 
   /// 오래된 사건부터 (대화는 위에서 아래로 시간 순).
   final List<VideoCase> cases;
+  final ChatPeer? peer;
 
-  String get latestAt => cases.last.createdAt;
+  /// 목록에 보일 가장 최근 시각. 사건이 있으면 연결 시각, 없으면 마지막 메시지 시각이다.
+  String? get latestAt => cases.isNotEmpty ? cases.last.createdAt : peer?.lastMessage?.createdAt;
 }
 
 class _NotificationsPageState extends ConsumerState<NotificationsPage> {
-  List<_Person>? _people;
+  List<VideoCase>? _cases; // 22번. null이면 아직 읽는 중
+  List<ChatPeer> _peers = []; // 29번
   List<VideoSummary> _videos = [];
   bool _admin = false;
-  Me? _me;
-  List<ChatMessage> _chat = [];
+  List<ChatMessage> _chat = []; // 고른 사람과의 최근 메시지 (30번)
   bool _sending = false;
   final _input = TextEditingController();
   String? _selected;
   final _accepting = <int>{}; // [수락]을 누른 사건. 다시 누르지 못하게 막는다
+  ChatSocket? _socket; // 33번
+  StreamSubscription<ChatEvent>? _socketSub;
+  Timer? _reconnectTimer;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _connect();
   }
 
   @override
   void dispose() {
+    _reconnectTimer?.cancel();
+    _socketSub?.cancel();
+    _socket?.close(); // 화면을 떠나면 닫는다
     _input.dispose();
     super.dispose();
   }
 
-  /// 채팅 메시지 읽기 (D-286 지난 메시지 조회, 주소는 05장 미정). 못 읽으면 조용히 비워 둔다(서버에 아직 없을 수 있다).
-  Future<void> _loadMessages() async {
-    try {
-      final chat = await ref.read(apiProvider).messages();
-      if (mounted) setState(() => _chat = chat);
-    } catch (_) {}
+  /// 33번에 연결한다. 연결 하나로 모든 상대의 메시지를 받는다.
+  void _connect() {
+    final socket = ref.read(chatSocketProvider)();
+    _socket = socket;
+    _socketSub = socket.events.listen(_onSocketEvent);
   }
 
-  /// 메시지 보내기 (D-286). 지금 임시 API가 사건 번호를 받아 그 사람과의 최근 수락 사건 번호를 넘긴다.
-  Future<void> _send(VideoCase target) async {
+  void _onSocketEvent(ChatEvent event) {
+    switch (event) {
+      case ChatMessageEvent():
+        _onSocketMessage(event);
+      case ChatClosedEvent(:final code):
+        _onSocketClosed(code);
+    }
+  }
+
+  /// 닫는 코드별 처리 (05장 33번, D-303). 4401은 로그인 화면으로, 4403은 조용히 멈추고,
+  /// 4408은 멈추고 안내한다. 이 셋은 다시 연결하지 않는다. 그 밖의 끊김은 [pollInterval] 뒤 다시 연결한다.
+  void _onSocketClosed(int code) {
+    if (!mounted) return;
+    switch (code) {
+      case chatCloseNoSession:
+        handleCommonError(context, ApiException(401, 'UNAUTHENTICATED'));
+      case chatCloseBadOrigin:
+        break;
+      case chatCloseTooMany:
+        showMessage(context, '다른 창에서 채팅을 열어 이 창의 실시간 연결을 닫았습니다. 화면을 다시 열면 이어집니다.');
+      default:
+        _reconnectTimer?.cancel();
+        _reconnectTimer = Timer(pollInterval, _reconnect);
+    }
+  }
+
+  /// 다시 연결한 뒤 끊겨 있던 동안 빠진 메시지를 채운다. 연결을 먼저 해서 그 사이에 온 것도 놓치지 않는다.
+  /// 지금 고른 상대는 30번을 `?after_id=(마지막으로 받은 id)`로 불러 붙이고, 나머지는 29번을 다시 읽는다.
+  Future<void> _reconnect() async {
+    if (!mounted) return;
+    _socketSub?.cancel();
+    _connect();
+    final current = _selected == null ? null : peerOf(_selected!, _peers);
+    if (current != null) {
+      final lastId = _chat.isEmpty ? null : _chat.map((m) => m.id).reduce((a, b) => a > b ? a : b);
+      try {
+        final missed = await ref.read(apiProvider).chatMessages(current.peerUserId, afterId: lastId); // 30
+        if (!mounted) return;
+        final merged = mergeMessages(_chat, missed);
+        if (merged.length != _chat.length) {
+          setState(() => _chat = merged);
+          WidgetsBinding.instance.addPostFrameCallback((_) => _markRead(current, merged));
+        }
+      } catch (_) {} // 못 채우면 다음에 열 때 다시 읽는다
+    }
+    await _loadPeers();
+    if (mounted) ref.invalidate(notificationBadgeProvider);
+  }
+
+  /// 받은 메시지를 반영한다. 같은 `id`는 버린다. 지금 고른 상대면 대화에 붙이고(상대가 보낸 것이면 읽음 처리),
+  /// 그 밖의 상대이거나 모르는 상대면 29번을 다시 읽어 목록 요약과 안 읽은 수를 맞춘다 (D-303).
+  Future<void> _onSocketMessage(ChatMessageEvent e) async {
+    if (!mounted) return;
+    final current = _selected == null ? null : peerOf(_selected!, _peers);
+    if (current != null && current.peerUserId == e.peerUserId) {
+      if (_chat.any((m) => m.id == e.message.id)) return;
+      setState(() => _chat = mergeMessages(_chat, [e.message]));
+      if (e.message.mine) {
+        await _loadPeers(); // 다른 탭에서 보낸 것. 목록 요약만 맞춘다
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _markRead(current, _chat));
+      }
+      return;
+    }
+    final known = _peers.where((p) => p.peerUserId == e.peerUserId).firstOrNull;
+    if ((known?.lastMessage?.id ?? 0) >= e.message.id) return; // 이미 반영된 메시지
+    await _loadPeers();
+    if (mounted) ref.invalidate(notificationBadgeProvider);
+  }
+
+  /// 29번 대화 목록. 못 읽으면(서버에 아직 없을 수 있다) 비워 두고 알림 카드는 그대로 보인다.
+  Future<void> _loadPeers() async {
+    var peers = <ChatPeer>[];
+    try {
+      peers = (await ref.read(apiProvider).chats()).items; // 29
+    } catch (_) {}
+    if (mounted) setState(() => _peers = peers);
+  }
+
+  /// 고른 사람의 최근 메시지를 읽고(30번), 화면에 그린 뒤 읽음으로 알린다(32번) (D-303).
+  Future<void> _openChat(String? name) async {
+    final peer = name == null ? null : peerOf(name, _peers);
+    if (peer == null) {
+      if (mounted) setState(() => _chat = []);
+      return;
+    }
+    try {
+      final messages = await ref.read(apiProvider).chatMessages(peer.peerUserId); // 30
+      if (!mounted || _selected != name) return; // 그 사이 다른 사람을 골랐다
+      setState(() => _chat = messages);
+      WidgetsBinding.instance.addPostFrameCallback((_) => _markRead(peer, messages));
+    } catch (e) {
+      if (!mounted) return;
+      if (e is ApiException && e.code == 'CHAT_NOT_FOUND') {
+        await _loadPeers(); // 없는 대화다. 목록을 새로 그린다 (D-287)
+      } else {
+        handleCommonError(context, e);
+      }
+    }
+  }
+
+  /// 보인 메시지 중 가장 큰 id까지 읽음으로 알린다. 실패하면 조용히 넘어간다(다음에 열 때 다시 처리, D-289).
+  Future<void> _markRead(ChatPeer peer, List<ChatMessage> shown) async {
+    if (shown.isEmpty) return;
+    final lastId = shown.map((m) => m.id).reduce((a, b) => a > b ? a : b);
+    try {
+      await ref.read(apiProvider).markChatRead(peer.peerUserId, lastId); // 32
+    } catch (_) {
+      return;
+    }
+    await _loadPeers();
+    if (mounted) ref.invalidate(notificationBadgeProvider); // 읽음 처리 뒤 메뉴 배지를 다시 센다 (D-303)
+  }
+
+  void _select(_Person p) {
+    setState(() => _selected = p.name);
+    _openChat(p.name);
+  }
+
+  /// 메시지 보내기 (31번). 응답 메시지를 대화에 합치고, 목록 요약을 위해 29번을 다시 읽는다.
+  Future<void> _send(ChatPeer peer) async {
     final text = _input.text.trim();
     if (text.isEmpty || text.length > maxMessageLength || _sending) return;
     setState(() => _sending = true);
     try {
-      await ref.read(apiProvider).sendMessage(target.id, text);
+      final sent = await ref.read(apiProvider).sendChat(peer.peerUserId, text); // 31
       if (!mounted) return;
       _input.clear();
-      await _loadMessages();
+      final current = _selected == null ? null : peerOf(_selected!, _peers);
+      if (current?.peerUserId == peer.peerUserId) setState(() => _chat = mergeMessages(_chat, [sent]));
+      await _loadPeers();
     } catch (e) {
-      if (mounted) handleCommonError(context, e);
+      if (!mounted) return;
+      if (e is ApiException && e.code == 'CHAT_NOT_FOUND') {
+        await _loadPeers();
+      } else {
+        handleCommonError(context, e);
+      }
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -96,20 +236,24 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       try {
         videos = await api.videos(); // 8. 못 읽으면 초대 알림만 보인다
       } catch (_) {}
+      var peers = <ChatPeer>[];
+      try {
+        peers = (await api.chats()).items; // 29. 못 읽으면 채팅 부분만 빈다
+      } catch (_) {}
       refreshSession(ref); // 메뉴 배지 수도 다시 센다
-      await _loadMessages();
       if (!mounted) return;
       setState(() {
         _admin = admin;
-        _me = me;
         _videos = videos;
-        final people = _grouped(cases);
-        _people = people;
+        _cases = cases;
+        _peers = peers;
+        final people = _grouped();
         // 처음은 맨 위 사람이다(피해자는 수락할 초대가 있는 관리자가 맨 위에 온다)
         if (_selected == null || !people.any((p) => p.name == _selected)) {
           _selected = people.firstOrNull?.name;
         }
       });
+      await _openChat(_selected);
     } catch (e) {
       if (mounted) handleCommonError(context, e);
     }
@@ -121,19 +265,24 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   bool _needsAction(VideoCase c) =>
       _admin ? adminTodoCount(_videos.where((v) => v.caseId == c.id).toList()) > 0 : c.pending;
 
-  /// 상대 계정별로 묶는다. 할 일이 있는 사람이 먼저이고, 그다음 최근에 연결한 사람 순이다.
-  List<_Person> _grouped(List<VideoCase> cases) {
+  /// 상대 계정별로 묶는다. 할 일이 있는 사람이 먼저이고, 그다음 최근 시각 순이다.
+  /// 29번에만 있는 상대(사건을 모두 숨긴 경우)도 한 줄로 붙인다 (D-303).
+  List<_Person> _grouped() {
     final byName = <String, List<VideoCase>>{};
-    for (final c in cases) {
+    for (final c in _cases ?? <VideoCase>[]) {
       byName.putIfAbsent(_nameOf(c), () => []).add(c);
     }
+    for (final p in _peers) {
+      byName.putIfAbsent(p.peerName, () => []);
+    }
     final people = [
-      for (final e in byName.entries) _Person(e.key, e.value..sort((a, b) => a.createdAt.compareTo(b.createdAt))),
+      for (final e in byName.entries)
+        _Person(e.key, e.value..sort((a, b) => a.createdAt.compareTo(b.createdAt)), peerOf(e.key, _peers)),
     ];
     bool first(_Person p) => p.cases.any(_needsAction);
     return people..sort((a, b) {
       if (first(a) != first(b)) return first(a) ? -1 : 1;
-      return b.latestAt.compareTo(a.latestAt);
+      return (b.latestAt ?? '').compareTo(a.latestAt ?? '');
     });
   }
 
@@ -157,17 +306,16 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   List<NoticeMessage> _messagesOf(VideoCase c) => messagesOf(c, _videos, admin: _admin);
 
   /// 왼쪽 목록 한 줄의 요약: "가장 최근 알림 · 가장 최근 채팅" (D-297).
-  /// 알림은 가장 최근 사건의 마지막 알림을 짧은 상태 이름으로, 채팅은 내용 전부다. 채팅이 없으면 알림만.
+  /// 알림은 가장 최근 사건의 마지막 알림을 짧은 상태 이름으로, 채팅은 29번의 마지막 메시지 내용 전부다. 없는 쪽은 뺀다.
   String _summaryOf(_Person p) {
-    final notice = noticeLabel(_messagesOf(p.cases.last).last);
-    final chat = messagesOfPerson(p.cases, _chat).lastOrNull;
-    return chat == null ? notice : '$notice · ${chat.body}';
+    final notice = p.cases.isEmpty ? null : noticeLabel(_messagesOf(p.cases.last).last);
+    final chat = p.peer?.lastMessage?.body;
+    return [?notice, ?chat].join(' · ');
   }
 
   @override
   Widget build(BuildContext context) {
-    final people = _people;
-    if (people == null) {
+    if (_cases == null) {
       return const PageFrame(
         current: NavItem.notifications,
         child: Padding(
@@ -176,6 +324,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         ),
       );
     }
+    final people = _grouped();
     if (people.isEmpty) {
       return const PageFrame(
         current: NavItem.notifications,
@@ -189,7 +338,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       people: people,
       selectedName: selected.name,
       summaryOf: _summaryOf,
-      onSelect: (p) => setState(() => _selected = p.name),
+      onSelect: _select,
     );
     final talk = _Conversation(
       person: selected,
@@ -197,9 +346,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       messagesOf: _messagesOf,
       accepting: _accepting,
       onAccept: _accept,
-      chat: messagesOfPerson(selected.cases, _chat),
-      me: _me,
-      target: sendTargetOf(selected.cases),
+      chat: _chat,
+      peer: selected.peer,
       input: _input,
       sending: _sending,
       onSend: _send,
@@ -221,7 +369,9 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
           : Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SizedBox(width: 280, child: scrollList),
+                SizedBox(width: 300, child: scrollList),
+                const SizedBox(width: 8),
+                const VerticalDivider(width: 1, color: lineColor), // 목록과 대화 사이 hair 선 (D-305)
                 const SizedBox(width: 32),
                 Expanded(child: talk),
               ],
@@ -254,20 +404,23 @@ class _PersonList extends StatelessWidget {
       label: '${admin ? '피해자' : '관리자'} 목록',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 6,
         children: [
+          // 어느 상대를 골라도 항상 보이게 목록 위에 둔다 (D-288, D-303)
+          const Padding(padding: EdgeInsets.only(bottom: 4), child: SmallText('메시지는 보낸 지 30일이 지나면 지워집니다.')),
+          // 카드 상자 없이 hair 줄 목록. 고른 줄은 옅은 파란 바탕 + 왼쪽 파란 막대 (캔버스 새 컨셉, D-305)
           for (final p in people)
             Material(
-              color: p.name == selectedName ? lineColor : offWhiteColor,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: const BorderSide(color: lineColor),
-              ),
-              clipBehavior: Clip.antiAlias,
+              color: p.name == selectedName ? const Color(0x143D8BFF) : Colors.transparent,
               child: InkWell(
                 onTap: () => onSelect(p),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border(
+                      left: BorderSide(color: p.name == selectedName ? focusLineColor : Colors.transparent, width: 3),
+                      bottom: const BorderSide(color: lineColor),
+                    ),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(12, 14, 8, 14),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     spacing: 6,
@@ -278,15 +431,23 @@ class _PersonList extends StatelessWidget {
                           Expanded(
                             child: Text(p.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                           ),
-                          SmallText(formatKstMinute(p.latestAt).substring(5)), // "MM-DD HH:mm"
+                          if (p.latestAt case final at?) SmallText(formatKstMinute(at).substring(5)), // "MM-DD HH:mm"
                         ],
                       ),
-                      // 시간 아래까지 한 줄을 다 쓰고, 넘치면 "..."로 줄인다 (D-297)
-                      Text(
-                        summaryOf(p),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 13, color: subColor, height: 1.5),
+                      // 시간 아래까지 한 줄을 쓰고, 넘치면 "..."로 줄인다. 안 읽은 수는 그 줄 오른쪽 끝에 둔다 (D-297, D-303)
+                      Row(
+                        spacing: 8,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              summaryOf(p),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 13, color: subColor, height: 1.5),
+                            ),
+                          ),
+                          if ((p.peer?.unread ?? 0) > 0) _UnreadDot(p.peer!.unread),
+                        ],
                       ),
                     ],
                   ),
@@ -299,6 +460,25 @@ class _PersonList extends StatelessWidget {
   }
 }
 
+/// 안 읽은 메시지 수를 보이는 빨간 숫자 동그라미 (D-303).
+class _UnreadDot extends StatelessWidget {
+  const _UnreadDot(this.count);
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: '안 읽은 메시지 $count개',
+    child: Container(
+      constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      alignment: Alignment.center,
+      decoration: const BoxDecoration(color: failChipColor, borderRadius: BorderRadius.all(Radius.circular(10))),
+      child: Text('$count', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: offWhiteColor)),
+    ),
+  );
+}
+
 /// 고른 사람과의 대화. 사건마다 날짜 구분선 아래에 그 사건의 알림을 잇는다.
 class _Conversation extends StatelessWidget {
   const _Conversation({
@@ -308,8 +488,7 @@ class _Conversation extends StatelessWidget {
     required this.accepting,
     required this.onAccept,
     required this.chat,
-    required this.me,
-    required this.target,
+    required this.peer,
     required this.input,
     required this.sending,
     required this.onSend,
@@ -321,18 +500,27 @@ class _Conversation extends StatelessWidget {
   final Set<int> accepting;
   final ValueChanged<VideoCase> onAccept;
   final List<ChatMessage> chat;
-  final Me? me;
-  final VideoCase? target;
+
+  /// 29번의 이 사람. null이면 수락한 사건이 없어 보낼 수 없다.
+  final ChatPeer? peer;
   final TextEditingController input;
   final bool sending;
-  final ValueChanged<VideoCase> onSend;
+  final ValueChanged<ChatPeer> onSend;
 
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     spacing: 12,
     children: [
-      Text(person.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
+      // 큰 제목 + 검은 아래선 (캔버스 새 컨셉, D-305)
+      Container(
+        padding: const EdgeInsets.only(bottom: 14),
+        decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: inkColor))),
+        child: Text(
+          person.name,
+          style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w600, height: 1.2, color: inkColor),
+        ),
+      ),
       // 대화만 스크롤하고 입력칸은 아래에 고정한다. reverse라 처음부터 맨 아래(최근 메시지)가 보인다 (D-297)
       Expanded(
         child: SingleChildScrollView(
@@ -343,12 +531,16 @@ class _Conversation extends StatelessWidget {
             children: [
               for (final c in person.cases) ..._caseMessages(context, c),
               const Divider(color: lineColor),
-              for (final m in chat) _Bubble(message: m, mine: me != null && m.mine(me!)),
+              for (final m in chat) _Bubble(message: m, mine: m.mine),
             ],
           ),
         ),
       ),
-      _Composer(target: target, input: input, sending: sending, onSend: onSend),
+      Container(
+        padding: const EdgeInsets.only(top: 12),
+        decoration: const BoxDecoration(border: Border(top: BorderSide(color: inkColor))),
+        child: _Composer(peer: peer, input: input, sending: sending, onSend: onSend),
+      ),
     ],
   );
 
@@ -383,23 +575,19 @@ class _Conversation extends StatelessWidget {
             at: c.createdAt,
             // 수락하면 오른쪽에 수락 카드가 따로 붙으므로, 요청 카드에는 수락 전 [수락]만 둔다
             footer: !admin && c.pending
-                ? FilledButton(
-                    onPressed: accepting.contains(c.id) ? null : () => onAccept(c),
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size(0, 38),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                    ),
-                    child: const Text('수락'),
-                  )
+                ? _NoticeButton(label: '수락', onPressed: accepting.contains(c.id) ? null : () => onAccept(c))
                 : null,
           ),
-          NoticeStatus(:final video, title: final noticeTitle, :final emoji, :final problem) => _NoticeCard(
+          NoticeStatus(:final video, title: final noticeTitle, :final emoji, :final problem, :final action) => _NoticeCard(
             title: noticeTitle,
             emoji: emoji,
             problem: problem,
             caseLine: title, // 작은 글씨는 사건 이름만 (D-297)
             mine: noticeIsMine(m, admin: admin),
-            onTap: () => context.go('/videos/${video.videoId}'),
+            // 카드는 누를 수 없고, 할 일이 남은 알림만 [수락]처럼 버튼으로 그 영상의 상태 화면에 간다 (D-304)
+            footer: action == null
+                ? null
+                : _NoticeButton(label: action, onPressed: () => context.go('/videos/${video.videoId}')),
           ),
         },
     ];
@@ -408,7 +596,7 @@ class _Conversation extends StatelessWidget {
 
 /// 알림 카드. 제목과 오른쪽 이모지, 아래 작은 글씨로 사건 이름만 적는다.
 /// [problem]이면 제목을 실패 색으로 그린다. [mine]이면(내가 한 일) 오른쪽, 아니면 왼쪽에 둔다 (D-297).
-/// [at]이 있으면 카드 바깥 안쪽 옆에 시각(HH:mm)만 보인다.
+/// [at]이 있으면 카드 바깥 안쪽 옆에 시각(HH:mm)만 보인다. 카드 자체는 누를 수 없고, 할 일은 [footer] 버튼으로 한다 (D-304).
 class _NoticeCard extends StatelessWidget {
   const _NoticeCard({
     required this.title,
@@ -416,7 +604,6 @@ class _NoticeCard extends StatelessWidget {
     required this.caseLine,
     this.problem = false,
     this.footer,
-    this.onTap,
     this.at,
     required this.mine,
   });
@@ -427,7 +614,6 @@ class _NoticeCard extends StatelessWidget {
   final bool mine;
   final bool problem;
   final Widget? footer;
-  final VoidCallback? onTap;
   final String? at;
 
   @override
@@ -446,52 +632,62 @@ class _NoticeCard extends StatelessWidget {
   Widget _box() => ConstrainedBox(
     constraints: const BoxConstraints(maxWidth: 320),
     child: Material(
-      color: offWhiteColor,
+      color: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(cardRadius),
-        side: const BorderSide(color: lineColor),
+        side: const BorderSide(color: hairColor),
       ),
-      shadowColor: const Color(0x0F2D3748),
-      elevation: 1,
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: 2, // 제목과 사건 이름을 붙인다 (D-297)
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                spacing: 10,
-                children: [
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        height: 1.35,
-                        color: problem ? failChipColor : null, // 실패 알림은 제목을 실패 색으로
-                      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: 2, // 제목과 사건 이름을 붙인다 (D-297)
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              spacing: 10,
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      height: 1.35,
+                      color: problem ? failChipColor : null, // 실패 알림은 제목을 실패 색으로
                     ),
                   ),
-                  ExcludeSemantics(child: Text(emoji, style: const TextStyle(fontSize: 20, height: 1.2))),
-                ],
-              ),
-              Text(
-                caseLine,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13, color: noteColor),
-              ),
-              if (footer case final f?) Padding(padding: const EdgeInsets.only(top: 8), child: f), // [수락]은 조금 띄운다
-            ],
-          ),
+                ),
+                ExcludeSemantics(child: Text(emoji, style: const TextStyle(fontSize: 20, height: 1.2))),
+              ],
+            ),
+            Text(
+              caseLine,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13, color: noteColor),
+            ),
+            if (footer case final f?) Padding(padding: const EdgeInsets.only(top: 8), child: f), // 버튼은 조금 띄운다
+          ],
         ),
       ),
     ),
+  );
+}
+
+/// 알림 카드 아래 버튼. [수락]과 영상 상태 알림의 버튼이 같은 모양이다 (D-304).
+class _NoticeButton extends StatelessWidget {
+  const _NoticeButton({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => FilledButton(
+    onPressed: onPressed,
+    style: FilledButton.styleFrom(minimumSize: const Size(0, 38), padding: const EdgeInsets.symmetric(horizontal: 16)),
+    child: Text(label),
   );
 }
 
@@ -510,9 +706,9 @@ class _Bubble extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 420),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: mine ? pointLightColor : offWhiteColor, // 내 것은 연한 포인트색 (D-297)
+            color: mine ? pointLightColor : Colors.transparent, // 내 것은 연한 포인트색 (D-297)
             borderRadius: BorderRadius.circular(cardRadius),
-            border: Border.all(color: mine ? pointLightColor : lineColor),
+            border: Border.all(color: mine ? pointLightColor : hairColor),
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -530,18 +726,18 @@ class _Bubble extends StatelessWidget {
   }
 }
 
-/// 메시지 입력칸 + [보내기]. 수락한 사건이 없으면([target]이 null) 막고 안내한다 (D-297).
+/// 메시지 입력칸 + [보내기]. 수락한 사건이 없으면([peer]가 null) 막고 안내한다 (D-297).
 class _Composer extends StatelessWidget {
-  const _Composer({required this.target, required this.input, required this.sending, required this.onSend});
+  const _Composer({required this.peer, required this.input, required this.sending, required this.onSend});
 
-  final VideoCase? target;
+  final ChatPeer? peer;
   final TextEditingController input;
   final bool sending;
-  final ValueChanged<VideoCase> onSend;
+  final ValueChanged<ChatPeer> onSend;
 
   @override
   Widget build(BuildContext context) {
-    final t = target;
+    final t = peer;
     if (t == null) return const SmallText('사건을 수락하면 메시지를 보낼 수 있습니다.');
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,

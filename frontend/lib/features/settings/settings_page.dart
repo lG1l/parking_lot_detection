@@ -34,7 +34,7 @@ class SettingsPage extends ConsumerWidget {
         data: (m) => Align(
           alignment: Alignment.topLeft,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
+            constraints: const BoxConstraints(maxWidth: 960),
             child: _SettingsBody(me: m),
           ),
         ),
@@ -60,7 +60,6 @@ class _SettingsBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    const value = TextStyle(fontSize: 15);
     void notReady(String feature) => showNotReady(context, feature);
     final size = ref.watch(textSizeProvider);
     void selectSize(TextSize? s) {
@@ -69,142 +68,126 @@ class _SettingsBody extends ConsumerWidget {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: 12,
+      spacing: 26,
       children: [
-        const _SectionTitle('내 계정'),
-        _SectionCard(
-          children: [
-            KeyValueRow(
-              label: '닉네임',
-              first: true,
-              value: _ValueWithAction(
-                value: Text(me.name, style: value),
-                action: EditIconButton(tooltip: '닉네임 변경', onPressed: () => notReady('닉네임 변경')),
+        _Section('내 계정', [
+          KeyValueRow(
+            label: '닉네임',
+            value: _ValueWithAction(
+              value: Text(me.name),
+              action: EditIconButton(tooltip: '닉네임 변경', onPressed: () => notReady('닉네임 변경')),
+            ),
+          ),
+          KeyValueRow(label: '계정 유형', value: Text(me.isAdmin ? '관리자' : '사건 관계자')),
+          KeyValueRow(
+            label: '비밀번호',
+            value: _ValueWithAction(
+              value: const SmallText('비밀번호는 변경 후 다시 로그인해야 합니다.'),
+              action: _SmallPill(label: '비밀번호 변경', onPressed: () => notReady('비밀번호 변경')),
+            ),
+          ),
+        ]),
+        _Section('보안 설정', [
+          KeyValueRow(
+            label: '로그아웃',
+            value: _ValueWithAction(
+              value: const SmallText('이 브라우저에서 로그아웃합니다.'),
+              action: _SmallPill(label: '로그아웃', onPressed: () => logout(context, ref)),
+            ),
+          ),
+          KeyValueRow(
+            label: '계정 삭제',
+            value: _ValueWithAction(
+              value: const SmallText('계정을 삭제하면 되돌릴 수 없습니다.'),
+              action: _SmallPill(label: '계정 삭제', danger: true, onPressed: () => notReady('계정 삭제')),
+            ),
+          ),
+        ]),
+        _Section('환경 설정', [
+          // 화면 모드는 표시만 한다. 늘 [라이트]이고, [다크]를 누르면 안내만 띄운다
+          _Choice(
+            label: '화면 모드',
+            child: RadioGroup<String>(
+              groupValue: 'light',
+              onChanged: (v) {
+                if (v == 'dark') notReady('다크 모드');
+              },
+              child: Wrap(
+                spacing: 20,
+                runSpacing: 12,
+                children: [
+                  _ModeButton(label: '라이트', dark: false, selected: true, onTap: () {}),
+                  _ModeButton(label: '다크', dark: true, selected: false, onTap: () => notReady('다크 모드')),
+                ],
               ),
             ),
-            KeyValueRow(
-              label: '계정 유형',
-              value: Text(me.isAdmin ? '관리자' : '사건 관계자', style: value),
-            ),
-            KeyValueRow(
-              label: '비밀번호',
-              value: _ValueWithAction(
-                value: const SmallText('비밀번호는 변경 후 다시 로그인해야 합니다.'),
-                action: OutlinedButton(onPressed: () => notReady('비밀번호 변경'), child: const Text('비밀번호 변경')),
+          ),
+          // 글자 크기는 [저장] 없이 바로 앱 전체에 적용되고 브라우저에 저장된다 (D-236)
+          _Choice(
+            label: '글자 크기',
+            child: RadioGroup<TextSize>(
+              groupValue: size,
+              onChanged: selectSize,
+              child: Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  for (final s in TextSize.values)
+                    _SizeOption(label: s.label, value: s, selected: s == size, onTap: () => selectSize(s)),
+                ],
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        const _SectionTitle('보안 설정'),
-        _SectionCard(
-          children: [
-            KeyValueRow(
-              label: '로그아웃',
-              first: true,
-              value: _ValueWithAction(
-                value: const SmallText('이 브라우저에서 로그아웃합니다.'),
-                action: OutlinedButton(onPressed: () => logout(context, ref), child: const Text('로그아웃')),
-              ),
-            ),
-            KeyValueRow(
-              label: '계정 삭제',
-              value: _ValueWithAction(
-                value: const SmallText('계정을 삭제하면 되돌릴 수 없습니다.'),
-                action: OutlinedButton(
-                  onPressed: () => notReady('계정 삭제'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: failChipColor,
-                    side: const BorderSide(color: failChipColor, width: 1.5),
-                  ),
-                  child: const Text('계정 삭제'),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        const _SectionTitle('환경 설정'),
-        _SectionCard(
-          children: [
-            // 화면 모드는 표시만 한다. 늘 [라이트]이고, [다크]를 누르면 안내만 띄운다
-            KeyValueRow(
-              label: '화면 모드',
-              first: true,
-              value: RadioGroup<String>(
-                groupValue: 'light',
-                onChanged: (v) {
-                  if (v == 'dark') notReady('다크 모드');
-                },
-                child: Wrap(
-                  spacing: 24,
-                  children: [
-                    _InlineOption(label: '라이트', radio: const Radio<String>(value: 'light'), onTap: () {}),
-                    _InlineOption(
-                      label: '다크',
-                      radio: const Radio<String>(value: 'dark'),
-                      onTap: () => notReady('다크 모드'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            // 글자 크기는 [저장] 없이 바로 앱 전체에 적용되고 브라우저에 저장된다 (D-236)
-            KeyValueRow(
-              label: '글자 크기',
-              value: RadioGroup<TextSize>(
-                groupValue: size,
-                onChanged: selectSize,
-                child: Wrap(
-                  spacing: 24,
-                  children: [
-                    for (final s in TextSize.values)
-                      _InlineOption(label: s.label, radio: Radio<TextSize>(value: s), onTap: () => selectSize(s)),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        const _SectionTitle('서비스'),
-        _SectionCard(
-          children: [
-            for (final (i, label) in ['1:1 문의', '공지사항', '이용약관'].indexed)
-              OptionRow(
-                label: label,
-                first: i == 0,
-                onTap: () => notReady(label),
-                trailing: const Icon(Icons.chevron_right, color: subColor),
-              ),
-          ],
-        ),
+          ),
+        ]),
+        _Section('서비스', [
+          for (final label in ['1:1 문의', '공지사항', '이용약관']) OptionRow(label: label, onTap: () => notReady(label)),
+        ]),
       ],
     );
   }
 }
 
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.text);
+/// 소제목 줄(검은 아래선) 아래에 `hair` 줄들을 두는 구역.
+class _Section extends StatelessWidget {
+  const _Section(this.title, this.children);
 
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(left: 4),
-    child: Text(text, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: inkColor)),
-  );
-}
-
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.children});
-
+  final String title;
   final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) => PageCard(
-    padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 8),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Container(
+        padding: const EdgeInsets.only(bottom: 6),
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: inkColor)),
+        ),
+        child: Text(title, style: kickerStyle),
+      ),
+      ...children,
+    ],
+  );
+}
+
+/// 작은 소제목 아래에 선택지를 두는 줄 (화면 모드·글자 크기).
+class _Choice extends StatelessWidget {
+  const _Choice({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 18),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 14,
+      children: [
+        Text(label, style: kickerStyle),
+        child,
+      ],
+    ),
   );
 }
 
@@ -225,25 +208,119 @@ class _ValueWithAction extends StatelessWidget {
   );
 }
 
-/// 가로로 늘어놓는 "◉ 이름" 선택지 하나. 이름을 눌러도 고른다.
-class _InlineOption extends StatelessWidget {
-  const _InlineOption({required this.label, required this.radio, required this.onTap});
+/// 줄 끝의 작은 알약 버튼 (높이 36). [danger]면 빨간 테두리·글자.
+class _SmallPill extends StatelessWidget {
+  const _SmallPill({required this.label, required this.onPressed, this.danger = false});
 
   final String label;
-  final Widget radio;
+  final VoidCallback onPressed;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) => OutlinedButton(
+    onPressed: onPressed,
+    style: OutlinedButton.styleFrom(
+      minimumSize: const Size(0, 36),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+      foregroundColor: danger ? dangerColor : inkColor,
+      side: BorderSide(color: danger ? dangerColor : inkColor, width: 1.5),
+    ),
+    child: Text(label),
+  );
+}
+
+/// 화면 모드 그림 단추: 작은 화면 그림 + "◉ 이름". 고른 쪽은 파란 테두리 (표시만, D-291).
+class _ModeButton extends StatelessWidget {
+  const _ModeButton({required this.label, required this.dark, required this.selected, required this.onTap});
+
+  final String label;
+  final bool dark;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget bar(double widthFactor, Color color) => FractionallySizedBox(
+      widthFactor: widthFactor,
+      alignment: Alignment.centerLeft,
+      child: Container(
+        height: 7,
+        decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)),
+      ),
+    );
+    final stripe = dark ? subColor : lineColor;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        width: 220,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: selected ? focusLineColor : hairColor, width: 1.5),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              height: 76,
+              color: dark ? inkColor : Colors.white,
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [bar(0.6, stripe), bar(0.85, stripe), bar(0.4, focusLineColor)],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(4, 0, 14, 0),
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: lineColor)),
+              ),
+              child: Row(
+                children: [
+                  Radio<String>(value: dark ? 'dark' : 'light', activeColor: focusLineColor),
+                  Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 글자 크기 알약 하나. 고른 것은 파란 테두리·글자, 아니면 회색 (#4A5568, 4.5:1 이상).
+class _SizeOption extends StatelessWidget {
+  const _SizeOption({required this.label, required this.value, required this.selected, required this.onTap});
+
+  final String label;
+  final TextSize value;
+  final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) => InkWell(
     onTap: onTap,
-    borderRadius: BorderRadius.circular(6),
-    child: Padding(
-      padding: const EdgeInsets.only(right: 8),
+    borderRadius: BorderRadius.circular(999),
+    child: Container(
+      constraints: const BoxConstraints(minHeight: 44),
+      padding: const EdgeInsets.fromLTRB(6, 0, 18, 0),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: selected ? focusLineColor : hairColor, width: 1.5),
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          radio,
-          Text(label, style: const TextStyle(fontSize: 15)),
+          Radio<TextSize>(value: value, activeColor: focusLineColor),
+          Text(
+            label,
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: selected ? pillColor : subColor),
+          ),
         ],
       ),
     ),

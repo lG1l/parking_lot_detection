@@ -118,6 +118,7 @@ class PageFrame extends StatelessWidget {
     this.current,
     this.canLeave,
     this.scrollBody = true,
+    this.titleStrong,
   });
 
   /// 본문 맨 위 제목. 없으면 두지 않는다.
@@ -144,39 +145,40 @@ class PageFrame extends StatelessWidget {
   /// (후보 확인 화면: 위쪽은 고정, 영상 목록만 스크롤).
   final bool scrollBody;
 
+  /// [title] 안에서 굵게 보일 부분 (예: "사건 12건"의 "12"). 없으면 제목 전체를 굵게 둔다 (D-305).
+  final String? titleStrong;
+
   @override
   Widget build(BuildContext context) {
     final side = isNarrow(context) ? 16.0 : 40.0;
+    final Widget body;
     if (!scrollBody) {
-      return Scaffold(
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _TopBar(current: current, canLeave: canLeave),
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(side, _bodyTop, side, 24),
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: maxWidth),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (title != null || eyebrow != null) ...[_heading(), const SizedBox(height: 16)],
-                        Expanded(child: child),
-                      ],
-                    ),
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _TopBar(current: current, canLeave: canLeave),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(side, _bodyTop, side, 24),
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: maxWidth),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (title != null || eyebrow != null) ...[_heading(), const SizedBox(height: 16)],
+                      Expanded(child: child),
+                    ],
                   ),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       );
-    }
-    return Scaffold(
-      body: Column(
+    } else {
+      body = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _TopBar(current: current, canLeave: canLeave),
@@ -198,13 +200,101 @@ class PageFrame extends StatelessWidget {
             ),
           ),
         ],
+      );
+    }
+    // 흰 바탕 + 파란 빛 번짐 두 개가 맨 뒤에 깔린다 (D-305)
+    return Scaffold(
+      body: Stack(
+        children: [
+          const Positioned.fill(child: PageGlow()),
+          body,
+        ],
       ),
     );
   }
 
-  Widget _heading() {
-    final eyebrow = this.eyebrow;
+  Widget _heading() =>
+      PageHeading(title: title, kicker: eyebrow, notes: eyebrowNotes, strong: titleStrong, actions: actions);
+}
+
+/// 바탕의 파란 빛 번짐 두 개: 오른쪽 위 · 왼쪽 아래 (캔버스 새 컨셉, D-305).
+class PageGlow extends StatelessWidget {
+  const PageGlow({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    Widget glow(double size, Color color) => Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(colors: [color, color.withValues(alpha: 0)], stops: const [0, 0.7]),
+      ),
+    );
+    return IgnorePointer(
+      child: ExcludeSemantics(
+        child: ClipRect(
+          child: Stack(
+            children: [
+              Positioned(right: -260, top: -260, child: glow(720, glowColorTop)),
+              Positioned(left: -260, bottom: -260, child: glow(640, glowColorBottom)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 본문 머리: 작은 소제목(있을 때만) + 큰 제목 (캔버스 새 컨셉, D-305). 글자는 07장 그대로 호출하는 쪽이 넘긴다.
+/// [strong]이 제목 안에 있으면 그 부분만 굵게 하고 나머지는 얇게 쓴다. 없으면 제목 전체를 굵게 둔다.
+class PageHeading extends StatelessWidget {
+  const PageHeading({
+    super.key,
+    this.title,
+    this.kicker,
+    this.notes = const [],
+    this.strong,
+    this.actions = const [],
+    this.titleSize,
+  });
+
+  final String? title;
+  final String? kicker;
+
+  /// 소제목 오른쪽에 `|`로 잇는 안내.
+  final List<String> notes;
+  final String? strong;
+
+  /// 제목 줄 오른쪽 버튼.
+  final List<Widget> actions;
+
+  /// 넓은 화면의 제목 글자 크기. 문장이 긴 제목(입력 단계 안내)은 줄이 바뀌어 아래 화면이 밀리지 않게 작게 쓴다.
+  final double? titleSize;
+
+  @override
+  Widget build(BuildContext context) {
     final title = this.title;
+    final kicker = this.kicker;
+    final size = isNarrow(context) ? 34.0 : (titleSize ?? 56.0);
+    TextStyle style(FontWeight w) =>
+        TextStyle(fontSize: size, fontWeight: w, color: inkColor, height: 1.15, letterSpacing: 0);
+    Widget titleText(String title) {
+      final strong = this.strong;
+      final at = strong == null ? -1 : title.indexOf(strong);
+      if (strong == null || at < 0) return Text(title, style: style(FontWeight.w600));
+      return Text.rich(
+        TextSpan(
+          style: style(FontWeight.w300),
+          children: [
+            TextSpan(text: title.substring(0, at)),
+            TextSpan(text: strong, style: style(FontWeight.w800)),
+            TextSpan(text: title.substring(at + strong.length)),
+          ],
+        ),
+      );
+    }
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
@@ -212,24 +302,21 @@ class PageFrame extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (eyebrow != null) ...[
+              if (kicker != null) ...[
                 Wrap(
                   spacing: 12,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Text(
-                      eyebrow,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: subColor),
-                    ),
-                    for (final note in eyebrowNotes) ...[
+                    Text(kicker, style: kickerStyle),
+                    for (final note in notes) ...[
                       const Text('|', style: TextStyle(fontSize: 13, color: noteColor)),
                       Text(note, style: const TextStyle(fontSize: 13, color: noteColor)),
                     ],
                   ],
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 10),
               ],
-              if (title != null) Text(title, style: pageTitleStyle),
+              if (title != null) titleText(title),
             ],
           ),
         ),
@@ -239,10 +326,14 @@ class PageFrame extends StatelessWidget {
   }
 }
 
-/// 화면 제목 글자 (캔버스 h1 26px).
+/// 작은 소제목 글자 (캔버스 `.k`: 13px 600, 자간 0.08em).
+const kickerStyle = TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 1.04, color: subColor);
+
+/// 화면 안 작은 제목 글자 (26px). 본문 머리의 큰 제목은 [PageHeading].
 const pageTitleStyle = TextStyle(fontSize: 26, fontWeight: FontWeight.w600, color: inkColor, height: 1.35);
 
-const _barHeight = 72.0;
+const _barHeight = 96.0; // 넓은 화면. 좁은 화면은 _narrowBarHeight
+const _narrowBarHeight = 72.0;
 
 /// 상단 바와 본문 첫 줄(제목 위 작은 글자, 입력 단계 표시줄 등) 사이 간격. 모든 화면이 같다 (D-190).
 const _bodyTop = 8.0;
@@ -276,19 +367,15 @@ class _TopBar extends ConsumerWidget {
             context.go(path);
           }),
           style: TextButton.styleFrom(
-            foregroundColor: selected ? pointColor : inkColor,
+            foregroundColor: selected ? pointColor : subColor,
+            // 지금 화면만 굵게 (캔버스 700 → 가까운 800, D-305)
             textStyle: TextStyle(
               fontFamily: 'Pretendard',
-              fontSize: selected ? 22 : 17,
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              fontSize: 16,
+              fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
             ),
           ),
-          child: Badge.count(
-            count: badge,
-            isLabelVisible: badge > 0,
-            offset: const Offset(12, -6),
-            child: Text(label),
-          ),
+          child: Badge.count(count: badge, isLabelVisible: badge > 0, offset: const Offset(12, -6), child: Text(label)),
         ),
       );
     }
@@ -308,12 +395,12 @@ class _TopBar extends ConsumerWidget {
     );
     // 관리자 계정이면 오른쪽에 "관리자 계정"을 보인다 (캔버스). 로그아웃은 [설정]에 있다 (D-291)
     final account = admin && !isNarrow(context)
-        ? const Text('관리자 계정', style: TextStyle(fontSize: 14, color: subColor))
+        ? const Text('관리자 계정', style: TextStyle(fontSize: 13, color: subColor))
         : null;
     if (MediaQuery.sizeOf(context).width < topBarWideWidth) {
       // 좁으면 로고 · 메뉴(넘치면 줄여 보임)를 차례로 둔다
       return Container(
-        height: _barHeight,
+        height: _narrowBarHeight,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Row(
           spacing: 8,
@@ -334,7 +421,7 @@ class _TopBar extends ConsumerWidget {
           const Expanded(
             child: Align(
               alignment: Alignment.centerLeft,
-              child: _Logo(size: 48), // 그림만. 누르지 않는다 (D-190)
+              child: _Logo(size: 40), // 그림만. 누르지 않는다 (D-190)
             ),
           ),
           nav,
@@ -365,26 +452,31 @@ class _Logo extends StatelessWidget {
       Image.asset('assets/images/logo.png', width: size, height: size, semanticLabel: '서비스 로고');
 }
 
-/// 테두리·옅은 그림자가 있는 흰 카드 (캔버스 `section`).
+/// 구역 틀. 새 컨셉에서는 상자·그림자 없이 위쪽 1px 연한 선으로 구역을 나눈다 (D-305).
+/// [border]를 주면 그 테두리의 상자(모서리 16)로 그린다 (예: 고정한 후보).
 class PageCard extends StatelessWidget {
-  const PageCard({super.key, required this.child, this.padding = const EdgeInsets.all(28), this.border});
+  const PageCard({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.symmetric(vertical: 24),
+    this.border,
+  });
 
   final Widget child;
   final EdgeInsetsGeometry padding;
 
-  /// 기본 1px 연한 회색 선 대신 쓸 테두리 (예: 고정한 후보).
+  /// 상자로 둘러야 할 때 쓸 테두리.
   final BoxBorder? border;
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: padding,
-    decoration: BoxDecoration(
-      color: offWhiteColor,
-      borderRadius: BorderRadius.circular(cardRadius),
-      border: border ?? Border.all(color: lineColor),
-      boxShadow: cardShadow,
-    ),
-    // 안의 목록 줄·버튼 물결이 카드 바탕에 가리지 않게 한다
+    padding: border == null ? padding : const EdgeInsets.all(20),
+    decoration: border == null
+        ? const BoxDecoration(
+            border: Border(top: BorderSide(color: lineColor)),
+          )
+        : BoxDecoration(borderRadius: BorderRadius.circular(cardRadius), border: border),
+    // 안의 목록 줄·버튼 물결이 바탕에 가리지 않게 한다
     child: Material(type: MaterialType.transparency, child: child),
   );
 }
@@ -413,37 +505,35 @@ class StateCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final icon = this.icon;
-    final leading = this.leading ?? (icon == null ? null : Icon(icon, size: 64, color: iconColor));
+    final leading = this.leading ?? (icon == null ? null : Icon(icon, size: 36, color: iconColor));
     final title = this.title;
-    return PageCard(
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 380),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            ?leading,
-            if (title != null) ...[
-              const SizedBox(height: 16),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
-              ),
+    // 캔버스 새 컨셉: 검은 윗선 아래 왼쪽 정렬 큰 문장 + 설명 + 알약 버튼 (D-305)
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.only(top: 28, bottom: 40),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: inkColor)),
+      ),
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 680),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (leading != null) ...[leading, const SizedBox(height: 16)],
+              if (title != null)
+                Text(title, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w600, height: 1.35)),
+              for (final m in messages) ...[
+                const SizedBox(height: 14),
+                Text(m, style: const TextStyle(fontSize: 16, height: 1.8, color: subColor)),
+              ],
+              if (actions.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                Wrap(spacing: 12, runSpacing: 8, children: actions),
+              ],
             ],
-            for (final m in messages) ...[
-              const SizedBox(height: 12),
-              Text(
-                m,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 16, height: 1.6, color: subColor),
-              ),
-            ],
-            if (actions.isNotEmpty) ...[
-              const SizedBox(height: 24),
-              Wrap(spacing: 12, runSpacing: 8, alignment: WrapAlignment.center, children: actions),
-            ],
-          ],
+          ),
         ),
       ),
     );
@@ -486,7 +576,7 @@ class Notice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PageCard(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      padding: const EdgeInsets.symmetric(vertical: 14),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -499,54 +589,58 @@ class Notice extends StatelessWidget {
   }
 }
 
-/// 카드 안 "이름 | 값" 한 줄 (캔버스 `.kv`). 줄 사이는 위쪽 1px 선이고 첫 줄은 선이 없다.
+/// "이름 | 값 | (버튼)" 한 줄. 아래 1px 연한 선(`hair`), 이름은 작은 소제목 글자, 값은 17px 600 (캔버스 새 컨셉, D-305).
 class KeyValueRow extends StatelessWidget {
-  const KeyValueRow({super.key, required this.label, required this.value, this.first = false});
+  const KeyValueRow({super.key, required this.label, required this.value});
 
   final String label;
   final Widget value;
-  final bool first;
 
   @override
   Widget build(BuildContext context) => Container(
-    constraints: const BoxConstraints(minHeight: 52),
-    padding: const EdgeInsets.symmetric(vertical: 6),
-    decoration: BoxDecoration(
-      border: first ? null : const Border(top: BorderSide(color: lineColor)),
+    padding: const EdgeInsets.symmetric(vertical: 14),
+    decoration: const BoxDecoration(
+      border: Border(bottom: BorderSide(color: lineColor)),
     ),
     child: Row(
       children: [
         SizedBox(
-          width: 160,
-          child: Text(label, style: const TextStyle(fontSize: 15, color: subColor)),
+          width: isNarrow(context) ? 112 : 200,
+          child: Text(label, style: kickerStyle),
         ),
-        Expanded(child: value),
+        Expanded(
+          child: DefaultTextStyle.merge(
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            child: value,
+          ),
+        ),
       ],
     ),
   );
 }
 
-/// 카드 안 "이름 ··· 고르기" 한 줄 (캔버스 `.opt`). 줄 전체를 눌러도 고른다.
+/// "이름 ··· ›" 한 줄. 아래 연한 선이 있고 줄 전체를 눌러 고른다 (캔버스 새 컨셉, D-305).
 class OptionRow extends StatelessWidget {
-  const OptionRow({super.key, required this.label, required this.trailing, required this.onTap, this.first = false});
+  const OptionRow({super.key, required this.label, required this.onTap});
 
   final String label;
-  final Widget trailing;
   final VoidCallback onTap;
-  final bool first;
 
   @override
   Widget build(BuildContext context) => InkWell(
     onTap: onTap,
     child: Container(
-      constraints: const BoxConstraints(minHeight: 52),
-      decoration: BoxDecoration(
-        border: first ? null : const Border(top: BorderSide(color: lineColor)),
+      constraints: const BoxConstraints(minHeight: 60),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: lineColor)),
       ),
       child: Row(
         children: [
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 15))),
-          trailing,
+          Expanded(
+            child: Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          ),
+          const Text('›', style: TextStyle(fontSize: 20, color: progressColor)),
         ],
       ),
     ),
@@ -598,4 +692,255 @@ class SmallText extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       Text(text, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color));
+}
+
+/// 상태 점 + 글자의 모양 (07장 2.2, D-305). [dot]이 null이면 속이 빈 회색 테두리 점이다.
+typedef StatusDotStyle = ({Color? dot, Color text});
+
+/// 상태 글자(07장 2.2)에서 점 모양을 고른다. 모르는 글자는 회색 점이다.
+StatusDotStyle statusDotStyle(String label) => switch (label) {
+  '사전 입력 필요' || '확인 완료' => (dot: pointColor, text: pointColor),
+  '후보 선택 가능' => (dot: focusLineColor, text: pointColor),
+  '분석 완료' => (dot: inkColor, text: inkColor), // 피해자 계정의 분석 완료
+  '분석 실패' || '업로드 확인 안 됨' => (dot: failChipColor, text: failChipColor),
+  '수락 대기 중' || '종료됨' => (dot: null, text: subColor),
+  _ => (dot: progressColor, text: pointColor), // 업로드 중·대기 중·분석 중·업로드 필요, 그 밖
+};
+
+/// 상태를 점(7px) + 글자로 보인다. 칩 대신 쓴다 (D-305).
+class StatusDot extends StatelessWidget {
+  const StatusDot(this.label, {super.key, this.strike = false});
+
+  final String label;
+
+  /// 보관 기간이 끝난 줄처럼 글자에 가운데 줄을 긋는다.
+  final bool strike;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = statusDotStyle(label);
+    final dot = style.dot;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: dot,
+            border: dot == null ? Border.all(color: progressColor, width: 1.5) : null,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: style.text,
+              decoration: strike ? TextDecoration.lineThrough : null,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 선으로만 나눈 표 (D-305). 머리 줄 아래 1px 검은 선, 줄마다 [LineRow]가 연한 선을 긋는다.
+class LineTable extends StatelessWidget {
+  const LineTable({super.key, this.header, required this.rows});
+
+  /// 머리 줄 (칸 이름). 없으면 선 없이 줄만 둔다.
+  final Widget? header;
+  final List<Widget> rows;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      if (header != null)
+        Container(
+          padding: const EdgeInsets.only(bottom: 12),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: inkColor)),
+          ),
+          child: header,
+        ),
+      ...rows,
+    ],
+  );
+}
+
+/// [LineTable]의 한 줄: 높이 64, 아래 1px #E2E8F0 선, 마우스를 올리면 옅은 파란 그라데이션.
+/// [onTap]이 있으면 줄 전체를 눌러 연다.
+class LineRow extends StatefulWidget {
+  const LineRow({super.key, required this.child, this.onTap});
+
+  final Widget child;
+  final VoidCallback? onTap;
+
+  @override
+  State<LineRow> createState() => _LineRowState();
+}
+
+class _LineRowState extends State<LineRow> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    onEnter: (_) => setState(() => _hover = true),
+    onExit: (_) => setState(() => _hover = false),
+    cursor: widget.onTap == null ? MouseCursor.defer : SystemMouseCursors.click,
+    child: InkWell(
+      onTap: widget.onTap,
+      hoverColor: Colors.transparent,
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 64),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          border: const Border(bottom: BorderSide(color: lineColor)),
+          gradient: _hover ? const LinearGradient(colors: [Color(0x143D8BFF), Color(0x003D8BFF)]) : null,
+        ),
+        child: widget.child,
+      ),
+    ),
+  );
+}
+
+/// 진행도·입력 단계: 굵기 4 막대 + 번호·이름 (D-305). [current]는 0부터이고, 그 단계까지 막대가 켜진다.
+class StepBar extends StatelessWidget {
+  const StepBar({super.key, required this.steps, required this.current});
+
+  final List<String> steps;
+  final int current;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    spacing: 8,
+    children: [
+      for (var i = 0; i < steps.length; i++)
+        Expanded(
+          child: Semantics(
+            selected: i == current,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: i <= current ? focusLineColor : lineColor,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${(i + 1).toString().padLeft(2, '0')} ${steps[i]}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: i == current ? FontWeight.w600 : FontWeight.w400,
+                    // 파랑 글자는 4.5:1이 되는 진한 파랑 (D-305 주의점)
+                    color: i == current ? pillColor : subColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+    ],
+  );
+}
+
+/// 연결·업로드 화면 오른쪽의 01·02·03 안내 (D-305). 줄마다 위쪽 1px 연한 선으로 나눈다.
+class SideSteps extends StatelessWidget {
+  const SideSteps({super.key, required this.items});
+
+  final List<({String title, String text})> items;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    decoration: const BoxDecoration(
+      border: Border(top: BorderSide(color: inkColor)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < items.length; i++)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 18),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: lineColor)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 44,
+                  child: Text(
+                    (i + 1).toString().padLeft(2, '0'),
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w300, color: pillColor, height: 1),
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(items[i].title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 4),
+                      Text(items[i].text, style: const TextStyle(fontSize: 14, height: 1.5, color: subColor)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+/// 왼쪽 내용 + 오른쪽 안내(폭 380)를 나란히 둔다. 좁은 창에서는 안내를 아래로 보낸다 (연결·업로드 화면).
+class SideLayout extends StatelessWidget {
+  const SideLayout({super.key, required this.main, required this.side});
+
+  final Widget main;
+  final Widget side;
+
+  @override
+  Widget build(BuildContext context) => isNarrow(context)
+      ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [main, const SizedBox(height: 32), side])
+      : Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: main),
+            const SizedBox(width: 72),
+            SizedBox(width: 380, child: side),
+          ],
+        );
+}
+
+/// 밑줄 입력칸 위에 작은 칸 이름을 둔다 (캔버스 `.field`). 밑줄·포커스 색은 테마가 정한다.
+class UnderlineField extends StatelessWidget {
+  const UnderlineField({super.key, required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: label,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(label, style: kickerStyle),
+        const SizedBox(height: 2),
+        child,
+      ],
+    ),
+  );
 }

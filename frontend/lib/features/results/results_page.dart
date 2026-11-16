@@ -102,9 +102,11 @@ class _ResultsPageState extends ConsumerState<ResultsPage> {
     final d = _detail;
     final pins = _pins;
     return PageFrame(
-      eyebrow: '고정 목록',
+      // 불러오는 동안은 제목·소제목을 비워 둔다. 임시 제목 "결과"가 보였다가 바뀌지 않게 한다
+      eyebrow: d == null ? null : '고정 목록',
       eyebrowNotes: d == null ? const [] : [...counterpartNote(ref, _id), viewExpiresText(d.viewExpiresAt)],
-      title: d?.originalFilename ?? '결과',
+      title: d?.originalFilename,
+      titleStrong: withoutExtension(d?.originalFilename),
       child: d == null || pins == null
           ? const Center(child: CircularProgressIndicator())
           : Column(
@@ -118,50 +120,61 @@ class _ResultsPageState extends ConsumerState<ResultsPage> {
                   Notice(partialUnavailableMessage(d.candidateUnavailable!)),
                   const SizedBox(height: 16),
                 ],
-                for (final p in pins) ...[_item(p), const SizedBox(height: 16)],
+                _grid(pins),
               ],
             ),
     );
   }
 
-  /// 왼쪽 클립, 오른쪽 원본 기준 시간 (캔버스 2.9).
+  /// 넓으면 영상 상자 2열, 좁으면 1열 (캔버스 2.9). 피해자 계정은 영상 없이 시각만이라 1열 줄이다.
+  Widget _grid(List<PinnedIncident> pins) {
+    const gap = 28.0;
+    return LayoutBuilder(
+      builder: (context, c) {
+        final columns = _admin && c.maxWidth >= 720 ? 2 : 1;
+        final width = (c.maxWidth - gap * (columns - 1)) / columns;
+        return Wrap(
+          spacing: gap,
+          runSpacing: 24,
+          children: [for (final p in pins) SizedBox(width: width, child: _item(p))],
+        );
+      },
+    );
+  }
+
+  /// 윗선 아래 "영상 시작부터" + 영상 + 원본 기준 시간 굵게 + 추정 실제 시각 작게 (캔버스 2.9, D-305).
   Widget _item(PinnedIncident p) {
     final est = estimatedTimeText(p);
-    final info = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SmallText('영상 시작부터'),
-        const SizedBox(height: 10),
-        // 경찰에게 바로 전달할 원본 영상 기준 시간 (07장 2.9)
-        SelectableText(
-          '${formatElapsed(p.startSec)} ~ ${formatElapsed(p.endSec)}',
-          style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: inkColor),
-        ),
-        if (est != null) ...[const SizedBox(height: 10), Text(est, style: const TextStyle(fontSize: 15))],
-      ],
-    );
     final clipUrl = p.clipUrl;
     // 피해자 계정은 클립 주소를 받지 않는다. 시각만 보인다 (D-211)
-    if (!_admin || clipUrl == null) {
-      return PageCard(padding: const EdgeInsets.all(20), child: info);
-    }
-    final player = ClipPlayer(url: clipUrl, onUrlExpired: _onUrlExpired);
-    return PageCard(
-      padding: const EdgeInsets.all(20),
-      child: LayoutBuilder(
-        builder: (context, c) => c.maxWidth < 720
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [player, const SizedBox(height: 16), info],
-              )
-            : Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  SizedBox(width: 380, child: player),
-                  const SizedBox(width: 28),
-                  Expanded(child: info),
-                ],
-              ),
+    final showClip = _admin && clipUrl != null;
+    return Container(
+      padding: const EdgeInsets.only(top: 16),
+      decoration: const BoxDecoration(border: Border(top: BorderSide(color: lineColor))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('영상 시작부터', style: kickerStyle),
+          const SizedBox(height: 14),
+          if (showClip) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: ClipPlayer(url: clipUrl, onUrlExpired: _onUrlExpired),
+            ),
+            const SizedBox(height: 14),
+          ],
+          // 경찰에게 바로 전달할 원본 영상 기준 시간 (07장 2.9)
+          SelectableText(
+            '${formatElapsed(p.startSec)} ~ ${formatElapsed(p.endSec)}',
+            style: TextStyle(
+              fontSize: showClip ? 22 : 40,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+              color: inkColor,
+            ),
+          ),
+          if (est != null) ...[const SizedBox(height: 10), SmallText(est)],
+        ],
       ),
     );
   }

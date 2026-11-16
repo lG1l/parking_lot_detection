@@ -4,7 +4,7 @@ from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
-from app import access_log
+from app import access_log, chat_hub
 from app.db import get_engine
 from app.errors import ApiError
 from app.security import dummy_hash, new_token, token_hash, verify_password
@@ -21,9 +21,8 @@ class LoginBody(BaseModel):
     password: str = Field(min_length=1)
 
 
-def current_user(request: Request) -> dict:
-    """세션 쿠키로 로그인한 사용자를 찾는다. 없거나 만료면 401."""
-    sid = request.cookies.get(COOKIE_NAME)
+def user_by_sid(sid: str | None) -> dict | None:
+    """세션 쿠키 값으로 로그인한 사용자를 찾는다. 없거나 만료면 None."""
     if sid:
         with get_engine().connect() as conn:
             row = conn.execute(
@@ -36,7 +35,15 @@ def current_user(request: Request) -> dict:
             ).one_or_none()
         if row:
             return {"id": row.id, "login_id": row.login_id, "name": row.name, "role": row.role}
-    raise ApiError(401, "UNAUTHENTICATED", "login required")
+    return None
+
+
+def current_user(request: Request) -> dict:
+    """세션 쿠키로 로그인한 사용자를 찾는다. 없거나 만료면 401."""
+    user = user_by_sid(request.cookies.get(COOKIE_NAME))
+    if user is None:
+        raise ApiError(401, "UNAUTHENTICATED", "login required")
+    return user
 
 
 def current_admin(request: Request) -> dict:
@@ -90,6 +97,8 @@ def logout(request: Request):
     if sid:
         with get_engine().begin() as conn:
             conn.execute(text("DELETE FROM sessions WHERE token_hash = :h"), {"h": token_hash(sid)})
+        # 열린 탭에 메시지가 더 가지 않게 그 세션의 채팅 연결을 닫는다 (D-290)
+        chat_hub.close_session_from_thread(token_hash(sid))
     response = Response(status_code=204)
     response.delete_cookie(COOKIE_NAME, path="/", httponly=True, samesite="lax")
     return response

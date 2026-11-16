@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme.dart';
 import '../../core/api/api.dart';
 import '../../core/session.dart';
 import '../../core/widgets/common.dart';
@@ -16,11 +17,16 @@ const caseNameMaxLength = 50;
 
 /// 관리자 계정이 아니면 목록으로 보낸다. 서버도 403 `ROLE_NOT_ALLOWED`로 막는다 (D-204).
 void requireAdmin(BuildContext context, WidgetRef ref) {
-  ref.read(meProvider.future).then((me) {
-    if (!me.isAdmin && context.mounted) redirectTo(context, '/videos');
-  }, onError: (Object e) {
-    if (context.mounted) handleCommonError(context, e);
-  });
+  ref
+      .read(meProvider.future)
+      .then(
+        (me) {
+          if (!me.isAdmin && context.mounted) redirectTo(context, '/videos');
+        },
+        onError: (Object e) {
+          if (context.mounted) handleCommonError(context, e);
+        },
+      );
 }
 
 /// 2.3 사건 관계자 연결 (관리자). 사건 이름과 피해자 아이디를 넣고 [연결]하면 24번으로 가린 이름을 확인하는 창을 띄우고(D-206),
@@ -112,22 +118,21 @@ class _CaseLinkPageState extends ConsumerState<CaseLinkPage> {
     return PageFrame(
       current: NavItem.link,
       title: '사건 관계자 연결',
-      child: Align(
-        alignment: Alignment.topLeft,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 640),
-          child: PageCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  '피해자 계정을 연결하면 사건이 생성되고, 피해자가 [채팅]에서 수락 시 최종 연결됩니다.\nCCTV 영상 업로드는 바로 진행할 수 있습니다.',
-                  style: TextStyle(fontSize: 15, height: 1.6),
-                ),
-                const SizedBox(height: 16),
-                const Text('사건 이름', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                TextField(
+      titleStrong: '연결',
+      child: SideLayout(
+        main: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                '피해자 계정을 연결하면 사건이 생성되고, 피해자가 [채팅]에서 수락 시 최종 연결됩니다.\nCCTV 영상 업로드는 바로 진행할 수 있습니다.',
+                style: TextStyle(fontSize: 16, height: 1.8, color: subColor),
+              ),
+              const SizedBox(height: 28),
+              UnderlineField(
+                label: '사건 이름',
+                child: TextField(
                   controller: _name,
                   enabled: !_busy,
                   maxLength: caseNameMaxLength,
@@ -137,10 +142,11 @@ class _CaseLinkPageState extends ConsumerState<CaseLinkPage> {
                   },
                   onSubmitted: (_) => _link(),
                 ),
-                const SizedBox(height: 16),
-                const Text('피해자 아이디', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                TextField(
+              ),
+              const SizedBox(height: 12),
+              UnderlineField(
+                label: '피해자 아이디',
+                child: TextField(
                   controller: _victim,
                   enabled: !_busy,
                   decoration: InputDecoration(errorText: _error),
@@ -149,14 +155,21 @@ class _CaseLinkPageState extends ConsumerState<CaseLinkPage> {
                   },
                   onSubmitted: (_) => _link(),
                 ),
-                const SizedBox(height: 16),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: FilledButton(onPressed: _busy ? null : _link, child: const Text('연결')),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 28),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton(onPressed: _busy ? null : _link, child: const Text('연결')),
+              ),
+            ],
           ),
+        ),
+        side: const SideSteps(
+          items: [
+            (title: '연결 요청', text: '사건 이름과 피해자 아이디를 입력합니다.'),
+            (title: '피해자 수락', text: '피해자가 채팅에서 수락하면 최종 연결됩니다.'),
+            (title: '영상 업로드', text: 'CCTV 영상 업로드는 바로 진행할 수 있습니다.'),
+          ],
         ),
       ),
     );

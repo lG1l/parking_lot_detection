@@ -53,10 +53,17 @@ const List<_Step> _victimSteps = [
 
 typedef _Tip = ({String title, String text});
 
-const List<_Tip> _features = [
+const List<_Tip> _adminFeatures = [
   (title: '개인정보 마스킹', text: '사람 얼굴과 번호판이 가려진 장면만 분석에 사용합니다.'),
   (title: '후보 구간 선별', text: '차량 이동과 파손 입력을 바탕으로 점수가 매겨진 후보를 보여 줍니다.'),
   (title: '관리자 최종 확인', text: '후보는 관리자가 하나씩 확인하고 결과를 저장합니다.'),
+];
+
+// 피해자 화면은 관리자 일 대신 피해자가 하는 일과 받는 것을 쓴다 (D-306)
+const List<_Tip> _victimFeatures = [
+  (title: '개인정보 마스킹', text: '사람 얼굴과 번호판이 가려진 장면만 분석에 사용합니다.'),
+  (title: '후보 구간 선별', text: '내가 입력한 차량과 파손 부위를 바탕으로 점수가 매겨진 후보를 고릅니다.'),
+  (title: '사건 지점 시간', text: '관리자와 함께 찾은 장면의 시간을 [사건 목록]에서 다시 볼 수 있습니다.'),
 ];
 
 const List<_Tip> _adminTips = [
@@ -114,18 +121,16 @@ class _InfoBody extends StatelessWidget {
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        // 배경의 옅은 빛 번짐 두 개 (캔버스). 글자 뒤에 깔린다
-        const Positioned(left: -200, top: 0, child: _Glow(size: 640, color: _accent, alpha: 0.20)),
-        const Positioned(right: -180, top: 480, child: _Glow(size: 560, color: progressColor, alpha: 0.35)),
+        // 배경의 빛 번짐은 PageFrame이 모든 화면에 깐다 (D-305)
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SizedBox(height: narrow ? 24 : 40),
             _Hero(admin: admin),
             SizedBox(height: gap),
-            const _FeatureRule(),
+            _FeatureRule(features: admin ? _adminFeatures : _victimFeatures),
             SizedBox(height: gap),
-            const _Lead(),
+            _Lead(admin: admin),
             SizedBox(height: gap),
             _Kicker(admin ? '관리자 계정 사용법' : '사건 관계자 계정 사용법'),
             const SizedBox(height: 18),
@@ -141,7 +146,7 @@ class _InfoBody extends StatelessWidget {
             SizedBox(height: gap),
             _Grid(
               minItemWidth: 260,
-              children: [for (final f in _features) _FeatureCard(tip: f)],
+              children: [for (final f in admin ? _adminFeatures : _victimFeatures) _FeatureCard(tip: f)],
             ),
             SizedBox(height: gap),
             _Grid(
@@ -149,7 +154,7 @@ class _InfoBody extends StatelessWidget {
               children: [for (final t in admin ? _adminTips : _victimTips) _TipNote(tip: t)],
             ),
             SizedBox(height: gap),
-            const _Signature(),
+            _Signature(admin: admin),
           ],
         ),
       ],
@@ -227,9 +232,11 @@ class _Hero extends StatelessWidget {
         const SizedBox(height: 30),
         ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 560),
-          child: const Text(
-            '주차장 CCTV 영상의 개인정보를 가린 뒤 물피도주 후보 구간을 선별합니다. 최종 판단은 관리자가 합니다.',
-            style: TextStyle(fontSize: 16, height: 1.8, color: subColor),
+          child: Text(
+            admin
+                ? '주차장 CCTV 영상의 개인정보를 가린 뒤 물피도주 후보 구간을 선별합니다. 최종 판단은 관리자가 합니다.'
+                : '주차장 CCTV 영상의 개인정보를 가린 뒤 물피도주 후보 구간을 선별합니다. 후보 영상은 관리자와 함께 확인합니다.',
+            style: const TextStyle(fontSize: 16, height: 1.8, color: subColor),
           ),
         ),
       ],
@@ -282,7 +289,9 @@ class _HeroPill extends StatelessWidget {
 
 /// 기능 세 개를 위쪽 검은 선 아래 한 줄로 (캔버스 `.fx-rule`).
 class _FeatureRule extends StatelessWidget {
-  const _FeatureRule();
+  const _FeatureRule({required this.features});
+
+  final List<_Tip> features;
 
   @override
   Widget build(BuildContext context) {
@@ -294,7 +303,7 @@ class _FeatureRule extends StatelessWidget {
         alignment: WrapAlignment.spaceBetween,
         spacing: 16,
         runSpacing: 8,
-        children: [for (final f in _features) Text(f.title, style: style)],
+        children: [for (final f in features) Text(f.title, style: style)],
       ),
     );
   }
@@ -302,7 +311,9 @@ class _FeatureRule extends StatelessWidget {
 
 /// 서비스 이름 두 줄과 오른쪽 짧은 안내.
 class _Lead extends StatelessWidget {
-  const _Lead();
+  const _Lead({required this.admin});
+
+  final bool admin;
 
   @override
   Widget build(BuildContext context) {
@@ -311,8 +322,10 @@ class _Lead extends StatelessWidget {
       '주차장 CCTV 물피도주 후보 구간 선별 서비스\n사람이 보기 전에 먼저 걸러 드립니다.',
       style: TextStyle(fontSize: narrow ? 24 : 34, fontWeight: FontWeight.w600, height: 1.5, letterSpacing: -0.3),
     );
-    const note = Text(
-      '분석 결과는 후보 목록으로만 보이며, 관계자 열람은 관리·감독 안내에 동의한 뒤에만 열립니다.',
+    final note = Text(
+      admin
+          ? '분석 결과는 후보 목록으로만 보이며, 관계자 열람은 관리·감독 안내에 동의한 뒤에만 열립니다.'
+          : '내 차량과 파손 부위를 입력하면 분석이 시작되고, 후보 영상은 관리자 화면에서 관리자와 함께 봅니다.',
       style: TextStyle(fontSize: 15, height: 1.8, color: subColor),
     );
     if (narrow) {
@@ -323,7 +336,7 @@ class _Lead extends StatelessWidget {
       children: [
         Expanded(child: title),
         const SizedBox(width: 40),
-        const SizedBox(width: 320, child: note),
+        SizedBox(width: 320, child: note),
       ],
     );
   }
@@ -450,9 +463,11 @@ class _TipNote extends StatelessWidget {
   );
 }
 
-/// 맨 아래 큰 글자 "ADMIN REVIEW". 화면보다 길면 오른쪽이 잘린다 (캔버스).
+/// 맨 아래 큰 글자. 관리자 "ADMIN REVIEW", 피해자 "CASE TIME" (D-306). 화면보다 길면 오른쪽이 잘린다 (캔버스).
 class _Signature extends StatelessWidget {
-  const _Signature();
+  const _Signature({required this.admin});
+
+  final bool admin;
 
   @override
   Widget build(BuildContext context) => ExcludeSemantics(
@@ -464,11 +479,11 @@ class _Signature extends StatelessWidget {
             TextSpan(
               children: [
                 TextSpan(
-                  text: 'ADMIN ',
+                  text: admin ? 'ADMIN ' : 'CASE ',
                   style: TextStyle(fontSize: size, fontWeight: FontWeight.w800),
                 ),
                 TextSpan(
-                  text: 'REVIEW',
+                  text: admin ? 'REVIEW' : 'TIME',
                   style: TextStyle(fontSize: size, fontWeight: FontWeight.w300, color: _accent),
                 ),
               ],

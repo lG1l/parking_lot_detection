@@ -264,6 +264,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
       // 제목 위 작은 글자에 피해자와 열람기한 (캔버스 2.7)
       eyebrowNotes: _filename == null ? const [] : [...counterpartNote(ref, _id), viewExpiresText(_viewExpiresAt)],
       title: _filename ?? '후보 확인',
+      titleStrong: withoutExtension(_filename),
       scrollBody: !_fixedLayout(context),
       child: batch == null ? const Center(child: CircularProgressIndicator()) : _body(context, batch),
     );
@@ -303,27 +304,28 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _tabs(lists),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         Text(
           _tab == CandidateList.main
               ? '점수(0~100)는 차량 접촉 근거가 얼마나 뚜렷한지를 나타내며, 사고가 났을 확률이 아닙니다.'
               : 'AI 답변 형식이 맞지 않아 3번 다시 불러도 점수를 읽지 못한 후보를 모았습니다. 사건 가능성이 낮다는 뜻은 아닙니다.',
-          style: const TextStyle(fontSize: 15, color: subColor),
+          style: const TextStyle(fontSize: 14, color: subColor),
         ),
         const SizedBox(height: 12),
         if (_status == VideoStatus.batchRunning) ...[
-          const PageCard(
-            padding: EdgeInsets.all(24),
-            child: Column(
+          // 카드 없이 윗선 아래 문장 (캔버스 2.7 CandBatch, D-305)
+          Container(
+            padding: const EdgeInsets.only(top: 14),
+            decoration: const BoxDecoration(border: Border(top: BorderSide(color: lineColor))),
+            child: const Row(
               children: [
-                BigSpinner(),
-                SizedBox(height: 18),
-                Text('다음 영상 묶음을 만드는 중입니다.', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
-                SizedBox(height: 8),
-                Text(
-                  '그동안 [◀ 이전]으로 앞 묶음을 다시 보고 [찾음]을 누를 수 있습니다.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 15, height: 1.6, color: subColor),
+                SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5)),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '다음 영상 묶음을 만드는 중입니다. 그동안 [◀ 이전]으로 앞 묶음을 다시 보고 [찾음]을 누를 수 있습니다.',
+                    style: TextStyle(fontSize: 15, height: 1.6, color: subColor),
+                  ),
                 ),
               ],
             ),
@@ -337,9 +339,8 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: offWhiteColor,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: lineColor),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: hairColor),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -358,12 +359,19 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
         if (fixed) Expanded(child: SingleChildScrollView(child: clips)) else clips,
         const SizedBox(height: 12),
         // 오른쪽 아래 묶음 이동. 열람기한은 제목 위로 옮겼다 (캔버스 2.7)
-        Align(alignment: isNarrow(context) ? Alignment.centerLeft : Alignment.centerRight, child: _navigation(batch, tab)),
+        Container(
+          padding: const EdgeInsets.only(top: 14),
+          decoration: const BoxDecoration(border: Border(top: BorderSide(color: lineColor))),
+          child: Align(
+            alignment: isNarrow(context) ? Alignment.centerLeft : Alignment.centerRight,
+            child: _navigation(batch, tab),
+          ),
+        ),
       ],
     );
   }
 
-  /// 밑줄형 탭 두 개 (캔버스 2.7). 고른 탭은 남색 밑줄.
+  /// 밑줄형 탭 두 개 (캔버스 2.7): 고른 탭은 파란 밑줄 2px, 아래 hair 선 (D-305).
   Widget _tabs(Map<String, ListSummary> lists) {
     Widget tabButton(String t) {
       final selected = t == _tab;
@@ -375,17 +383,18 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
           onTap: enabled && !_busy ? () => _switchTab(t) : null,
           child: Container(
             constraints: const BoxConstraints(minHeight: 44),
-            padding: const EdgeInsets.symmetric(horizontal: 18),
+            margin: const EdgeInsets.only(right: 28),
+            padding: const EdgeInsets.symmetric(horizontal: 4),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: selected ? pointColor : Colors.transparent, width: 3)),
+              border: Border(bottom: BorderSide(color: selected ? focusLineColor : Colors.transparent, width: 2)),
             ),
             child: Text(
               tabLabel(lists, t),
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
-                color: selected ? inkColor : (enabled ? noteColor : progressColor),
+                color: selected ? inkColor : (enabled ? subColor : progressColor),
               ),
             ),
           ),
@@ -395,7 +404,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
 
     return Container(
       decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFD6D6D2), width: 1.5)),
+        border: Border(bottom: BorderSide(color: lineColor)),
       ),
       child: Row(
         children: [
@@ -407,14 +416,14 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
 
   /// 넓으면 3열, 좁아지면 2열·1열.
   Widget _grid(List<CandidateClip> candidates) {
-    const gap = 14.0;
+    const gap = 28.0;
     return LayoutBuilder(
       builder: (context, c) {
         final columns = c.maxWidth >= 900 ? 3 : (c.maxWidth >= 560 ? 2 : 1);
         final width = (c.maxWidth - gap * (columns - 1)) / columns;
         return Wrap(
           spacing: gap,
-          runSpacing: gap,
+          runSpacing: 20,
           children: [for (final clip in candidates) SizedBox(width: width, child: _candidateCard(clip))],
         );
       },
@@ -424,46 +433,42 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
   Widget _candidateCard(CandidateClip c) {
     final pinned = _pinned.contains(c.candidateClipId);
     final score = c.vlmScore;
+    // 카드 상자 없이 윗선 + 얇은 큰 점수 + 둥근 영상 (캔버스 2.7, D-305)
     return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: offWhiteColor,
-        borderRadius: BorderRadius.circular(10),
-        // 고정한 후보는 굵은 남색 테두리 (캔버스 2.7)
-        border: pinned ? Border.all(color: pointColor, width: 3) : Border.all(color: inkColor, width: 1.5),
-      ),
+      padding: const EdgeInsets.only(top: 14),
+      decoration: const BoxDecoration(border: Border(top: BorderSide(color: lineColor))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              // 순위 대신 점수만 진하게 (D-190). 점수 미산출 탭은 "-"
+              // 순위 대신 점수만 (D-190). 점수 미산출 탭은 "-"
               Text(
                 '점수: ${score == null ? '-' : score.round()}',
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: inkColor),
+                style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w300, color: inkColor, height: 1),
               ),
               const Spacer(),
               if (pinned)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(color: pointColor, borderRadius: BorderRadius.circular(cardRadius)),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.push_pin, size: 14, color: offWhiteColor),
-                      SizedBox(width: 4),
-                      Text(
-                        '확정됨',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: offWhiteColor),
-                      ),
-                    ],
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: pillColor),
+                  ),
+                  child: const Text(
+                    '확정됨',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: pillColor),
                   ),
                 ),
             ],
           ),
-          const SizedBox(height: 8),
-          ClipPlayer(url: c.clipUrl, onUrlExpired: _onUrlExpired),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: ClipPlayer(url: c.clipUrl, onUrlExpired: _onUrlExpired),
+          ),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(child: SmallText('${formatElapsed(c.startSec)} ~ ${formatElapsed(c.endSec)}')),

@@ -1,19 +1,26 @@
-import '../../core/models/account.dart';
 import '../../core/models/message.dart';
 
-/// 채팅 규칙 (07장 2.11, D-297). 위젯이 없는 순수 규칙이라 단위 테스트로 확인한다.
+/// 채팅 규칙 (07장 2.11, D-303). 위젯이 없는 순수 규칙이라 단위 테스트로 확인한다.
 
-/// 한 상대와 묶인 [cases]에 속한 메시지만 시간순(오래된 것이 먼저)으로 모은다.
-List<ChatMessage> messagesOfPerson(List<VideoCase> cases, List<ChatMessage> messages) {
-  final ids = {for (final c in cases) c.id};
-  return messages.where((m) => ids.contains(m.caseId)).toList()..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+/// 메시지 목록에 새 메시지를 합친다. 같은 `id`는 한 번만 두고 `id` 오름차순으로 돌려준다.
+/// 31번 응답과 33번 WebSocket이 같은 메시지를 두 번 줄 수 있어서 쓴다 (05장 33번).
+List<ChatMessage> mergeMessages(List<ChatMessage> old, List<ChatMessage> incoming) {
+  final byId = {for (final m in old) m.id: m};
+  for (final m in incoming) {
+    byId.putIfAbsent(m.id, () => m);
+  }
+  return byId.values.toList()..sort((a, b) => a.id.compareTo(b.id));
 }
 
-/// 메시지를 보낼 사건: 가장 최근에 수락한 사건. 수락한 사건이 없으면 null (보낼 수 없다).
-VideoCase? sendTargetOf(List<VideoCase> cases) {
-  final accepted = cases.where((c) => !c.pending).toList();
-  if (accepted.isEmpty) return null;
-  // 수락 시각이 있으면 그것으로, 없으면(지금 백엔드) 연결 시각으로 견준다
-  String at(VideoCase c) => c.acceptedAt ?? c.createdAt;
-  return accepted.reduce((a, b) => at(a).compareTo(at(b)) >= 0 ? a : b);
+/// 22번의 상대 이름과 같은 이름의 29번 대화 상대. 22번에 상대 계정 ID가 없어 이름으로 짝짓는다 (D-303).
+/// 없으면 null이다. 수락한 사건이 없어 29번에 없는 상대다.
+ChatPeer? peerOf(String name, List<ChatPeer> peers) {
+  for (final p in peers) {
+    if (p.peerName == name) return p;
+  }
+  return null;
 }
+
+/// 메뉴 [채팅] 배지 수: 기존 수(피해자는 대기 중인 초대 수, 관리자는 할 일 수)에 안 읽은 채팅 수를 더한다 (D-303).
+/// 29번이 실패해 [unreadTotal]이 null이면 채팅 수는 0으로 친다.
+int chatBadgeCount(int base, int? unreadTotal) => base + (unreadTotal ?? 0);

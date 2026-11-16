@@ -11,6 +11,7 @@ dependencies = [
     "bcrypt",
     "pydantic-settings",
     "boto3",
+    "websockets>=17.4",
 ]
 
 [dependency-groups]

@@ -10,10 +10,18 @@ const offWhiteColor = Color(0xFFF9F9F9); // 모든 배경 · 진한 바탕 위 �
 const pointLightColor = Color(0xFFE4E8EF); // 포인트색을 연하게. 내가 보낸 채팅 말풍선 바탕 (D-297)
 const failColor = Color(0xFF93000A); // 분석 실패
 
-// 목록 상태 칩 바탕. 색상표보다 조금 연하게 (D-190, 팀원 1)
-const progressChipColor = Color(0xFFB8C2D0); // 업로드 중·대기 중·분석 중. 검정 글자와 약 10:1
-const doneChipColor = Color(0xFF64748B); // 확인 완료. 흰 글자와 약 4.5:1
-const failChipColor = Color(0xFFB04A4A); // 분석 실패·업로드 확인 안 됨. 채도를 낮춘 빨강, 흰 글자와 약 5.1:1
+// 화면 겉모습 "새 컨셉" (D-305). 캔버스 색은 흰 글자 대비가 모자라 같은 파랑 계열에서 더 진하게 잡았다.
+const whiteColor = Color(0xFFFFFFFF); // 바탕
+const pillColor = Color(0xFF3F74C6); // 주요 버튼 · 파랑 글자. 흰 글자와 4.64:1 (캔버스 #5F90D9는 3.24:1)
+const dangerColor = Color(0xFFC53030); // 위험 버튼 · 입력 오류. 흰 글자와 5.47:1 (캔버스 #E53E3E는 4.13:1)
+const hairColor = Color(0xFFCBD5E0); // 입력칸 밑줄 · 막힌 버튼 테두리
+const focusLineColor = Color(0xFF3D8BFF); // 입력칸 포커스 · 탭 밑줄 · 단계 막대. 글자가 아닌 표시로만 (3.31:1)
+const glowColorTop = Color(0x333D8BFF); // 오른쪽 위 파란 빛 번짐 (rgba(61,139,255) 0.20)
+const glowColorBottom = Color(0x293D8BFF); // 왼쪽 아래 파란 빛 번짐 (0.16)
+
+// 보조 아이콘·실패 표시 색 (상태 칩은 D-305로 점 + 글자가 됐다)
+const doneChipColor = Color(0xFF64748B); // 연필 아이콘 등. 흰 바탕에서 약 4.8:1
+const failChipColor = Color(0xFFB04A4A); // 분석 실패·업로드 확인 안 됨 점·글자. 채도를 낮춘 빨강, 흰 바탕에서 5.35:1
 
 // 색상표 밖의 보조 회색. 작은 안내 글자, 입력칸 테두리, 막힌 버튼.
 const noteColor = Color(0xFF555555);
@@ -28,16 +36,15 @@ const frontEdgeColor = Color(0xFF22E55F);
 const cornerColor = Color(0xFF3D8BFF);
 const damageDragColor = failChipColor;
 const _fieldBorderColor = Color(0xFF8F8F8B);
-const _disabledBorderColor = Color(0xFFB5B5B5);
-const _disabledTextColor = Color(0xFF767676);
-const _disabledFillColor = Color(0xFFEFEFED);
+const _disabledTextColor = Color(0xFFA0AEC0); // 막힌 버튼 글자 (캔버스 그대로, 막힌 것은 접근성 대비 기준 밖)
 
 const _fontFamily = 'Pretendard';
 
 // 모서리 둥글기: 버튼·입력칸 / 대화상자 / 카드·상태 칩
-const _smallRadius = 6.0;
+const pillRadius = 999.0; // 알약 버튼
 const _dialogRadius = 12.0;
 const cardRadius = 16.0;
+const stillRadius = 24.0; // 정지 장면·영상 상자 (D-305)
 
 /// 카드 아래 옅은 그림자 (캔버스 `box-shadow`).
 const cardShadow = [
@@ -60,13 +67,13 @@ ThemeData _buildTheme() {
     onTertiary: offWhiteColor,
     error: failColor,
     onError: offWhiteColor,
-    surface: offWhiteColor,
+    surface: whiteColor,
     onSurface: inkColor,
     onSurfaceVariant: subColor,
-    surfaceContainerLowest: offWhiteColor,
-    surfaceContainerLow: offWhiteColor,
-    surfaceContainer: offWhiteColor,
-    surfaceContainerHigh: offWhiteColor,
+    surfaceContainerLowest: whiteColor,
+    surfaceContainerLow: whiteColor,
+    surfaceContainer: whiteColor,
+    surfaceContainerHigh: whiteColor,
     surfaceContainerHighest: lineColor,
     outline: _fieldBorderColor,
     outlineVariant: lineColor,
@@ -76,31 +83,36 @@ ThemeData _buildTheme() {
   final base = ThemeData(colorScheme: colorScheme, fontFamily: _fontFamily);
 
   final textTheme = _textTheme(base.textTheme.apply(bodyColor: inkColor, displayColor: inkColor));
-  final smallShape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(_smallRadius));
+  final pillShape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(pillRadius));
   const buttonText = TextStyle(fontSize: 15, fontWeight: FontWeight.w600, letterSpacing: 0);
   const buttonSize = Size(0, 44);
   const buttonPadding = EdgeInsets.symmetric(horizontal: 20);
 
   return base.copyWith(
     textTheme: textTheme,
-    scaffoldBackgroundColor: offWhiteColor,
+    scaffoldBackgroundColor: whiteColor,
     dividerColor: lineColor,
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        shape: smallShape,
+        shape: pillShape,
         minimumSize: buttonSize,
         padding: buttonPadding,
         textStyle: buttonText,
-        backgroundColor: pointColor,
-        foregroundColor: offWhiteColor,
-        disabledBackgroundColor: _disabledFillColor,
+        backgroundColor: pillColor,
+        foregroundColor: whiteColor,
+        disabledBackgroundColor: whiteColor,
         disabledForegroundColor: _disabledTextColor,
+        disabledMouseCursor: SystemMouseCursors.forbidden,
+      ).copyWith(
+        side: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.disabled) ? const BorderSide(color: hairColor, width: 1.5) : null,
+        ),
       ),
     ),
-    // 테두리형 버튼은 1.5px 검은 선. 막히면 연한 회색 선과 바탕
+    // 테두리형 버튼은 투명 바탕에 1.5px 검은 선. 막히면 연한 회색 선
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: ButtonStyle(
-        shape: WidgetStatePropertyAll(smallShape),
+        shape: WidgetStatePropertyAll(pillShape),
         minimumSize: const WidgetStatePropertyAll(buttonSize),
         padding: const WidgetStatePropertyAll(buttonPadding),
         textStyle: const WidgetStatePropertyAll(buttonText),
@@ -108,19 +120,19 @@ ThemeData _buildTheme() {
           (s) => s.contains(WidgetState.disabled) ? _disabledTextColor : inkColor,
         ),
         backgroundColor: WidgetStateProperty.resolveWith(
-          (s) => s.contains(WidgetState.disabled) ? _disabledFillColor : offWhiteColor,
+          (s) => s.contains(WidgetState.disabled) ? whiteColor : Colors.transparent,
         ),
         side: WidgetStateProperty.resolveWith(
-          (s) => BorderSide(color: s.contains(WidgetState.disabled) ? _disabledBorderColor : inkColor, width: 1.5),
+          (s) => BorderSide(color: s.contains(WidgetState.disabled) ? hairColor : inkColor, width: 1.5),
         ),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        shape: smallShape,
+        shape: pillShape,
         minimumSize: buttonSize,
         textStyle: buttonText,
-        foregroundColor: pointColor,
+        foregroundColor: pillColor,
       ),
     ),
     cardTheme: CardThemeData(
@@ -132,29 +144,31 @@ ThemeData _buildTheme() {
         side: const BorderSide(color: lineColor),
       ),
     ),
-    inputDecorationTheme: InputDecorationTheme(
-      filled: true,
-      fillColor: offWhiteColor,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(_smallRadius),
-        borderSide: const BorderSide(color: _fieldBorderColor, width: 1.5),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(_smallRadius),
-        borderSide: const BorderSide(color: _fieldBorderColor, width: 1.5),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(_smallRadius),
-        borderSide: const BorderSide(color: pointColor, width: 2),
-      ),
+    // 입력칸은 밑줄만 (D-305). 칸 이름은 위 작은 소제목이라 라벨은 화면이 따로 둔다
+    inputDecorationTheme: const InputDecorationTheme(
+      filled: false,
+      contentPadding: EdgeInsets.symmetric(vertical: 12),
+      border: UnderlineInputBorder(borderSide: BorderSide(color: hairColor, width: 1.5)),
+      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: hairColor, width: 1.5)),
+      focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: focusLineColor, width: 2)),
+      errorBorder: UnderlineInputBorder(borderSide: BorderSide(color: dangerColor, width: 1.5)),
+      focusedErrorBorder: UnderlineInputBorder(borderSide: BorderSide(color: dangerColor, width: 2)),
+      errorStyle: TextStyle(color: dangerColor),
+    ),
+    // 탭은 파란 밑줄 2px (D-305)
+    tabBarTheme: const TabBarThemeData(
+      indicatorColor: focusLineColor,
+      indicatorSize: TabBarIndicatorSize.label,
+      dividerColor: lineColor,
+      labelColor: inkColor,
+      unselectedLabelColor: subColor,
     ),
     chipTheme: ChipThemeData(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(cardRadius)),
       side: BorderSide.none,
     ),
     dialogTheme: DialogThemeData(
-      backgroundColor: offWhiteColor,
+      backgroundColor: whiteColor,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(_dialogRadius),
         side: const BorderSide(color: inkColor, width: 1.5),
