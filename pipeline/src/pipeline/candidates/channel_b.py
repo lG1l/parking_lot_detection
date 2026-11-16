@@ -14,6 +14,9 @@ FOREGROUND_THRESHOLD = 16  # MOG2 varThreshold. 얼마나 달라져야 전경으
 BACKGROUND_LEARN_SEC = 60  # 배경 학습 시간. 프레임 수는 샘플링 fps로 환산한다
 NOISE_AREA_RATIO = 0.0001  # 줄인 프레임 넓이의 0.01% 미만 덩어리는 노이즈로 버린다
 
+# 이 시각 전의 전경은 믿지 않는다. 01장 1.6 "MOG2 안정 시간" = 배경 학습 시간 (D-199)
+MOG2_STABLE_SEC = BACKGROUND_LEARN_SEC
+
 # 움직임 프레임 사이가 이 값(초) 이하면 같은 구간. 01장 1.6 "후보 구간 끊김 간격"을 빌려 쓴다 (D-303)
 RANGE_GAP_SEC = 1.0
 
