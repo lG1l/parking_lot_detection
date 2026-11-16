@@ -170,7 +170,7 @@ class DemoApi extends Api {
     'vlm_score': failed ? null : 95 - rank * 5,
     'start_sec': 3600.0 * rank + 125,
     'end_sec': 3600.0 * rank + 155,
-    'clip_url': '',
+    'clip_url': failed ? '' : 'demo/clips/${(rank - 1) % 20 + 1}.mp4#t=0.5', // TEMP-SCREENSHOT
   };
 
   Map<String, Object?> _pinOf(Map<String, Object?> clip) => {
