@@ -9,9 +9,9 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-# 01장 1.6 "채널 B 시작값" (D-195, U-09에서 조정)
-FOREGROUND_THRESHOLD = 16  # MOG2 varThreshold. 얼마나 달라져야 전경으로 볼지
-BACKGROUND_LEARN_SEC = 60  # 배경 학습 시간. 프레임 수는 샘플링 fps로 환산한다
+# 01장 1.6 "채널 B 시작값" (D-195). 임계값과 학습 시간은 시연 영상으로 조정한 값이다 (D-309)
+FOREGROUND_THRESHOLD = 100  # MOG2 varThreshold. 얼마나 달라져야 전경으로 볼지
+BACKGROUND_LEARN_SEC = 30  # 배경 학습 시간. 프레임 수는 샘플링 fps로 환산한다
 NOISE_AREA_RATIO = 0.0001  # 줄인 프레임 넓이의 0.01% 미만 덩어리는 노이즈로 버린다
 
 # 이 시각 전의 전경은 믿지 않는다. 01장 1.6 "MOG2 안정 시간" = 배경 학습 시간 (D-199)
