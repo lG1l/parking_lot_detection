@@ -14,6 +14,12 @@ FOREGROUND_THRESHOLD = 16  # MOG2 varThreshold. 얼마나 달라져야 전경으
 BACKGROUND_LEARN_SEC = 60  # 배경 학습 시간. 프레임 수는 샘플링 fps로 환산한다
 NOISE_AREA_RATIO = 0.0001  # 줄인 프레임 넓이의 0.01% 미만 덩어리는 노이즈로 버린다
 
+# 움직임 프레임 사이가 이 값(초) 이하면 같은 구간. 01장 1.6 "후보 구간 끊김 간격"을 빌려 쓴다 (D-303)
+RANGE_GAP_SEC = 1.0
+
+# 시각을 소수로 다루다 생기는 오차를 흡수하는 값 (초). 4.9 - 4.1이 0.8보다 조금 클 수 있다
+_TIME_EPS = 1e-6
+
 # MOG2 마스크 값. detectShadows를 켜면 그림자를 127로 따로 표시한다
 FOREGROUND = 255
 
@@ -26,6 +32,22 @@ class Blob:
     area: int  # 실제 전경 픽셀 수 (bbox 넓이가 아니다, D-195)
     contour: np.ndarray  # 줄인 프레임 좌표의 바깥 테두리. 확인용 영상에 칠할 때 쓴다
     touches_roi: bool
+
+
+@dataclass(frozen=True)
+class FrameRecord:
+    """탐지 중 분석 프레임 한 장마다 적는 사실. 구간 판정은 탐지가 끝난 뒤 이것만 보고 한다 (D-250)."""
+
+    time_sec: float
+    roi_motion: bool
+    blobs: list[Blob]
+
+
+@dataclass(frozen=True)
+class MotionRange:
+    start_sec: float  # 첫 움직임 프레임의 시각
+    end_sec: float  # 마지막 움직임 프레임의 시각
+    motion_frames: int  # 구간 안에서 ROI 움직임이 있던 프레임 수
 
 
 def create_mog2(sampling_fps: float) -> cv2.BackgroundSubtractorMOG2:
@@ -72,3 +94,21 @@ def find_blobs(binary: np.ndarray, roi_mask: np.ndarray) -> list[Blob]:
 def has_roi_motion(blobs: list[Blob]) -> bool:
     """덩어리 중 하나라도 ROI에 닿으면 이 프레임에 ROI 움직임이 있다."""
     return any(blob.touches_roi for blob in blobs)
+
+
+def merge_motion_ranges(records: list[FrameRecord]) -> list[MotionRange]:
+    """ROI 움직임이 있던 프레임을 시간순으로 이어 붙여 움직임 구간을 만든다 (D-303).
+
+    앞 움직임 프레임과의 사이가 RANGE_GAP_SEC 이하면 같은 구간에 넣고, 넘으면 새 구간을 연다.
+    전경이 한두 프레임 깜빡여 한 장면이 여러 조각으로 나뉘지 않게 하려는 것이다.
+    """
+    ranges: list[MotionRange] = []
+    for record in records:
+        if not record.roi_motion:
+            continue
+        last = ranges[-1] if ranges else None
+        if last and record.time_sec - last.end_sec <= RANGE_GAP_SEC + _TIME_EPS:
+            ranges[-1] = MotionRange(last.start_sec, record.time_sec, last.motion_frames + 1)
+        else:
+            ranges.append(MotionRange(record.time_sec, record.time_sec, 1))
+    return ranges
