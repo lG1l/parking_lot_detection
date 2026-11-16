@@ -25,8 +25,6 @@ YOLO_INPUT_SIZE = 640
 TRACK_START_CONF = 0.5
 # 이만큼 연속으로 잡혀야 트랙 번호가 확정된다 (D-255). 라이브러리 기본값은 2다
 TRACK_CONFIRM_FRAMES = 3
-# 채널 A 트랙 번호의 시작 (D-257). 추적기는 0부터 매기므로 쓸 때 더한다
-TRACK_ID_START = 1
 
 # 받는 클래스: 사람, 차량, COCO 동물 전체 (D-196). 번호는 모델의 이름 표에서 찾는다
 CLASS_NAMES = (
@@ -117,7 +115,8 @@ def track_lines(
         lines.append(
             {
                 "t": round(time_sec, 3),
-                "track_id": int(tracker_id) + TRACK_ID_START,
+                # 추적기가 매긴 번호 그대로 쓴다. 0번부터다 (D-312)
+                "track_id": int(tracker_id),
                 # 그 프레임에 YOLO가 낸 이름 그대로 쓴다. 트랙 안에서 바뀔 수 있다 (D-269)
                 "cls": names[int(class_id)],
                 "bbox": [round(x1), round(y1), round(x2), round(y2)],

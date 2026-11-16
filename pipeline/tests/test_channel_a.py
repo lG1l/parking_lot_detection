@@ -1,7 +1,7 @@
 import numpy as np
 import supervision as sv
 
-from pipeline.candidates.channel_a import TRACK_ID_START, track_lines
+from pipeline.candidates.channel_a import track_lines
 from pipeline.candidates.crop import Crop
 
 # 원본 1280×720 영역을 640×360으로 줄인 분석 크롭. 줄인 좌표 × 2 + (400, 200) = 원본 좌표
@@ -23,7 +23,7 @@ def test_확정된_트랙만_원본_좌표_정수_bbox로_줄이_된다():
     assert lines == [
         {
             "t": 43.709,
-            "track_id": 6 + TRACK_ID_START,
+            "track_id": 6,
             "cls": "person",
             # (300.2, 100.4, 400.6, 160.8) × 2 + (400, 200) = (1000.4, 400.8, 1201.2, 521.6)
             "bbox": [1000, 401, 1201, 522],
