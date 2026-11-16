@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from pipeline.candidates.crop import Crop, CropError, analysis_crop, to_original
+from pipeline.candidates.crop import ANALYSIS_SCALE, Crop, CropError, to_original
 from pipeline.candidates.inputs import AnalysisInput, InputError, load_input
 from pipeline.candidates.roi import STRIP_OUT_M, Roi, RoiError, build_roi, camera_side_edges
 from pipeline.candidates.video import SAMPLING_FPS, iter_analysis_frames
@@ -111,7 +111,7 @@ def _label_list(
     dx, dy = roi.display.rect[0], roi.display.rect[3] - gap
     all_pts = np.concatenate(contours)
     labels = [
-        ("분석 영역 (차 폭 2배, 16:9)", (ax + 6, ay + 6), ORANGE),
+        (f"분석 영역 (보여줄 영역 {ANALYSIS_SCALE:g}배, 16:9)", (ax + 6, ay + 6), ORANGE),
         ("보여줄 영역", (dx + 6, dy), CYAN),
         ("ROI", (int(all_pts[:, 0].min()) + 6, int(all_pts[:, 1].min()) + 6), GREEN),
     ]
@@ -150,8 +150,7 @@ def _draw_time(image: np.ndarray, index: int, time_sec: float) -> None:
 def make_preview(video_path: str, input_path: str, out_dir: str) -> None:
     width, height = video_size(video_path)
     data = load_input(input_path, width, height)
-    crop = analysis_crop(data.vehicle_bbox, (width, height))
-    roi = build_roi(data, (width, height), crop)
+    roi = build_roi(data, (width, height))
     crop, roi_mask = roi.crop, roi.mask
     contours = roi_contours(roi_mask, crop)
     labels = _label_list(roi, contours)

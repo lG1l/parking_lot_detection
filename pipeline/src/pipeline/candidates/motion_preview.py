@@ -25,30 +25,34 @@ from pipeline.candidates.channel_b import (
     has_roi_motion,
     merge_motion_ranges,
 )
-from pipeline.candidates.crop import Crop, CropError, analysis_crop, crop_frame, to_original
+from pipeline.candidates.crop import Crop, CropError, crop_frame, to_original
 from pipeline.candidates.inputs import InputError, load_input
 from pipeline.candidates.preview import (
+    CYAN,
+    GREEN,
     ORANGE,
     RED,
     WHITE,
     _draw_time,
     _format_time,
+    draw_display_crop,
     draw_labels,
-    draw_roi,
     roi_contours,
     video_size,
 )
-from pipeline.candidates.roi import Roi, RoiError, build_roi
+from pipeline.candidates.roi import STRIP_OUT_M, Roi, RoiError, build_roi
 from pipeline.candidates.video import SAMPLING_FPS, iter_analysis_frames
 
 # 그림 색 (BGR)
 YELLOW = (0, 220, 255)  # ROI에 닿지 않은 덩어리
 SCENE_BLUE = (220, 120, 0)  # 시간 막대 윗줄: 기대 장면
 GRAY = (130, 130, 130)  # 시간 막대 아랫줄: 안정 전
+MAGENTA = (255, 0, 255)  # 바닥띠. 움직임 덩어리(빨강·노랑)와 헷갈리지 않는 색
 DARK = (40, 40, 40)  # 시간 막대 바탕
 
 _BLOB_ALPHA = 0.5
 _LABEL_GAP = 34  # 이름표 줄 간격 (px). preview의 글꼴 크기 22에 여백을 더한 값
+_ZONE_LINE = 2  # 영역 테두리 두께. 영상을 가리지 않게 칠하지 않고 선만 긋는다
 
 # 시간 막대 모양 (px). 원본 크기 화면 맨 아래에 붙인다
 _BAR_MARGIN_X = 40
@@ -139,6 +143,35 @@ def draw_blobs(image: np.ndarray, record: FrameRecord, crop: Crop) -> np.ndarray
         color = RED if blob.touches_roi else YELLOW
         cv2.fillPoly(layer, [_blob_to_original(blob.contour, crop)], color)
     return cv2.addWeighted(layer, _BLOB_ALPHA, image, 1 - _BLOB_ALPHA, 0)
+
+
+def draw_zones(image: np.ndarray, roi: Roi, contours: list[np.ndarray]) -> None:
+    """ROI·바닥띠·보여줄 영역·분석 영역을 테두리 선으로만 그린다 (image를 직접 고친다).
+
+    움직임 덩어리를 칠한 빨강·노랑과 겹치지 않는 색을 쓰고, 영상이 보이게 안을 칠하지 않는다.
+    """
+    cv2.polylines(image, contours, True, GREEN, _ZONE_LINE)
+    cv2.polylines(image, [roi.strip], True, MAGENTA, _ZONE_LINE)
+    x1, y1, x2, y2 = roi.crop.rect
+    cv2.rectangle(image, (x1, y1), (x2 - 1, y2 - 1), ORANGE, _ZONE_LINE)
+    draw_display_crop(image, roi.display)
+
+
+def _zone_labels(
+    roi: Roi, contours: list[np.ndarray]
+) -> list[tuple[str, tuple[int, int], tuple[int, int, int]]]:
+    """영역 이름표. 자리는 1단계 확인용 영상(preview)과 같다."""
+    ax, ay = roi.crop.rect[:2]
+    # 분석 영역과 왼쪽 위 구석이 가까울 수 있어, 보여줄 영역 이름표는 왼쪽 아래에 둔다
+    dx, dy = roi.display.rect[0], roi.display.rect[3] - _LABEL_GAP
+    all_pts = np.concatenate(contours)
+    cx, cy = roi.strip.mean(axis=0)
+    return [
+        ("분석 영역", (ax + 6, ay + 6), ORANGE),
+        ("보여줄 영역", (dx + 6, dy), CYAN),
+        ("ROI", (int(all_pts[:, 0].min()) + 6, int(all_pts[:, 1].min()) + 6), GREEN),
+        (f"바닥띠 ({STRIP_OUT_M:g}m)", (int(cx) - 60, int(cy)), MAGENTA),
+    ]
 
 
 def _range_at(ranges: list[MotionRange], t: float) -> int | None:
@@ -251,8 +284,8 @@ def render(
     width, height = size
     duration = records[-1].time_sec if records else 0.0
     contours = roi_contours(roi.mask, roi.crop)
+    zone_labels = _zone_labels(roi, contours)
     timeline = make_timeline(width, duration, ranges, scenes)
-    x1, y1, x2, y2 = roi.crop.rect
 
     writer = cv2.VideoWriter(
         out_video, cv2.VideoWriter_fourcc(*"mp4v"), SAMPLING_FPS, (width, height)
@@ -260,12 +293,10 @@ def render(
     count = 0
     # 같은 함수로 같은 영상을 읽으므로 프레임 순서가 탐지 때와 같다
     for frame, record in zip(iter_analysis_frames(video_path), records, strict=False):
-        image = draw_roi(frame.image, contours)
-        image = draw_blobs(image, record, roi.crop)
-        cv2.rectangle(image, (x1, y1), (x2 - 1, y2 - 1), ORANGE, 2)
-        labels = _frame_labels(record, ranges, scenes)
-        if labels:
-            image = draw_labels(image, labels)
+        # 덩어리를 먼저 칠해야 그 위의 영역 선이 흐려지지 않는다
+        image = draw_blobs(frame.image, record, roi.crop)
+        draw_zones(image, roi, contours)
+        image = draw_labels(image, zone_labels + _frame_labels(record, ranges, scenes))
         _draw_time(image, frame.index, frame.time_sec)
         attach_timeline(image, timeline, record.time_sec, duration)
         writer.write(image)
@@ -279,7 +310,7 @@ def make_motion_preview(
 ) -> None:
     width, height = video_size(video_path)
     data = load_input(input_path, width, height)
-    roi = build_roi(data, (width, height), analysis_crop(data.vehicle_bbox, (width, height)))
+    roi = build_roi(data, (width, height))
     scenes = load_scenes(scenes_path) if scenes_path else []
 
     records = detect(video_path, roi)

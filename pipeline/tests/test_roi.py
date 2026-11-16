@@ -3,7 +3,7 @@ import dataclasses
 import numpy as np
 import pytest
 
-from pipeline.candidates.crop import analysis_crop, to_original, to_reduced
+from pipeline.candidates.crop import to_original, to_reduced
 from pipeline.candidates.inputs import AnalysisInput
 from pipeline.candidates.roi import (
     CAR_LENGTH_M,
@@ -46,7 +46,7 @@ def _input(damage_edges):
 def _roi(damage_edges):
     data = _input(damage_edges)
     frame = (1920, 1080)
-    return build_roi(data, frame, analysis_crop(data.vehicle_bbox, frame))
+    return build_roi(data, frame)
 
 
 def _covered(roi, original):
@@ -142,4 +142,4 @@ def test_바닥_모서리가_차량_사각형_위_변보다_위면_멈춘다():
     # 가장 먼 모서리 y 630보다 bbox 위 변이 아래(650)면 차체 높이가 음수가 된다
     data = dataclasses.replace(_input([1]), vehicle_bbox=(715, 650, 1261, 728))
     with pytest.raises(RoiError):
-        build_roi(data, (1920, 1080), analysis_crop(data.vehicle_bbox, (1920, 1080)))
+        build_roi(data, (1920, 1080))
