@@ -1,16 +1,20 @@
 import numpy as np
 import pytest
+import supervision as sv
 
 from pipeline.candidates.blob_tracks import (
     BLOB_ATTACH_RATIO,
+    BLOB_TRACK_ID_OFFSET,
     STOPPED_MOVE_RATIO,
     STOPPED_WINDOW_SEC,
     attach_target,
+    blob_track_lines,
     is_stopped_vehicle,
     remember_positions,
 )
 from pipeline.candidates.channel_a import TrackBox
 from pipeline.candidates.channel_b import find_blobs
+from pipeline.candidates.crop import Crop
 
 SHAPE = (360, 640)
 BLOB_SIZE = 20
@@ -64,3 +68,20 @@ def test_멈춘_차만_붙일_대상에서_뺀다():
     assert is_stopped_vehicle(new_car, history)
     # 사람은 움직이지 않아도 붙일 대상이다
     assert not is_stopped_vehicle(*_moved("person", 0.0))
+
+
+def test_확정된_클래스_없는_트랙만_원본_좌표_줄로_쓴다():
+    # 줄인 좌표에 2를 곱하고 (400, 200)을 더하면 원본 좌표다
+    crop = Crop((400, 200, 1680, 920), (640, 360))
+    tracked = sv.Detections(
+        xyxy=np.array([[10.0, 20.0, 30.0, 40.0], [100.0, 100.0, 120.0, 120.0]], dtype=np.float32),
+        confidence=np.array([1.0, 1.0], dtype=np.float32),
+        tracker_id=np.array([4, -1]),
+    )
+
+    lines = blob_track_lines(tracked, 12.3, crop)
+
+    # 번호가 음수인 사각형은 아직 확정되지 않아 빠진다. 클래스·신뢰도 키는 없다
+    assert lines == [
+        {"t": 12.3, "track_id": 4 + BLOB_TRACK_ID_OFFSET, "bbox": [420, 240, 460, 280]}
+    ]

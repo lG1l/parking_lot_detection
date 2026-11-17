@@ -6,8 +6,14 @@ ROI에 닿은 덩어리가 사람·움직이는 차의 일부(손 등)이면 그
 
 import math
 
-from pipeline.candidates.channel_a import TrackBox
-from pipeline.candidates.channel_b import Blob
+import numpy as np
+import supervision as sv
+from trackers import ByteTrackTracker
+
+from pipeline.candidates.channel_a import TRACK_CONFIRM_FRAMES, TRACK_START_CONF, TrackBox
+from pipeline.candidates.channel_b import Blob, Box
+from pipeline.candidates.crop import Crop, to_original
+from pipeline.candidates.video import SAMPLING_FPS
 
 # 01장 1.6 "0단계 필터 시작값"의 덩어리 붙이기 (D-256).
 # 덩어리 픽셀 중 이 비율 이상이 트랙 bbox 안에 있으면 그 트랙의 일부로 본다
@@ -20,6 +26,11 @@ STOPPED_MOVE_RATIO = 0.05
 
 # "차"로 보는 클래스 (D-197). 사람·동물은 멈춰도 붙인다
 VEHICLE_CLASSES = ("car", "motorcycle", "bicycle", "truck", "bus")
+
+# 채널 B 트랙 번호는 추적기 번호에 이 값을 더한다. 채널 A 번호와 겹치지 않게 한다 (D-312)
+BLOB_TRACK_ID_OFFSET = 1_000_000
+# 추적기에 넣는 신뢰도. 덩어리에는 신뢰도가 없어 늘 새 트랙을 시작할 수 있는 값으로 준다 (D-257)
+BLOB_TRACK_CONF = 1.0
 
 # 시각을 소수로 다루다 생기는 오차를 흡수하는 값 (초)
 _TIME_EPS = 1e-6
@@ -90,3 +101,46 @@ def attach_target(blob: Blob, tracks: list[TrackBox], history: History) -> int |
         if ratio > best_ratio:
             best_id, best_ratio = track.track_id, ratio
     return best_id if best_ratio >= BLOB_ATTACH_RATIO else None
+
+
+def open_blob_tracker() -> ByteTrackTracker:
+    """채널 B용 추적기. 채널 A와 번호가 섞이지 않게 따로 만들고 설정은 같게 둔다 (D-257)."""
+    return ByteTrackTracker(
+        frame_rate=SAMPLING_FPS,
+        track_activation_threshold=TRACK_START_CONF,
+        high_conf_det_threshold=TRACK_START_CONF,
+        minimum_consecutive_frames=TRACK_CONFIRM_FRAMES,
+    )
+
+
+def track_boxes(tracker: ByteTrackTracker, boxes: list[Box]) -> sv.Detections:
+    """사각형들을 채널 B 추적기에 넣는다. 좌표는 줄인 프레임 기준이다.
+
+    사각형이 없는 프레임에도 불러야 추적기가 "놓친 프레임"을 세어 트랙을 끝낸다 (06장 6.5 규칙 5).
+    시각은 주지 않는다. 프레임 시각을 주는 것은 채널 A 추적기만의 규칙이다 (D-313).
+    """
+    detections = sv.Detections(
+        xyxy=np.array(boxes, dtype=np.float32).reshape(-1, 4),
+        confidence=np.full(len(boxes), BLOB_TRACK_CONF, dtype=np.float32),
+    )
+    return tracker.update(detections)
+
+
+def blob_track_lines(tracked: sv.Detections, time_sec: float, crop: Crop) -> list[dict]:
+    """채널 B 추적기가 돌려준 결과를 클래스 없는 트랙 줄로 바꾼다 (04장 4.8)."""
+    lines = []
+    for xyxy, tracker_id in zip(tracked.xyxy, tracked.tracker_id):
+        if tracker_id < 0:
+            # 아직 확정되지 않은 트랙이다 (D-255)
+            continue
+        x1, y1 = to_original((xyxy[0], xyxy[1]), crop)
+        x2, y2 = to_original((xyxy[2], xyxy[3]), crop)
+        lines.append(
+            {
+                "t": round(time_sec, 3),
+                "track_id": int(tracker_id) + BLOB_TRACK_ID_OFFSET,
+                # 클래스와 신뢰도는 쓰지 않는다. 이 둘이 없는 줄이 채널 B 줄이다 (D-257)
+                "bbox": [round(x1), round(y1), round(x2), round(y2)],
+            }
+        )
+    return lines
