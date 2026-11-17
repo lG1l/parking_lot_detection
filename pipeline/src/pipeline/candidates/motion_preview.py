@@ -215,32 +215,47 @@ def _bar_x(t: float, duration: float, width: int) -> int:
     return _BAR_MARGIN_X + round(usable * t / duration) if duration > 0 else _BAR_MARGIN_X
 
 
-def _bar_height() -> int:
-    return _BAR_NAME_H + 2 * _BAR_ROW_H + _BAR_ROW_GAP + _BAR_TICK_H
+def _bar_height(rows: int) -> int:
+    return _BAR_NAME_H + rows * _BAR_ROW_H + (rows - 1) * _BAR_ROW_GAP + _BAR_TICK_H
+
+
+def _draw_ranges(bar: np.ndarray, ranges: list, y: int, duration: float, color) -> None:
+    """구간마다 시간 막대의 한 줄에 칸을 칠한다. 구간은 start_sec·end_sec만 있으면 된다."""
+    for r in ranges:
+        x1 = _bar_x(r.start_sec, duration, bar.shape[1])
+        x2 = max(_bar_x(r.end_sec, duration, bar.shape[1]), x1 + _BAR_MIN_W)
+        cv2.rectangle(bar, (x1, y), (x2, y + _BAR_ROW_H), color, -1)
 
 
 def make_timeline(
-    width: int, duration: float, ranges: list[MotionRange], scenes: list[Scene]
+    width: int,
+    duration: float,
+    ranges: list[MotionRange],
+    scenes: list[Scene],
+    yolo_ranges: list | None = None,
 ) -> np.ndarray:
-    """두 줄 시간 막대를 한 번만 그려 둔다. 프레임마다 흰 세로선만 더한다.
+    """시간 막대를 한 번만 그려 둔다. 프레임마다 흰 세로선만 더한다.
 
-    윗줄 = 장면 파일의 기대 장면(파랑), 아랫줄 = 잡힌 움직임 구간(빨강)과 안정 전(회색).
+    윗줄 = 장면 파일의 기대 장면(파랑), 둘째 줄 = 잡힌 움직임 구간(빨강)과 안정 전(회색).
     파란 칸 바로 아래에 빨간 칸이 있으면 그 장면이 잡힌 것이다.
+    yolo_ranges를 주면 셋째 줄에 YOLO를 돌린 구간(초록)을 더한다.
     """
-    bar = np.full((_bar_height(), width, 3), DARK, np.uint8)
+    rows = 2 if yolo_ranges is None else 3
+    bar = np.full((_bar_height(rows), width, 3), DARK, np.uint8)
     top_y = _BAR_NAME_H
     low_y = top_y + _BAR_ROW_H + _BAR_ROW_GAP
+    last_y = top_y + (rows - 1) * (_BAR_ROW_H + _BAR_ROW_GAP)
     left, right = _bar_x(0, duration, width), _bar_x(duration, duration, width)
-    for y in (top_y, low_y):
+    for row in range(rows):
+        y = top_y + row * (_BAR_ROW_H + _BAR_ROW_GAP)
         cv2.rectangle(bar, (left, y), (right, y + _BAR_ROW_H), (70, 70, 70), -1)
 
     # 회색(안정 전)을 먼저 칠해야 그 위의 빨간 구간이 보인다
     stable_x = _bar_x(min(MOG2_STABLE_SEC, duration), duration, width)
     cv2.rectangle(bar, (left, low_y), (stable_x, low_y + _BAR_ROW_H), GRAY, -1)
-    for r in ranges:
-        x1 = _bar_x(r.start_sec, duration, width)
-        x2 = max(_bar_x(r.end_sec, duration, width), x1 + _BAR_MIN_W)
-        cv2.rectangle(bar, (x1, low_y), (x2, low_y + _BAR_ROW_H), RED, -1)
+    _draw_ranges(bar, ranges, low_y, duration, RED)
+    if yolo_ranges is not None:
+        _draw_ranges(bar, yolo_ranges, last_y, duration, GREEN)
 
     names = []
     for scene in scenes:
@@ -250,7 +265,7 @@ def make_timeline(
         names.append((scene.label, (x1, 4), SCENE_BLUE))
 
     # 양 끝과 가운데 시각 (분:초)
-    tick_y = low_y + _BAR_ROW_H + 26
+    tick_y = last_y + _BAR_ROW_H + 26
     for t in (0.0, duration / 2, duration):
         text = _format_time(t)
         x = _bar_x(t, duration, width)
@@ -266,9 +281,9 @@ def attach_timeline(image: np.ndarray, timeline: np.ndarray, t: float, duration:
     top = height - timeline.shape[0]
     image[top:] = timeline
     x = _bar_x(t, duration, width)
-    cv2.line(
-        image, (x, top + _BAR_NAME_H - 4), (x, top + _BAR_NAME_H + 2 * _BAR_ROW_H + 10), WHITE, 3
-    )
+    # 세로선은 장면 줄 위에서 마지막 줄 아래까지 긋는다
+    bottom = height - _BAR_TICK_H + 4
+    cv2.line(image, (x, top + _BAR_NAME_H - 4), (x, bottom), WHITE, 3)
 
 
 def render(

@@ -41,6 +41,7 @@ from pipeline.candidates.channel_b import (
     MOG2_STABLE_SEC,
     Blob,
     Box,
+    FrameRecord,
     boxes_for_tracker,
     clean_foreground,
     create_mog2,
@@ -48,6 +49,7 @@ from pipeline.candidates.channel_b import (
     group_blobs,
     has_oversized_blob,
     has_roi_motion,
+    merge_motion_ranges,
 )
 from pipeline.candidates.crop import Crop, CropError, crop_frame, to_original
 from pipeline.candidates.inputs import InputError, load_input
@@ -57,6 +59,7 @@ from pipeline.candidates.motion_preview import (
     DARK,
     GRAY,
     SCENE_BLUE,
+    YELLOW,
     Scene,
     _blob_to_original,
     _range_at,
@@ -114,6 +117,7 @@ class BlobFrame:
     # ROI에 닿은 덩어리마다 (바깥 테두리, 붙이기 결과)
     blobs: list[tuple[np.ndarray, str]]
     boxes: list[Box]  # 채널 B 추적기에 넣은 사각형
+    outside: list[np.ndarray]  # ROI에 닿지 않은 덩어리의 바깥 테두리 (판정하지 않은 MOG2 전경)
 
 
 @dataclass
@@ -124,6 +128,9 @@ class DetectResult:
     yolo_frames: list[int] = field(default_factory=list)  # 구간마다 YOLO를 돌린 프레임 수
     track_ids: set[int] = field(default_factory=set)  # 트랙 파일에 나온 트랙 번호
     roi_motion: list[bool] = field(default_factory=list)  # 분석 프레임마다의 ROI 움직임 여부
+    times: list[float] = field(
+        default_factory=list
+    )  # 분석 프레임마다의 시각 (roi_motion과 자리가 같다)
     duration_sec: float = 0.0  # 마지막 분석 프레임 시각
     # ROI에 닿은 덩어리 수 (붙이기 결과별). 영상 전체를 더한 값이다
     blob_counts: dict[str, int] = field(default_factory=lambda: dict.fromkeys(BLOB_STATUSES, 0))
@@ -194,7 +201,12 @@ def _blob_frame(
         for blob, status in zip(blobs, statuses, strict=True)
         if status is not None
     ]
-    return BlobFrame(drawn, [_box_to_original(box, crop) for box in boxes])
+    outside = [
+        _blob_to_original(blob.contour, crop)
+        for blob, status in zip(blobs, statuses, strict=True)
+        if status is None
+    ]
+    return BlobFrame(drawn, [_box_to_original(box, crop) for box in boxes], outside)
 
 
 def _count_blob_tracks(result: DetectResult, lines: list[dict]) -> None:
@@ -267,6 +279,7 @@ def detect(
         _count_blob_tracks(result, blob_lines)
         ring.append((frame.time_sec, small))
         result.roi_motion.append(roi_motion)
+        result.times.append(frame.time_sec)
         result.duration_sec = frame.time_sec
     return result
 
@@ -361,9 +374,14 @@ def draw_tracks(image: np.ndarray, lines: list[dict]) -> None:
 
 
 def draw_blob_frame(image: np.ndarray, blob_frame: BlobFrame) -> np.ndarray:
-    """ROI 덩어리를 붙이기 결과 색으로 반투명하게 칠하고, 추적기에 넣은 사각형을 얇은 흰 선으로 그린다."""
-    if blob_frame.blobs:
+    """MOG2 전경을 반투명하게 칠하고, 추적기에 넣은 사각형을 얇은 흰 선으로 그린다.
+
+    ROI 덩어리는 붙이기 결과 색, ROI에 닿지 않은 덩어리는 노랑이다 (2단계 영상과 같은 색).
+    """
+    if blob_frame.blobs or blob_frame.outside:
         layer = image.copy()
+        for contour in blob_frame.outside:
+            cv2.fillPoly(layer, [contour], YELLOW)
         for contour, status in blob_frame.blobs:
             cv2.fillPoly(layer, [contour], _STATUS_COLORS[status])
         image = cv2.addWeighted(layer, _BLOB_ALPHA, image, 1 - _BLOB_ALPHA, 0)
@@ -403,7 +421,7 @@ def _frame_labels(
     """왼쪽 위 시각 아래에 한 줄씩 쌓는 이름표."""
     texts = []
     if _range_at(ranges, time_sec) is not None:
-        texts.append(("YOLO 켜짐", RED))
+        texts.append(("YOLO 켜짐", GREEN))
     if roi_motion:
         texts.append(("ROI 움직임", RED))
         texts.append((_blob_count_text(blob_frame), DARK))
@@ -428,8 +446,14 @@ def render(
     width, height = size
     contours = roi_contours(roi.mask, roi.crop)
     zone_labels = _zone_labels(roi, contours)
-    # 시간 막대 아랫줄의 빨간 칸이 YOLO 구간이다
-    timeline = make_timeline(width, result.duration_sec, result.ranges, scenes)
+    # 시간 막대 둘째 줄의 빨간 칸이 ROI 움직임 구간, 셋째 줄의 초록 칸이 YOLO 구간이다
+    records = [
+        FrameRecord(time_sec, roi_motion, [])
+        for time_sec, roi_motion in zip(result.times, result.roi_motion, strict=True)
+    ]
+    timeline = make_timeline(
+        width, result.duration_sec, merge_motion_ranges(records), scenes, result.ranges
+    )
 
     writer = cv2.VideoWriter(
         out_video, cv2.VideoWriter_fourcc(*"mp4v"), SAMPLING_FPS, (width, height)
