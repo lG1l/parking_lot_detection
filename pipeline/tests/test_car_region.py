@@ -78,6 +78,17 @@ def test_자리_안_비율이_높아도_아래_여유보다_더_내려가면_내
     assert pick_my_car(tall[None], spot) is None
 
 
+def test_앞의_두_조건을_넘어도_네_모서리_사각형과_겹치지_않으면_내_차가_아니다():
+    spot = build_car_spot(DATA, FRAME, CROP)
+    # 내 차 너머의 차: 내 차 지붕 위로만 보인다. 자리 안 100%이고 내려가지 않지만 사각형(y 215 이상)에 닿지 못한다
+    behind = _rect_mask(300, 120, 440, 180)
+    assert np.count_nonzero(behind & spot.mask) == np.count_nonzero(behind)
+    assert not (behind & spot.too_low).any()
+    assert pick_my_car(behind[None], spot) is None
+    # 내 차 조각과 함께 있으면 내 차 조각만 남는다
+    assert np.array_equal(pick_my_car(np.stack([RIGHT_PIECE, behind]), spot), RIGHT_PIECE)
+
+
 def test_기준_영역은_조각마다_바깥_윤곽_다각형이고_다시_그리면_구멍이_채워진다():
     shape = (FRAME[1], FRAME[0])
     left = _rect_mask(200, 130, 260, 220)

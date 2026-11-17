@@ -1,4 +1,4 @@
-"""내 차 영역: 내 차 자리, 내 차 마스크 고르기, 기준 영역 (D-259, D-263, D-264, D-319).
+"""내 차 영역: 내 차 자리, 내 차 마스크 고르기, 기준 영역 (D-259, D-263, D-264, D-319, D-320).
 
 내 차 자리는 영역으로 쓰지 않는다. YOLO가 낸 차량 마스크 가운데 내 차의 것을 고르는 틀이다 (D-264 결정 8).
 계산은 모두 줄인 분석 프레임 좌표에서 한다 (D-262, D-263).
@@ -24,13 +24,20 @@ CAR_SPOT_BELOW_RATIO = (
 class CarSpot:
     mask: np.ndarray  # 내 차 자리. 줄인 프레임 크기, 안쪽 True
     too_low: np.ndarray  # 내 차 자리의 세로줄에서 아래 경계 + 아래 여유보다 더 아래인 칸 (True)
+    floor: np.ndarray  # 네 모서리 사각형. 줄인 프레임 크기, 안쪽 True (D-320)
 
 
-def _spot_original(data: AnalysisInput, frame: tuple[int, int]) -> np.ndarray:
-    """원본 화면 크기의 내 차 자리 (안쪽 255). 화면 밖으로 나간 부분은 버려진다."""
+def _floor_original(data: AnalysisInput, frame: tuple[int, int]) -> np.ndarray:
+    """원본 화면 크기의 네 모서리 사각형 (안쪽 255). 화면 밖으로 나간 부분은 버려진다."""
     width, height = frame
     quad = np.zeros((height, width), np.uint8)
     cv2.fillPoly(quad, [np.array(data.floor_corners, np.int32)], 255)
+    return quad
+
+
+def _spot_original(data: AnalysisInput, quad: np.ndarray) -> np.ndarray:
+    """원본 화면 크기의 내 차 자리 (안쪽 255). quad는 원본 화면 크기의 네 모서리 사각형이다."""
+    height, width = quad.shape
     filled = quad > 0
 
     # 세로줄마다 사각형의 아래 경계(가장 아래 픽셀)를 찾는다. 뒤집어서 처음 나오는 칸이 가장 아래 칸이다
@@ -60,14 +67,19 @@ def build_car_spot(data: AnalysisInput, frame: tuple[int, int], crop: Crop) -> C
     """
     if min(y for _, y in data.floor_corners) <= data.vehicle_bbox[1]:
         return None
-    full = _spot_original(data, frame)
-    x1, y1, x2, y2 = crop.rect
-    small = cv2.resize(full[y1:y2, x1:x2], crop.reduced_size, interpolation=cv2.INTER_AREA)
-    mask = small >= 128
+    quad = _floor_original(data, frame)
+    mask = _to_reduced(_spot_original(data, quad), crop)
     # 아래 여유 픽셀 수도 줄인 배율로 바꾼다
     scale_y = crop.reduced_size[1] / crop.height
     margin = (data.vehicle_bbox[3] - data.vehicle_bbox[1]) * CAR_SPOT_BELOW_RATIO * scale_y
-    return CarSpot(mask, _too_low(mask, margin))
+    return CarSpot(mask, _too_low(mask, margin), _to_reduced(quad, crop))
+
+
+def _to_reduced(full: np.ndarray, crop: Crop) -> np.ndarray:
+    """원본 화면 크기의 그림(안쪽 255)을 분석 크롭으로 자르고 줄여 참·거짓 그림으로 만든다."""
+    x1, y1, x2, y2 = crop.rect
+    small = cv2.resize(full[y1:y2, x1:x2], crop.reduced_size, interpolation=cv2.INTER_AREA)
+    return small >= 128
 
 
 def _too_low(spot: np.ndarray, margin: float) -> np.ndarray:
@@ -83,9 +95,9 @@ def _too_low(spot: np.ndarray, margin: float) -> np.ndarray:
 
 
 def pick_my_car(masks: np.ndarray, spot: CarSpot) -> np.ndarray | None:
-    """차량 마스크들 가운데 내 차 자리에 선 것을 전부 합쳐 그 프레임의 내 차 영역을 만든다 (D-264 결정 3).
+    """차량 마스크들 가운데 내 차 자리에 선 것을 전부 합쳐 그 프레임의 내 차 영역을 만든다 (D-264 결정 3, D-320).
 
-    masks는 (차량 탐지 수, 높이, 폭)의 참·거짓 그림이다. 두 조건을 모두 만족하는 마스크가 없으면
+    masks는 (차량 탐지 수, 높이, 폭)의 참·거짓 그림이다. 세 조건을 모두 만족하는 마스크가 없으면
     "찾지 못함"으로 None을 돌려준다. 프레임마다 처음부터 다시 고르고 앞 프레임 결과를 이어받지 않는다.
     """
     picked = np.zeros(spot.mask.shape, bool)
@@ -94,7 +106,10 @@ def pick_my_car(masks: np.ndarray, spot: CarSpot) -> np.ndarray | None:
         if area == 0:
             continue
         inside = np.count_nonzero(mask & spot.mask) / area
-        if inside >= CAR_SPOT_INSIDE_RATIO and not (mask & spot.too_low).any():
+        not_too_low = not (mask & spot.too_low).any()
+        # 네 모서리 사각형 안의 픽셀에는 내 차나 더 가까운 물체만 보인다. 내 차 너머의 차는 닿지 못한다 (D-320)
+        on_floor = (mask & spot.floor).any()
+        if inside >= CAR_SPOT_INSIDE_RATIO and not_too_low and on_floor:
             picked |= mask
     return picked if picked.any() else None
 
