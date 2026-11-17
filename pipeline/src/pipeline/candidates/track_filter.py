@@ -13,6 +13,7 @@ from pathlib import Path
 
 import numpy as np
 
+from pipeline.candidates.candidate_clips import has_moving_frame
 from pipeline.candidates.car_region import draw_region
 from pipeline.candidates.crop import Crop, CropError, to_reduced
 from pipeline.candidates.filter_preview import PreviewError, TrackMark, make_filter_preview
@@ -381,11 +382,15 @@ def beyond_keeps(
         return ["쓰지 않는 종류"]
     if any(e in scene.far_edges for e in scene.damage_edges):
         return ["파손 변이 카메라 쪽 변만이 아님"]
+    width, height = scene.roi.crop.reduced_size
+    crop_area = width * height  # _px 키는 줄인 분석 프레임의 픽셀 수다
+    # 멈춘 물체는 배경으로 흡수되어 내 차 앞에 있어도 변화가 없다.
+    # "변화 없음"은 움직인 프레임에서만 근거가 되므로 이런 트랙에는 이 규칙을 쓰지 않는다 (D-245, D-278)
+    if not has_moving_frame(lines, crop_area):
+        return ["움직인 프레임 없음"]
     unusable = _unusable(lines, ("car_fg_px", "car_lost_px"), scene)
     if unusable:
         return unusable
-    width, height = scene.roi.crop.reduced_size
-    crop_area = width * height  # _px 키는 줄인 분석 프레임의 픽셀 수다
     keeps = []
     if any(f.visible for f in frames):
         keeps.append("바닥점이 보임")
