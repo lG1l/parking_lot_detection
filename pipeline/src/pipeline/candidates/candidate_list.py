@@ -10,11 +10,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pipeline.candidates.candidate_clips import Clip, Range, make_clips, moving_times, track_ranges
+from pipeline.candidates.candidate_preview import MomentMark, clock, make_candidate_preview
 from pipeline.candidates.crop import CropError
 from pipeline.candidates.filter_preview import PreviewError
 from pipeline.candidates.floor_map import build_floor_map, is_trusted, trust_range
 from pipeline.candidates.inputs import InputError, load_input
 from pipeline.candidates.likely_moment import (
+    METHOD_SCREEN,
     Damage,
     build_damage,
     measure,
@@ -28,6 +30,7 @@ from pipeline.candidates.track_filter import (
     EXCLUDED_FILE,
     RANGES_FILE,
     TRACKS_FILE,
+    VIDEO_FILE,
     Scene,
     _load_regions,
     _region_at,
@@ -36,6 +39,7 @@ from pipeline.candidates.track_filter import (
     track_class,
 )
 from pipeline.candidates.track_preview import load_tracks
+from pipeline.candidates.video import SAMPLING_FPS
 
 CANDIDATES_FILE = "candidates.jsonl"
 REPORT_FILE = "candidate_report.jsonl"
@@ -125,8 +129,16 @@ def report_line(number: int, report: TrackReport) -> dict:
     }
 
 
-def _clock(sec: float) -> str:
-    return f"{int(sec // 60)}:{int(sec % 60):02d}"
+def moment_marks(reports: list[list[TrackReport]]) -> dict[tuple[float, int], MomentMark]:
+    """확인용 영상에 그릴 유력 시점. 키는 (시각, 트랙 번호)다."""
+    return {
+        (m.at_sec, m.track_id): MomentMark(
+            f"{m.dist:.{DIST_DIGITS}f}{unit_of(m.method)}", m.method != METHOD_SCREEN
+        )
+        for group in reports
+        for report in group
+        for m in report.moments
+    }
 
 
 def scene_text(label: str, start: float, end: float, clips: list[Clip]) -> str:
@@ -135,7 +147,7 @@ def scene_text(label: str, start: float, end: float, clips: list[Clip]) -> str:
         str(i) for i, clip in enumerate(clips, 1) if clip.start_sec <= end and start <= clip.end_sec
     ]
     found = "후보 " + ", ".join(numbers) if numbers else "후보 없음"
-    return f"{label} {_clock(start)}~{_clock(end)} → {found}"
+    return f"{label} {clock(start)}~{clock(end)} → {found}"
 
 
 def run_candidate_list(
@@ -207,6 +219,20 @@ def run_candidate_list(
     if scenes_path is not None:
         for s in load_scenes(scenes_path):
             print(scene_text(s.label, s.start_sec, s.end_sec, clips))
+
+    if make_video:
+        out_video = out / VIDEO_FILE
+        count = make_candidate_preview(
+            video_path,
+            str(Path(filter_dir) / VIDEO_FILE),
+            str(out_video),
+            by_time,
+            clips,
+            moment_marks(reports),
+            damage.screen_points,
+            duration,
+        )
+        print(f"확인용 영상: {out_video} ({count}장, {SAMPLING_FPS}fps)")
 
 
 if __name__ == "__main__":
