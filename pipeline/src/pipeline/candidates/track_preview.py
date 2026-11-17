@@ -30,6 +30,13 @@ from pipeline.candidates.blob_tracks import (
     remember_positions,
     track_boxes,
 )
+from pipeline.candidates.car_region import (
+    CarSpot,
+    Polygon,
+    build_car_spot,
+    pick_my_car,
+    region_polygons,
+)
 from pipeline.candidates.channel_a import (
     ChannelA,
     ModelError,
@@ -126,6 +133,8 @@ class DetectResult:
 
     ranges: list[YoloRange]  # YOLO를 돌린 구간 (시간순)
     yolo_frames: list[int] = field(default_factory=list)  # 구간마다 YOLO를 돌린 프레임 수
+    # 구간마다의 기준 영역 다각형 목록. 내 차를 찾지 못한 구간은 빈 목록이다 (D-319)
+    car_regions: list[list[Polygon]] = field(default_factory=list)
     track_ids: set[int] = field(default_factory=set)  # 트랙 파일에 나온 트랙 번호
     roi_motion: list[bool] = field(default_factory=list)  # 분석 프레임마다의 ROI 움직임 여부
     times: list[float] = field(
@@ -231,9 +240,18 @@ def _write_lines(tracks_file: TextIO, lines: list[dict]) -> None:
     tracks_file.writelines(json.dumps(line, ensure_ascii=False) + "\n" for line in lines)
 
 
+def _base_region(vehicle_masks: np.ndarray, spot: CarSpot | None) -> list[Polygon]:
+    """구간 첫 프레임의 차량 마스크에서 기준 영역 다각형 목록을 만든다. 내 차를 찾지 못하면 빈 목록이다."""
+    if spot is None:
+        return []
+    my_car = pick_my_car(vehicle_masks, spot)
+    return [] if my_car is None else region_polygons(my_car)
+
+
 def detect(
     video_path: str,
     roi: Roi,
+    spot: CarSpot | None,
     channel: ChannelA,
     blob_tracker: ByteTrackTracker,
     tracks_file: TextIO,
@@ -256,15 +274,20 @@ def detect(
         if decision.run:
             # 거슬러 돌릴 프레임을 먼저, 지금 프레임을 마지막에. 추적기에는 시간순으로 넣어야 한다 (D-313)
             to_run = [*_backfill_frames(ring, decision), (frame.time_sec, small)]
-            for time_sec, image in to_run:
-                lines, tracks, _ = process_frame(channel, image, time_sec, roi.crop)
+            # 새 구간이 열렸으면 칸을 만든다. 규칙 4로 앞 구간에 이어 붙었으면 구간 수가 그대로다
+            new_range = len(result.yolo_frames) < len(switch.ranges)
+            if new_range:
+                result.yolo_frames.append(0)
+            for index, (time_sec, image) in enumerate(to_run):
+                lines, tracks, vehicle_masks = process_frame(channel, image, time_sec, roi.crop)
+                # 기준 영역은 구간의 첫 프레임에서 한 번만 만든다 (D-259). 이어 붙은 구간은 다시 만들지 않는다
+                if new_range and index == 0:
+                    result.car_regions.append(_base_region(vehicle_masks, spot))
                 _write_lines(tracks_file, lines)
                 # 거슬러 돌린 프레임의 위치도 적어야 켜자마자 멈춘 차를 알아본다 (D-314 결정 4)
                 remember_positions(history, time_sec, tracks)
                 result.track_ids.update(line["track_id"] for line in lines)
-            # 방금 돌린 프레임은 모두 마지막 구간의 것이다. 새 구간이 열렸으면 칸을 만든다
-            if len(result.yolo_frames) < len(switch.ranges):
-                result.yolo_frames.append(0)
+            # 방금 돌린 프레임은 모두 마지막 구간의 것이다
             result.yolo_frames[-1] += len(to_run)
         # 채널 B는 지금 프레임에만 한다. 거슬러 돌린 프레임에는 채널 A만 돈다 (규칙 1)
         statuses, boxes = judge_blobs(blobs, small.shape, frame.time_sec, tracks, history)
@@ -299,8 +322,11 @@ def write_ranges(path: str, video_path: str, result: DetectResult) -> None:
                 "start_sec": round(r.start_sec, 3),
                 "end_sec": round(r.end_sec, 3),
                 "yolo_frames": count,
+                "car_region": car_region,
             }
-            for r, count in zip(result.ranges, result.yolo_frames, strict=True)
+            for r, count, car_region in zip(
+                result.ranges, result.yolo_frames, result.car_regions, strict=True
+            )
         ],
     }
     with open(path, "w", encoding="utf-8") as f:
@@ -485,6 +511,7 @@ def make_track_preview(
     width, height = video_size(video_path)
     data = load_input(input_path, width, height)
     roi = build_roi(data, (width, height))
+    spot = build_car_spot(data, (width, height), roi.crop)
     scenes = load_scenes(scenes_path) if scenes_path else []
     # 모델을 못 열면 영상을 읽기 전에 끝낸다
     channel = open_channel_a(Path(weights_path))
@@ -493,7 +520,7 @@ def make_track_preview(
     os.makedirs(out_dir, exist_ok=True)
     tracks_path = os.path.join(out_dir, "tracks.jsonl")
     with open(tracks_path, "w", encoding="utf-8") as tracks_file:
-        result = detect(video_path, roi, channel, blob_tracker, tracks_file)
+        result = detect(video_path, roi, spot, channel, blob_tracker, tracks_file)
 
     ranges_path = os.path.join(out_dir, "yolo_ranges.json")
     write_ranges(ranges_path, video_path, result)

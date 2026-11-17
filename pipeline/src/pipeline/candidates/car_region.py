@@ -97,3 +97,29 @@ def pick_my_car(masks: np.ndarray, spot: CarSpot) -> np.ndarray | None:
         if inside >= CAR_SPOT_INSIDE_RATIO and not (mask & spot.too_low).any():
             picked |= mask
     return picked if picked.any() else None
+
+
+# 다각형 하나 = 꼭짓점 [x, y]의 목록. 줄인 분석 프레임 좌표의 정수다 (D-263)
+Polygon = list[list[int]]
+
+
+def region_polygons(region: np.ndarray) -> list[Polygon]:
+    """내 차 영역(참·거짓 그림)을 다각형 목록으로 바꾼다 (D-263). 다각형 하나 = 조각 하나의 바깥 윤곽이다.
+
+    바깥 윤곽만 따므로 안쪽 구멍은 적히지 않는다. 꼭짓점을 줄이는 근사는 하지 않는다.
+    CHAIN_APPROX_SIMPLE은 곧은 줄의 가운데 점만 빼므로 다시 그리면 같은 모양이 나온다.
+    """
+    contours, _ = cv2.findContours(
+        region.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
+    return [contour.reshape(-1, 2).tolist() for contour in contours]
+
+
+def draw_region(polygons: list[Polygon], shape: tuple[int, int]) -> np.ndarray:
+    """다각형 목록을 (높이, 폭) 크기의 참·거짓 그림으로 다시 그린다. 안쪽 구멍은 채워진다.
+
+    기준 영역은 이렇게 다시 그린 모양이다. 파일에 적힌 다각형으로 누구나 같은 모양을 얻는다 (D-263).
+    """
+    canvas = np.zeros(shape, np.uint8)
+    cv2.fillPoly(canvas, [np.array(polygon, np.int32) for polygon in polygons], 1)
+    return canvas > 0

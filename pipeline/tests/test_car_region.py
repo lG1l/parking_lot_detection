@@ -2,7 +2,12 @@ import dataclasses
 
 import numpy as np
 
-from pipeline.candidates.car_region import build_car_spot, pick_my_car
+from pipeline.candidates.car_region import (
+    build_car_spot,
+    draw_region,
+    pick_my_car,
+    region_polygons,
+)
 from pipeline.candidates.crop import Crop
 from pipeline.candidates.inputs import AnalysisInput
 
@@ -71,3 +76,26 @@ def test_자리_안_비율이_높아도_아래_여유보다_더_내려가면_내
     tall = _rect_mask(300, 120, 400, 290)
     assert np.count_nonzero(tall & spot.mask) / np.count_nonzero(tall) >= 0.8
     assert pick_my_car(tall[None], spot) is None
+
+
+def test_기준_영역은_조각마다_바깥_윤곽_다각형이고_다시_그리면_구멍이_채워진다():
+    shape = (FRAME[1], FRAME[0])
+    left = _rect_mask(200, 130, 260, 220)
+    right = _rect_mask(300, 130, 440, 225)
+    hole = _rect_mask(350, 160, 380, 190)
+    region = (left | right) & ~hole
+
+    polygons = region_polygons(region)
+    redrawn = draw_region(polygons, shape)
+
+    assert len(polygons) == 2
+    assert all(
+        isinstance(value, int) for polygon in polygons for point in polygon for value in point
+    )
+    assert np.array_equal(redrawn, left | right)
+    # 한 번 더 바꿔도 같은 모양이다 (파일로 적었다 다시 그려도 달라지지 않는다)
+    assert np.array_equal(draw_region(region_polygons(redrawn), shape), redrawn)
+
+
+def test_빈_다각형_목록을_그리면_빈_그림이다():
+    assert not draw_region([], (FRAME[1], FRAME[0])).any()
