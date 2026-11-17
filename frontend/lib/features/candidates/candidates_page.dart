@@ -277,7 +277,6 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
   Widget _body(BuildContext context, Batch batch) {
     final lists = _lists!;
     final tab = lists[_tab]!;
-    final unavailable = unavailableMessage(batch);
     final doneMessage = tabDoneMessage(lists, _tab);
     final other = CandidateList.other(_tab);
     final fixed = _fixedLayout(context);
@@ -303,7 +302,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _tabs(lists),
+        _tabs(lists, unavailableLabel(batch)),
         const SizedBox(height: 12),
         Text(
           _tab == CandidateList.main
@@ -332,30 +331,6 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
           ),
           const SizedBox(height: 14),
         ],
-        if (unavailable != null) ...[
-          // 작은 안내 띠 (D-190)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: hairColor),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                spacing: 8,
-                children: [
-                  const Icon(Icons.videocam_off_outlined, size: 16, color: subColor),
-                  Flexible(
-                    child: Text(unavailable, style: const TextStyle(fontSize: 13, color: subColor)),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-        ],
         if (fixed) Expanded(child: SingleChildScrollView(child: clips)) else clips,
         const SizedBox(height: 12),
         // 오른쪽 아래 묶음 이동. 열람기한은 제목 위로 옮겼다 (캔버스 2.7)
@@ -372,7 +347,8 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
   }
 
   /// 밑줄형 탭 두 개 (캔버스 2.7): 고른 탭은 파란 밑줄 2px, 아래 hair 선 (D-305).
-  Widget _tabs(Map<String, ListSummary> lists) {
+  /// 묶음에 열람 불가 후보가 있으면 [점수 미산출] 옆에 "볼 수 없는 후보 N"을 누를 수 없는 연한 글자로 둔다.
+  Widget _tabs(Map<String, ListSummary> lists, String? unavailable) {
     Widget tabButton(String t) {
       final selected = t == _tab;
       final enabled = tabEnabled(lists, t);
@@ -409,6 +385,16 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
       child: Row(
         children: [
           for (final t in [CandidateList.main, CandidateList.parseFailed]) tabButton(t),
+          if (unavailable != null)
+            Container(
+              constraints: const BoxConstraints(minHeight: 44),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              alignment: Alignment.center,
+              child: Text(
+                unavailable,
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: progressColor),
+              ),
+            ),
         ],
       ),
     );

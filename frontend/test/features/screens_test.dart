@@ -1288,7 +1288,9 @@ void main() {
     expect(find.text('후보 10'), findsOneWidget);
     expect(find.text('점수 미산출 (0)'), findsOneWidget);
     expect(find.text('2026-11-19 10:00까지 열람 가능'), findsOneWidget); // 제목 위 작은 글자 (캔버스 2.7)
-    expect(find.text('이 묶음에 영상을 준비하지 못해 볼 수 없는 후보가 1건 있습니다.'), findsOneWidget);
+    // 점수 미산출 옆 연한 글자. 누를 수 없다
+    expect(find.text('볼 수 없는 후보 1'), findsOneWidget);
+    expect(find.ancestor(of: find.text('볼 수 없는 후보 1'), matching: find.byType(InkWell)), findsNothing);
     expect(find.text('다음 ▶'), findsOneWidget); // 새 묶음을 받는 버튼도 이름은 [다음 ▶] (D-190)
     expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '확인 끝내기')).onPressed, isNull); // 늘 보이지만 막힘
 
