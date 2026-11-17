@@ -27,6 +27,7 @@ from pipeline.candidates.blob_tracks import (
     attach_target,
     blob_track_boxes,
     blob_track_lines,
+    is_stopped_vehicle,
     open_blob_tracker,
     remember_positions,
     track_boxes,
@@ -84,6 +85,14 @@ from pipeline.candidates.motion_preview import (
     load_scenes,
     make_timeline,
 )
+from pipeline.candidates.motion_px import (
+    blobs_moved_mask,
+    changed_pixels,
+    grow_bbox,
+    moved_in_bbox,
+    moved_in_blob,
+    to_gray,
+)
 from pipeline.candidates.preview import (
     GREEN,
     RED,
@@ -130,8 +139,9 @@ _CAR_SPOT_LINE = 1
 _BASE_REGION_LINE = 2
 _MY_CAR_ALPHA = 0.3  # 전경 칠(0.5)보다 옅게 해서 밑의 차와 전경 칠이 보이게 한다
 
-# 트랙 이름표 뒤에 붙이는 차 영역 키와 짧은 이름
+# 트랙 이름표 뒤에 붙이는 움직인 픽셀 수·차 영역 키와 짧은 이름
 _CAR_KEY_NAMES = (
+    ("moved_px", "mv"),
     ("car_fg_px", "fg"),
     ("car_front_fg", "fr"),
     ("car_out_fg", "out"),
@@ -199,14 +209,17 @@ def judge_blobs(
     time_sec: float,
     tracks: list[TrackBox],
     history: History,
-) -> tuple[list[str | None], list[Box]]:
+) -> tuple[list[str | None], list[Box], list[int | None]]:
     """덩어리마다 붙이기 결과를 정하고, 채널 B 추적기에 넣을 사각형을 고른다.
 
     결과 목록은 blobs와 자리가 같다. ROI에 닿지 않은 덩어리는 판정하지 않아 None이다 (D-314 결정 1).
+    마지막 목록은 덩어리마다 붙은 채널 A 트랙의 번호다 (붙지 않았으면 None).
+    붙은 덩어리의 움직인 픽셀을 그 트랙에 세려면 번호가 필요하다 (D-333 나-1).
     """
+    targets: list[int | None] = [None] * len(blobs)
     if time_sec < MOG2_STABLE_SEC:
         # 안정 전 전경은 믿을 수 없어 채널 B 추적기에 아무것도 넣지 않는다 (D-315 결정 4)
-        return [SKIPPED if blob.touches_roi else None for blob in blobs], []
+        return [SKIPPED if blob.touches_roi else None for blob in blobs], [], targets
     statuses: list[str | None] = [None] * len(blobs)
     attached: set[int] = set()
     groups = group_blobs(blobs, shape)
@@ -215,13 +228,14 @@ def judge_blobs(
         for index in group:
             if not blobs[index].touches_roi:
                 continue
-            if attach_target(blobs[index], tracks, history) is not None:
+            targets[index] = attach_target(blobs[index], tracks, history)
+            if targets[index] is not None:
                 statuses[index] = ATTACHED
                 attached.add(index)
             else:
                 # 상한에 걸린 묶음은 추적기에 넣지 않는다 (D-315 결정 3)
                 statuses[index] = SKIPPED if oversized else PASSED
-    return statuses, boxes_for_tracker(blobs, groups, attached, shape)
+    return statuses, boxes_for_tracker(blobs, groups, attached, shape), targets
 
 
 def _box_to_original(box: Box, crop: Crop) -> Box:
@@ -290,6 +304,56 @@ def _add_car_keys(
         line.update(car_keys(bbox, base, my_car, pixels, stable))
 
 
+def track_moved_px(
+    tracks: list[TrackBox],
+    blobs: list[Blob],
+    targets: list[int | None],
+    changed: np.ndarray,
+    roi_in: np.ndarray,
+    history: History,
+    by_bbox: bool,
+) -> list[int]:
+    """채널 A 트랙마다의 움직인 픽셀 수. tracks와 자리가 같다 (D-333 나-1·3).
+
+    by_bbox가 거짓이면 그 트랙에 붙은 덩어리 안에서 센다. 붙은 덩어리가 없으면 0이다.
+    by_bbox가 참이면(MOG2 전경을 믿을 수 없는 프레임) 넓힌 bbox와 ROI가 겹친 곳에서
+    밝기 차이만으로 센다. 멈춘 차는 0이다. bbox 안의 변화가 그 차의 움직임으로 세어지는 것을 막는다 (D-265).
+    """
+    if by_bbox:
+        moved = changed & roi_in
+        return [
+            0 if is_stopped_vehicle(track, history) else moved_in_bbox(grow_bbox(track.bbox), moved)
+            for track in tracks
+        ]
+    counts = dict.fromkeys((track.track_id for track in tracks), 0)
+    for blob, target in zip(blobs, targets, strict=True):
+        if target is not None:
+            counts[target] += moved_in_blob(blob, changed, roi_in)
+    return [counts[track.track_id] for track in tracks]
+
+
+def blob_track_moved_px(
+    bboxes: list[tuple[float, float, float, float]],
+    blobs: list[Blob],
+    statuses: list[str | None],
+    changed: np.ndarray,
+    roi_in: np.ndarray,
+) -> list[int]:
+    """클래스 없는 트랙마다의 움직인 픽셀 수. bboxes와 자리가 같다 (D-333 나-2).
+
+    넘긴 덩어리의 움직인 픽셀 가운데 그 트랙 bbox 안에 든 것을 센다.
+    """
+    passed = [blob for blob, status in zip(blobs, statuses, strict=True) if status == PASSED]
+    moved = blobs_moved_mask(passed, changed, roi_in)
+    return [moved_in_bbox(bbox, moved) for bbox in bboxes]
+
+
+def _add_moved_px(lines: list[dict], counts: list[int] | None) -> None:
+    """트랙 줄마다 moved_px를 더한다 (lines를 직접 고친다). counts가 None이면 모두 null이다."""
+    for index, line in enumerate(lines):
+        line["moved_px"] = None if counts is None else counts[index]
+
+
 def detect(
     video_path: str,
     roi: Roi,
@@ -306,8 +370,14 @@ def detect(
     result = DetectResult(ranges=switch.ranges)
     # 지금 구간의 기준 영역. 구간이 열릴 때마다 바뀐다. 내 차를 찾지 못한 구간은 None이다
     base: BaseRegion | None = None
+    roi_in = roi.mask > 0
+    # 직전 분석 프레임의 밝기 그림. 맨 첫 프레임에는 없다
+    prev_gray: np.ndarray | None = None
     for frame in iter_analysis_frames(video_path):
         small = crop_frame(frame.image, roi.crop)
+        gray = to_gray(small)
+        # 직전 분석 프레임과 달라진 픽셀. 맨 첫 프레임은 견줄 프레임이 없어 None이다 (moved_px가 null)
+        changed = None if prev_gray is None else changed_pixels(prev_gray, gray)
         # MOG2는 켜고 끄기와 상관없이 모든 프레임을 한 번씩만 본다 (D-192)
         blobs, pixels = _find_frame_blobs(mog2, small, roi)
         stable = frame.time_sec >= MOG2_STABLE_SEC
@@ -318,6 +388,8 @@ def detect(
         tracks: list[TrackBox] = []
         # 이 프레임의 내 차 영역. YOLO가 꺼진 프레임에는 없다
         my_car: np.ndarray | None = None
+        # 이 프레임의 채널 A 줄. 덩어리 붙이기 뒤에 moved_px를 더해 쓴다 (D-333 나-1)
+        current_lines: list[dict] = []
         if decision.run:
             # 거슬러 돌릴 프레임을 먼저, 지금 프레임을 마지막에. 추적기에는 시간순으로 넣어야 한다 (D-313)
             to_run = [*_backfill_frames(ring, decision), (frame.time_sec, small)]
@@ -336,24 +408,30 @@ def detect(
                     polygons = [] if my_car is None else region_polygons(my_car)
                     result.car_regions.append(polygons)
                     base = base_region(polygons, small.shape[:2])
-                # 거슬러 돈 프레임은 MOG2를 다시 돌리지 않아 전경이 없다. 마지막이 지금 프레임이다
-                is_current = index == len(to_run) - 1
-                _add_car_keys(
-                    lines,
-                    [track.bbox for track in tracks],
-                    base,
-                    my_car,
-                    pixels if is_current else None,
-                    stable,
-                )
-                _write_lines(tracks_file, lines)
                 # 거슬러 돌린 프레임의 위치도 적어야 켜자마자 멈춘 차를 알아본다 (D-314 결정 4)
                 remember_positions(history, time_sec, tracks)
                 result.track_ids.update(line["track_id"] for line in lines)
+                # 마지막이 지금 프레임이다. 지금 프레임의 줄은 덩어리 붙이기 뒤에 쓴다
+                if index == len(to_run) - 1:
+                    current_lines = lines
+                    continue
+                # 거슬러 돈 프레임은 MOG2를 다시 돌리지 않아 전경이 없다. moved_px도 쓰지 않는다
+                _add_car_keys(lines, [track.bbox for track in tracks], base, my_car, None, stable)
+                _write_lines(tracks_file, lines)
             # 방금 돌린 프레임은 모두 마지막 구간의 것이다
             result.yolo_frames[-1] += len(to_run)
         # 채널 B는 지금 프레임에만 한다. 거슬러 돌린 프레임에는 채널 A만 돈다 (규칙 1)
-        statuses, boxes = judge_blobs(blobs, small.shape, frame.time_sec, tracks, history)
+        statuses, boxes, targets = judge_blobs(blobs, small.shape, frame.time_sec, tracks, history)
+        # MOG2 전경을 믿을 수 없는 프레임: 안정 전이거나 덩어리 상한 이상인 덩어리가 있다 (D-265, D-268)
+        by_bbox = not stable or has_oversized_blob(blobs, list(range(len(blobs))), small.shape)
+        _add_moved_px(
+            current_lines,
+            None
+            if changed is None
+            else track_moved_px(tracks, blobs, targets, changed, roi_in, history, by_bbox),
+        )
+        _add_car_keys(current_lines, [track.bbox for track in tracks], base, my_car, pixels, stable)
+        _write_lines(tracks_file, current_lines)
         for status in statuses:
             if status is not None:
                 result.blob_counts[status] += 1
@@ -361,11 +439,19 @@ def detect(
         # 넣을 사각형이 없어도 매 프레임 불러야 사라진 트랙이 1초 뒤 끝난다 (D-315 결정 5)
         tracked = track_boxes(blob_tracker, boxes)
         blob_lines = blob_track_lines(tracked, frame.time_sec, roi.crop)
+        blob_bboxes = blob_track_boxes(tracked)
+        _add_moved_px(
+            blob_lines,
+            None
+            if changed is None
+            else blob_track_moved_px(blob_bboxes, blobs, statuses, changed, roi_in),
+        )
         # 채널 B 줄에도 같은 규칙으로 쓴다 (D-319 결정 2)
-        _add_car_keys(blob_lines, blob_track_boxes(tracked), base, my_car, pixels, stable)
+        _add_car_keys(blob_lines, blob_bboxes, base, my_car, pixels, stable)
         _write_lines(tracks_file, blob_lines)
         _count_blob_tracks(result, blob_lines)
         ring.append((frame.time_sec, small))
+        prev_gray = gray
         result.roi_motion.append(roi_motion)
         result.times.append(frame.time_sec)
         result.duration_sec = frame.time_sec
@@ -510,7 +596,10 @@ def _base_contours(result: DetectResult, crop: Crop) -> list[list[np.ndarray]]:
 
 
 def _car_key_text(line: dict) -> str:
-    """트랙 줄의 차 영역 키를 "fg2650 fr0.05 lost2410"처럼 쓴다. 없는 키는 빼고 null은 "-"다."""
+    """트랙 줄의 움직인 픽셀 수와 차 영역 키를 "mv95 fg2650 fr0.05 lost2410"처럼 쓴다.
+
+    없는 키는 빼고 null은 "-"다.
+    """
     return "".join(
         f" {name}{'-' if line[key] is None else line[key]}"
         for key, name in _CAR_KEY_NAMES
