@@ -125,18 +125,24 @@ def in_strip(floor_map: FloorMap, point: FloorPoint, edge: int, out_m: float, en
     return -end_m <= along <= edge_length(floor_map, edge) + end_m and 0 <= out <= out_m
 
 
+def _segment_points(a: FloorPoint, b: FloorPoint) -> list[FloorPoint]:
+    """바닥의 선분 a–b를 촘촘한 점으로 나눈다. 화면의 직선은 바닥에서도 직선이라 양 끝점만 바꿔 오면 된다."""
+    return [
+        (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+        for t in np.linspace(0.0, 1.0, SEGMENT_SAMPLES)
+    ]
+
+
 def segment_in_strip(
     floor_map: FloorMap, a: FloorPoint, b: FloorPoint, edge: int, out_m: float, end_m: float
 ) -> bool:
-    """바닥의 선분 a–b가 일부라도 변 edge의 띠 안에 있는지. 차의 bbox 아래 변에 쓴다 (D-330).
+    """바닥의 선분 a–b가 일부라도 변 edge의 띠 안에 있는지. 차의 bbox 아래 변에 쓴다 (D-330)."""
+    return any(in_strip(floor_map, p, edge, out_m, end_m) for p in _segment_points(a, b))
 
-    화면의 직선은 바닥에서도 직선이라 양 끝점만 바꾼 뒤 그 사이를 촘촘한 점으로 나눠 본다.
-    """
-    for t in np.linspace(0.0, 1.0, SEGMENT_SAMPLES):
-        point = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
-        if in_strip(floor_map, point, edge, out_m, end_m):
-            return True
-    return False
+
+def segment_distance(floor_map: FloorMap, a: FloorPoint, b: FloorPoint, edge: int) -> float:
+    """바닥의 선분 a–b에서 변 edge까지의 가장 짧은 거리 (m). 차의 bbox 아래 변에 쓴다 (D-325)."""
+    return min(distance_to_edge(floor_map, p, edge) for p in _segment_points(a, b))
 
 
 def _trust_point(floor_map: FloorMap, edge: int) -> Point | None:
