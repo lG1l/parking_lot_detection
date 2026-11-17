@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from pipeline.candidates.track_filter import floor_point_visible, track_class
+from pipeline.candidates.track_filter import floor_point_visible, longest_run, track_class
 
 # 줄인 프레임 640×360. 닿음 여유는 짧은 변의 1%인 3.6px다
 SIZE = (640, 360)
@@ -48,3 +48,9 @@ def test_아래_변이_기준_영역에_닿으면_바닥점이_안_보인다():
 def test_아래_변이_모두와_떨어져_있으면_바닥점이_보인다():
     other = (360, 150, 400, 250)  # 아래 변의 오른쪽 끝에서 20px 떨어져 있다
     assert floor_point_visible(BOX, [other], FAR_REGION, SIZE)
+
+
+def test_가장_긴_연속은_빠진_칸에서_끊긴다():
+    # 10fps: 4개 연속 → 한 칸 빠짐 → 5개 연속
+    times = [1.0, 1.1, 1.2, 1.3, 1.5, 1.6, 1.7, 1.8, 1.9]
+    assert longest_run(times) == 5

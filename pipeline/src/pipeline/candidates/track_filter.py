@@ -67,6 +67,22 @@ NEAR_WINDOW_SEC = 0.5
 # 제외 기록에 쓰는 규칙 이름 (04장 4.8, D-331)
 RULE_NO_ROI = "ROI 미접촉"
 RULE_FLOOR = "바닥점 필터"
+RULE_BEYOND = "차 너머 트랙 빼기"
+RULE_FRONT = "차 앞 트랙 빼기"
+
+# 차 너머 트랙 빼기를 쓰는 종류: 사람·승용차·오토바이 (06장 6.5, D-245)
+BEYOND_CLASSES = ("person", "car", "motorcycle")
+# 차 너머: 이 비율(분석 크롭 넓이 대비) 이상인 프레임이 하나라도 있으면 남긴다 (시작값, D-256, D-261)
+BEYOND_CHANGE_RATIO = 0.01  # 차 영역 변화 (car_fg_px)
+BEYOND_LOST_RATIO = 0.01  # 영역 줄어듦 (car_lost_px). 값은 같지만 따로 조정할 수 있게 상수를 나눈다
+
+# 차 앞 트랙 빼기 (시작값, D-321, D-330)
+FRONT_COVER_RATIO = 0.03  # "여러 프레임": car_front_fg가 이 값 이상
+FRONT_OUT_RATIO = (
+    0.05  # "전체가 함께": car_out_fg가 이 값 이상이면 가린 것이 아니라 차가 흔들린 것이다
+)
+FRONT_RUN_SEC = 0.5  # 가린 프레임이 이만큼 연속이어야 한다
+CROSSED_RUN_SEC = 0.5  # 손이 닿는 구역 안에 이만큼 연속으로 있었으면 건너편으로 넘어간 것이다
 
 TRACKS_FILE = "tracks.jsonl"
 RANGES_FILE = "yolo_ranges.json"
@@ -89,6 +105,7 @@ class Frame:
     )  # 바닥점에서 파손 변까지의 거리. 재지 않는 종류이거나 바닥 지도 바깥이면 None
     in_zone: bool  # 손이 닿는 구역 안인지
     on_region: bool  # bbox 아래 변이 기준 영역에 닿았는지. 기준 영역이 없는 구간이면 True다
+    crossed: bool  # 차 앞 트랙 빼기의 "건너편" 구역 안인지. 재지 않는 종류는 승용차 띠를 빌려 쓴다
 
 
 @dataclass(frozen=True)
@@ -229,6 +246,19 @@ def measure(bbox: list[float], cls: str | None, scene: Scene) -> tuple[float | N
     return None, False
 
 
+def in_crossed_zone(bbox: list[float], cls: str | None, scene: Scene) -> bool:
+    """차 앞 트랙 빼기의 "건너편으로 넘어갔다"에 쓰는 구역 안인지 (D-330).
+
+    사람·동물·승용차·오토바이·자전거는 바닥점 필터와 같은 구역이다.
+    트럭·버스·새·클래스 없는 물체는 여기서만 승용차의 띠를 빌려 쓴다.
+    """
+    if scene.floor_map is None:
+        return False
+    if cls in PERSON_LIKE:
+        return _measure_person(bbox, scene)[1]
+    return _measure_car(bbox, scene)[1]
+
+
 def _region_at(scene: Scene, t: float) -> np.ndarray | None:
     """시각 t가 속한 YOLO 구간의 기준 영역. 구간을 찾지 못하거나 영역이 비었으면 None."""
     for start, end, region in scene.regions:
@@ -255,7 +285,10 @@ def track_frames(
         shown = floor_point_visible(box, others, region, crop.reduced_size)
         on_region = touches_region(box, region, min(crop.reduced_size) * TOUCH_RATIO)
         # 바닥 지도 바깥이라 거리를 못 잰 프레임은 바닥점이 안 보인 것으로 친다 (06장 "바닥 지도 바깥")
-        frames.append(Frame(line["t"], shown and dist is not None, dist, in_zone, on_region))
+        crossed = in_crossed_zone(line["bbox"], cls, scene)
+        frames.append(
+            Frame(line["t"], shown and dist is not None, dist, in_zone, on_region, crossed)
+        )
     return frames
 
 
@@ -312,17 +345,102 @@ def floor_filter_keeps(
     return keeps
 
 
+def longest_run(times: list[float]) -> int:
+    """시각 목록에서 분석 프레임이 빠짐없이 이어진 가장 긴 줄의 프레임 수 (D-332 나-6). times는 시각 순이다."""
+    step = 1 / SAMPLING_FPS
+    best = run = 0
+    previous = None
+    for t in times:
+        # 앞 프레임과의 간격이 분석 프레임 한 칸이면 이어진 것이다. 한 칸이라도 빠지면 새로 센다
+        linked = previous is not None and t - previous <= step * 1.5
+        run = run + 1 if linked else 1
+        best = max(best, run)
+        previous = t
+    return best
+
+
+def _unusable(lines: list[dict], keys: tuple[str, ...], scene: Scene) -> list[str]:
+    """차 영역 키로 판정할 수 없는 이유. 비어 있으면 판정할 수 있다 (04장 4.8, D-259)."""
+    if not scene.trusted:
+        return ["바닥 지도 믿지 않음"]
+    if any(_region_at(scene, line["t"]) is None for line in lines):
+        return ["기준 영역이 없는 구간"]
+    # 키가 있는데 값이 null이면 측정 불가다. 키가 없는 것은 "변화 없음"이라 여기에 들지 않는다
+    if any(key in line and line[key] is None for line in lines for key in keys):
+        return ["측정 불가 프레임 있음"]
+    return []
+
+
+def beyond_keeps(
+    lines: list[dict], cls: str | None, frames: list[Frame], scene: Scene
+) -> list[str]:
+    """차 너머 트랙 빼기에서 이 트랙을 남기는 이유들 (06장 "차 너머 트랙 빼기"). 비어 있으면 뺀다."""
+    if cls not in BEYOND_CLASSES:
+        return ["쓰지 않는 종류"]
+    if any(e in scene.far_edges for e in scene.damage_edges):
+        return ["파손 변이 카메라 쪽 변만이 아님"]
+    unusable = _unusable(lines, ("car_fg_px", "car_lost_px"), scene)
+    if unusable:
+        return unusable
+    width, height = scene.roi.crop.reduced_size
+    crop_area = width * height  # _px 키는 줄인 분석 프레임의 픽셀 수다
+    keeps = []
+    if any(f.visible for f in frames):
+        keeps.append("바닥점이 보임")
+    if any(line.get("car_fg_px", 0) >= crop_area * BEYOND_CHANGE_RATIO for line in lines):
+        keeps.append("차 영역 변화 있음")
+    if any(line.get("car_lost_px", 0) >= crop_area * BEYOND_LOST_RATIO for line in lines):
+        keeps.append("영역 줄어듦 있음")
+    return keeps
+
+
+def _covers_front(line: dict) -> bool:
+    """그 프레임에서 트랙이 내 차 앞을 가렸는지: 아래쪽 1/2이 충분히 변했고 차 전체가 함께 변하지는 않았다.
+
+    car_out_fg가 null(bbox 바깥의 차 영역이 없음)이면 함께 변했는지 알 수 없어 가린 프레임으로 세지 않는다.
+    """
+    out = line.get("car_out_fg", 0)
+    return (
+        line.get("car_front_fg", 0) >= FRONT_COVER_RATIO
+        and out is not None
+        and out < FRONT_OUT_RATIO
+    )
+
+
+def front_keeps(lines: list[dict], frames: list[Frame], scene: Scene) -> list[str]:
+    """차 앞 트랙 빼기에서 이 트랙을 남기는 이유들 (06장 "차 앞 트랙 빼기"). 비어 있으면 뺀다."""
+    if not all(e in scene.far_edges for e in scene.damage_edges):
+        return ["파손 변이 건너편 변만이 아님"]
+    # car_out_fg의 null은 프레임 단위로 다룬다 (_covers_front). MOG2가 안정되기 전이면 car_front_fg도 null이다
+    unusable = _unusable(lines, ("car_front_fg",), scene)
+    if unusable:
+        return unusable
+    keeps = []
+    covered = longest_run([line["t"] for line in lines if _covers_front(line)])
+    if covered < round(FRONT_RUN_SEC * SAMPLING_FPS):
+        keeps.append("차 앞을 가리지 않음")
+    crossed = longest_run([f.t for f in frames if f.crossed])
+    if crossed >= round(CROSSED_RUN_SEC * SAMPLING_FPS):
+        keeps.append("건너편으로 넘어갔다")
+    return keeps
+
+
 def judge(lines: list[dict], cls: str | None, frames: list[Frame], scene: Scene) -> tuple:
     """트랙에 걸린 규칙 이름 목록과, 규칙마다 남긴 이유를 낸다.
 
     ROI 자격이 없는 트랙에는 다른 규칙을 적용하지 않는다.
+    그 밖에는 한 규칙에 걸려도 나머지 규칙을 모두 판정한다 (D-331).
     """
     if not touches_roi(lines, scene.roi):
         return [RULE_NO_ROI], {}
-    keeps = floor_filter_keeps(lines, cls, frames, scene)
-    if not keeps:
-        return [RULE_FLOOR], {}
-    return [], {RULE_FLOOR: ", ".join(keeps)}
+    keeps_by_rule = {
+        RULE_FLOOR: floor_filter_keeps(lines, cls, frames, scene),
+        RULE_BEYOND: beyond_keeps(lines, cls, frames, scene),
+        RULE_FRONT: front_keeps(lines, frames, scene),
+    }
+    rules = [rule for rule, keeps in keeps_by_rule.items() if not keeps]
+    kept_by = {rule: ", ".join(keeps) for rule, keeps in keeps_by_rule.items() if keeps}
+    return rules, kept_by
 
 
 def report_line(
@@ -404,6 +522,7 @@ def run_track_filter(
     counts = Counter(rule for line in excluded for rule in line["rules"])
     print(
         f"트랙 {len(report)} · {RULE_NO_ROI} {counts[RULE_NO_ROI]} · {RULE_FLOOR} {counts[RULE_FLOOR]}"
+        f" · 차 너머 {counts[RULE_BEYOND]} · 차 앞 {counts[RULE_FRONT]}"
         f" · 남음 {len(report) - len(excluded)} · {trust_text(measured)}"
     )
 
