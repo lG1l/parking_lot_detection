@@ -135,14 +135,25 @@ def track_lines(
     return lines
 
 
+def track_boxes(tracked: sv.Detections, names: dict[int, str]) -> list[TrackBox]:
+    """추적기가 돌려준 결과에서 확정된 트랙을 줄인 프레임 좌표 그대로 꺼낸다 (D-314 결정 2)."""
+    return [
+        TrackBox(int(tracker_id), names[int(class_id)], tuple(float(v) for v in xyxy))
+        for xyxy, class_id, tracker_id in zip(tracked.xyxy, tracked.class_id, tracked.tracker_id)
+        if tracker_id >= 0
+    ]
+
+
 def process_frame(
     channel: ChannelA, reduced: np.ndarray, time_sec: float, crop: Crop
-) -> list[dict]:
-    """줄인 프레임 한 장을 탐지·추적해 그 프레임의 트랙 줄들을 돌려준다.
+) -> tuple[list[dict], list[TrackBox]]:
+    """줄인 프레임 한 장을 탐지·추적해 그 프레임의 트랙 줄들과 확정 트랙들을 돌려준다.
 
+    트랙 줄은 파일에 쓸 원본 좌표이고, 확정 트랙은 채널 B 덩어리를 붙일 때 볼 줄인 좌표다.
     프레임은 시간순으로 넣는다. 앞선 시각을 넣으면 추적기가 그 프레임을 건너뛴다.
     """
     # 시각을 줘서 YOLO가 꺼져 있던 시간만큼 추적기도 시간이 흐르게 한다 (D-313).
     # 주지 않으면 호출 1번을 1프레임으로 세어, 공백 뒤 같은 자리에 온 다른 물체가 앞 번호를 이어받는다
     tracked = channel.tracker.update(detect(channel, reduced), timestamp=time_sec)
-    return track_lines(tracked, channel.model.names, time_sec, crop)
+    names = channel.model.names
+    return track_lines(tracked, names, time_sec, crop), track_boxes(tracked, names)

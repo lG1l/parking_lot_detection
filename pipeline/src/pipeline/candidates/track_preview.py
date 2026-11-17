@@ -1,6 +1,7 @@
-"""채널 A까지 돌려 트랙 파일과 YOLO 구간 목록을 만든다 (3단계, D-310). 명령의 진입점이다.
+"""채널 A·B를 돌려 트랙 파일과 YOLO 구간 목록을 만든다 (3·4단계, D-310, D-316). 명령의 진입점이다.
 
-영상을 한 번 읽으며 프레임마다 MOG2(채널 B) → 켜고 끄기 판정 → YOLO + ByteTrack(채널 A)을 돈다.
+영상을 한 번 읽으며 프레임마다 MOG2(채널 B) → 켜고 끄기 판정 → YOLO + ByteTrack(채널 A)
+→ 덩어리 붙이기 → 채널 B 추적기를 돈다.
 YOLO를 켜는 순간에는 링 버퍼에 들고 있던 지난 프레임부터 먼저 돌린다 (06장 6.5 규칙 1, D-247).
 그리기는 탐지가 끝난 뒤 영상을 한 번 더 읽어 한다. MOG2와 YOLO는 다시 돌리지 않는다.
 
@@ -19,13 +20,33 @@ from typing import TextIO
 
 import cv2
 import numpy as np
+from trackers import ByteTrackTracker
 
-from pipeline.candidates.channel_a import ChannelA, ModelError, open_channel_a, process_frame
+from pipeline.candidates.blob_tracks import (
+    History,
+    attach_target,
+    blob_track_lines,
+    open_blob_tracker,
+    remember_positions,
+    track_boxes,
+)
+from pipeline.candidates.channel_a import (
+    ChannelA,
+    ModelError,
+    TrackBox,
+    open_channel_a,
+    process_frame,
+)
 from pipeline.candidates.channel_b import (
     MOG2_STABLE_SEC,
+    Blob,
+    Box,
+    boxes_for_tracker,
     clean_foreground,
     create_mog2,
     find_blobs,
+    group_blobs,
+    has_oversized_blob,
     has_roi_motion,
 )
 from pipeline.candidates.crop import CropError, crop_frame
@@ -64,6 +85,12 @@ TimedFrame = tuple[float, np.ndarray]
 # 이름표 한 개: (글, 왼쪽 위 좌표, BGR 색). preview.draw_labels가 받는 모양이다
 Label = tuple[str, tuple[int, int], tuple[int, int, int]]
 
+# ROI에 닿은 덩어리 하나의 붙이기 결과 (D-314, D-315). 파일에는 쓰지 않는다 (D-316 결정 3)
+ATTACHED = "붙음"  # 채널 A 트랙에 붙었다
+PASSED = "넘김"  # 붙을 트랙이 없어 채널 B 추적기에 넣는 사각형이 됐다
+SKIPPED = "건너뜀"  # MOG2 안정 전이거나 덩어리 상한에 걸려 넣지 않았다
+BLOB_STATUSES = (ATTACHED, PASSED, SKIPPED)
+
 # 트랙 색. 색상환(0~179)을 이 걸음으로 돌아 이웃 번호끼리 색이 멀어지게 한다
 _HUE_STEP = 47
 _TRACK_COLOR_VALUE = 190  # 흰 글씨가 읽히게 조금 어둡게 한다
@@ -79,6 +106,10 @@ class DetectResult:
     track_ids: set[int] = field(default_factory=set)  # 트랙 파일에 나온 트랙 번호
     roi_motion: list[bool] = field(default_factory=list)  # 분석 프레임마다의 ROI 움직임 여부
     duration_sec: float = 0.0  # 마지막 분석 프레임 시각
+    # ROI에 닿은 덩어리 수 (붙이기 결과별). 영상 전체를 더한 값이다
+    blob_counts: dict[str, int] = field(default_factory=lambda: dict.fromkeys(BLOB_STATUSES, 0))
+    # 클래스 없는 트랙 번호 → [처음 시각, 마지막 시각, 줄 수]
+    blob_tracks: dict[int, list] = field(default_factory=dict)
 
     @property
     def frame_count(self) -> int:
@@ -89,10 +120,51 @@ class DetectResult:
 # ---------- ① 탐지 ----------
 
 
-def _roi_motion(mog2: cv2.BackgroundSubtractorMOG2, small: np.ndarray, roi: Roi) -> bool:
-    """줄인 프레임 한 장을 MOG2에 넣고 ROI 움직임이 있는지 본다 (채널 B)."""
+def _find_frame_blobs(
+    mog2: cv2.BackgroundSubtractorMOG2, small: np.ndarray, roi: Roi
+) -> list[Blob]:
+    """줄인 프레임 한 장을 MOG2에 넣고 덩어리를 찾는다 (채널 B)."""
     binary = clean_foreground(mog2.apply(small))
-    return has_roi_motion(find_blobs(binary, roi.mask))
+    return find_blobs(binary, roi.mask)
+
+
+def judge_blobs(
+    blobs: list[Blob],
+    shape: tuple[int, ...],
+    time_sec: float,
+    tracks: list[TrackBox],
+    history: History,
+) -> tuple[list[str | None], list[Box]]:
+    """덩어리마다 붙이기 결과를 정하고, 채널 B 추적기에 넣을 사각형을 고른다.
+
+    결과 목록은 blobs와 자리가 같다. ROI에 닿지 않은 덩어리는 판정하지 않아 None이다 (D-314 결정 1).
+    """
+    if time_sec < MOG2_STABLE_SEC:
+        # 안정 전 전경은 믿을 수 없어 채널 B 추적기에 아무것도 넣지 않는다 (D-315 결정 4)
+        return [SKIPPED if blob.touches_roi else None for blob in blobs], []
+    statuses: list[str | None] = [None] * len(blobs)
+    attached: set[int] = set()
+    groups = group_blobs(blobs, shape)
+    for group in groups:
+        oversized = has_oversized_blob(blobs, group, shape)
+        for index in group:
+            if not blobs[index].touches_roi:
+                continue
+            if attach_target(blobs[index], tracks, history) is not None:
+                statuses[index] = ATTACHED
+                attached.add(index)
+            else:
+                # 상한에 걸린 묶음은 추적기에 넣지 않는다 (D-315 결정 3)
+                statuses[index] = SKIPPED if oversized else PASSED
+    return statuses, boxes_for_tracker(blobs, groups, attached, shape)
+
+
+def _count_blob_tracks(result: DetectResult, lines: list[dict]) -> None:
+    """클래스 없는 트랙마다 처음·마지막 시각과 줄 수를 센다 (터미널 요약용)."""
+    for line in lines:
+        entry = result.blob_tracks.setdefault(line["track_id"], [line["t"], line["t"], 0])
+        entry[1] = line["t"]
+        entry[2] += 1
 
 
 def _backfill_frames(ring: deque[TimedFrame], decision: Decision) -> list[TimedFrame]:
@@ -109,28 +181,51 @@ def _write_lines(tracks_file: TextIO, lines: list[dict]) -> None:
     tracks_file.writelines(json.dumps(line, ensure_ascii=False) + "\n" for line in lines)
 
 
-def detect(video_path: str, roi: Roi, channel: ChannelA, tracks_file: TextIO) -> DetectResult:
-    """영상을 처음부터 끝까지 한 번 읽으며 YOLO가 켜진 프레임의 트랙 줄을 파일에 쓴다."""
+def detect(
+    video_path: str,
+    roi: Roi,
+    channel: ChannelA,
+    blob_tracker: ByteTrackTracker,
+    tracks_file: TextIO,
+) -> DetectResult:
+    """영상을 처음부터 끝까지 한 번 읽으며 채널 A·B의 트랙 줄을 파일에 쓴다."""
     mog2 = create_mog2(SAMPLING_FPS)
+    history: History = {}
     switch = YoloSwitch()
     ring: deque[TimedFrame] = deque(maxlen=RING_FRAMES)
     result = DetectResult(ranges=switch.ranges)
     for frame in iter_analysis_frames(video_path):
         small = crop_frame(frame.image, roi.crop)
         # MOG2는 켜고 끄기와 상관없이 모든 프레임을 한 번씩만 본다 (D-192)
-        roi_motion = _roi_motion(mog2, small, roi)
+        blobs = _find_frame_blobs(mog2, small, roi)
+        roi_motion = has_roi_motion(blobs)
         decision = switch.step(frame.time_sec, roi_motion)
+        # 이 프레임의 확정된 채널 A 트랙. YOLO가 꺼진 프레임에는 없다.
+        # ROI 움직임이 있으면 YOLO를 반드시 돌리므로, 붙이기 판정에는 늘 이 프레임의 결과가 있다 (규칙 6)
+        tracks: list[TrackBox] = []
         if decision.run:
             # 거슬러 돌릴 프레임을 먼저, 지금 프레임을 마지막에. 추적기에는 시간순으로 넣어야 한다 (D-313)
             to_run = [*_backfill_frames(ring, decision), (frame.time_sec, small)]
             for time_sec, image in to_run:
-                lines = process_frame(channel, image, time_sec, roi.crop)
+                lines, tracks = process_frame(channel, image, time_sec, roi.crop)
                 _write_lines(tracks_file, lines)
+                # 거슬러 돌린 프레임의 위치도 적어야 켜자마자 멈춘 차를 알아본다 (D-314 결정 4)
+                remember_positions(history, time_sec, tracks)
                 result.track_ids.update(line["track_id"] for line in lines)
             # 방금 돌린 프레임은 모두 마지막 구간의 것이다. 새 구간이 열렸으면 칸을 만든다
             if len(result.yolo_frames) < len(switch.ranges):
                 result.yolo_frames.append(0)
             result.yolo_frames[-1] += len(to_run)
+        # 채널 B는 지금 프레임에만 한다. 거슬러 돌린 프레임에는 채널 A만 돈다 (규칙 1)
+        statuses, boxes = judge_blobs(blobs, small.shape, frame.time_sec, tracks, history)
+        for status in statuses:
+            if status is not None:
+                result.blob_counts[status] += 1
+        # 넣을 사각형이 없어도 매 프레임 불러야 사라진 트랙이 1초 뒤 끝난다 (D-315 결정 5)
+        tracked = track_boxes(blob_tracker, boxes)
+        blob_lines = blob_track_lines(tracked, frame.time_sec, roi.crop)
+        _write_lines(tracks_file, blob_lines)
+        _count_blob_tracks(result, blob_lines)
         ring.append((frame.time_sec, small))
         result.roi_motion.append(roi_motion)
         result.duration_sec = frame.time_sec
@@ -172,6 +267,20 @@ def print_summary(result: DetectResult) -> None:
         print(
             f"  {n:>3}  {_format_time(r.start_sec)} ~ {_format_time(r.end_sec)}  프레임 {count}장"
         )
+    print_blob_summary(result)
+
+
+def print_blob_summary(result: DetectResult) -> None:
+    """ROI 덩어리의 붙이기 결과와 클래스 없는 트랙 목록을 찍는다 (D-316 결정 3)."""
+    counts = result.blob_counts
+    line_total = sum(entry[2] for entry in result.blob_tracks.values())
+    print(
+        f"ROI 덩어리 {sum(counts.values())}개 "
+        f"({ATTACHED} {counts[ATTACHED]} · {PASSED} {counts[PASSED]} · {SKIPPED} {counts[SKIPPED]})"
+        f" / 클래스 없는 트랙 {len(result.blob_tracks)}개 (줄 {line_total}개)"
+    )
+    for track_id, (start_sec, end_sec, lines) in sorted(result.blob_tracks.items()):
+        print(f"  {track_id}  {_format_time(start_sec)} ~ {_format_time(end_sec)}  줄 {lines}개")
 
 
 # ---------- ③ 그리기 ----------
@@ -202,10 +311,12 @@ def draw_tracks(image: np.ndarray, lines: list[dict]) -> None:
 
 
 def _track_labels(lines: list[dict]) -> list[Label]:
-    """사각형 왼쪽 위에 붙이는 "번호 클래스 신뢰도" 이름표."""
+    """사각형 왼쪽 위에 붙이는 "번호 클래스 신뢰도" 이름표. 채널 B 줄은 번호뿐이다 (D-258)."""
     return [
         (
-            f"{line['track_id']} {line['cls']} {line['conf']:.2f}",
+            f"{line['track_id']} {line['cls']} {line['conf']:.2f}"
+            if "cls" in line
+            else str(line["track_id"]),
             (line["bbox"][0], max(line["bbox"][1] - _LABEL_GAP, 0)),
             _track_color(line["track_id"]),
         )
@@ -276,11 +387,12 @@ def make_track_preview(
     scenes = load_scenes(scenes_path) if scenes_path else []
     # 모델을 못 열면 영상을 읽기 전에 끝낸다
     channel = open_channel_a(Path(weights_path))
+    blob_tracker = open_blob_tracker()
 
     os.makedirs(out_dir, exist_ok=True)
     tracks_path = os.path.join(out_dir, "tracks.jsonl")
     with open(tracks_path, "w", encoding="utf-8") as tracks_file:
-        result = detect(video_path, roi, channel, tracks_file)
+        result = detect(video_path, roi, channel, blob_tracker, tracks_file)
 
     ranges_path = os.path.join(out_dir, "yolo_ranges.json")
     write_ranges(ranges_path, video_path, result)
