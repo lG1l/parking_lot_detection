@@ -227,7 +227,8 @@ def car_keys(
         # 안정 전 전경은 믿을 수 없어 전경을 쓰는 키 셋은 측정 불가다 (06장 6.5 구현 주의사항)
         keys.update(car_fg_px=None, car_front_fg=None, car_out_fg=None)
     elif pixels is not None:
-        fg_px = np.count_nonzero(overlap & (pixels.foreground | pixels.shadow))
+        # NumPy가 센 값은 NumPy 정수라 JSON으로 쓸 수 없다. 파이썬 정수로 바꾼다
+        fg_px = int(np.count_nonzero(overlap & (pixels.foreground | pixels.shadow)))
         if fg_px:
             keys["car_fg_px"] = fg_px
         # 분모는 기준 영역 전체 넓이다. bbox가 조금만 걸친 물체는 값이 작게 나온다 (D-321)
@@ -251,7 +252,7 @@ def car_keys(
         # 그 프레임의 내 차 영역이 없으면 영역 줄어듦을 잴 수 없다
         keys["car_lost_px"] = None
     else:
-        lost_px = np.count_nonzero(overlap & ~my_car)
+        lost_px = int(np.count_nonzero(overlap & ~my_car))
         if lost_px:
             keys["car_lost_px"] = lost_px
     return keys

@@ -1,4 +1,5 @@
 import dataclasses
+import json
 
 import numpy as np
 
@@ -138,7 +139,9 @@ MY_CAR = BASE.mask & ~_small_mask(10, 5, 15, 7)
 
 def test_차_영역_키_네_개를_손으로_센_값대로_잰다():
     assert np.count_nonzero(BASE.mask) == 100
-    assert car_keys(RIGHT_HALF, BASE, MY_CAR, PIXELS, stable=True) == {
+    keys = car_keys(RIGHT_HALF, BASE, MY_CAR, PIXELS, stable=True)
+    json.dumps(keys)  # 트랙 파일에 쓸 수 있는 값이어야 한다 (NumPy 정수면 여기서 실패한다)
+    assert keys == {
         "car_fg_px": 9,  # 전경 5 + 그림자 4
         "car_front_fg": 0.05,  # 아래쪽 전경 5칸 ÷ 기준 영역 100칸 (D-321)
         "car_out_fg": 0.02,  # bbox 밖 전경 1칸 ÷ bbox 밖 기준 영역 50칸

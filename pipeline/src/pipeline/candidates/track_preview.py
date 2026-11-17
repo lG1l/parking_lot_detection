@@ -123,6 +123,21 @@ _STATUS_COLORS = {ATTACHED: GREEN, PASSED: RED, SKIPPED: GRAY}
 _FED_BOX_LINE = 1  # 채널 B 추적기에 넣은 사각형 (얇은 흰 선)
 _BLOB_TRACK_LINE = 4  # 클래스 없는 트랙 (굵은 흰 선)
 
+# 내 차 영역 표시 (BGR). 앞 단계의 색(주황·하늘·자홍·노랑·초록·빨강·회색·흰색·파랑)과 겹치지 않게 골랐다
+BROWN = (40, 80, 140)  # 내 차 자리 (얇은 테두리)
+PURPLE = (200, 50, 140)  # 구간의 기준 영역 (테두리), 그 프레임의 내 차 영역 (옅은 칠)
+_CAR_SPOT_LINE = 1
+_BASE_REGION_LINE = 2
+_MY_CAR_ALPHA = 0.3  # 전경 칠(0.5)보다 옅게 해서 밑의 차와 전경 칠이 보이게 한다
+
+# 트랙 이름표 뒤에 붙이는 차 영역 키와 짧은 이름
+_CAR_KEY_NAMES = (
+    ("car_fg_px", "fg"),
+    ("car_front_fg", "fr"),
+    ("car_out_fg", "out"),
+    ("car_lost_px", "lost"),
+)
+
 
 @dataclass(frozen=True)
 class BlobFrame:
@@ -153,6 +168,9 @@ class DetectResult:
     # 클래스 없는 트랙 번호 → [처음 시각, 마지막 시각, 줄 수]
     blob_tracks: dict[int, list] = field(default_factory=dict)
     blob_frames: list[BlobFrame] = field(default_factory=list)  # 분석 프레임마다의 채널 B 결과
+    # YOLO를 돌린 프레임의 시각(소수 셋째 자리) → 그 프레임 내 차 영역의 테두리 (원본 좌표).
+    # 내 차를 찾지 못한 프레임은 None이다. 확인용 영상과 터미널 요약에 쓴다
+    my_car: dict[float, list[np.ndarray] | None] = field(default_factory=dict)
 
     @property
     def frame_count(self) -> int:
@@ -311,6 +329,9 @@ def detect(
                 lines, tracks, vehicle_masks = process_frame(channel, image, time_sec, roi.crop)
                 # 기준 영역은 구간의 첫 프레임에서 한 번만 만든다 (D-259). 이어 붙은 구간은 다시 만들지 않는다
                 my_car = _my_car(vehicle_masks, spot)
+                result.my_car[round(time_sec, 3)] = (
+                    None if my_car is None else roi_contours(my_car.astype(np.uint8), roi.crop)
+                )
                 if new_range and index == 0:
                     polygons = [] if my_car is None else region_polygons(my_car)
                     result.car_regions.append(polygons)
@@ -390,6 +411,17 @@ def print_summary(result: DetectResult) -> None:
             f"  {n:>3}  {_format_time(r.start_sec)} ~ {_format_time(r.end_sec)}  프레임 {count}장"
         )
     print_blob_summary(result)
+    print_car_summary(result)
+
+
+def print_car_summary(result: DetectResult) -> None:
+    """내 차를 찾지 못한 프레임 수와 기준 영역이 빈 구간 수를 한 줄로 찍는다."""
+    not_found = sum(contours is None for contours in result.my_car.values())
+    empty = sum(not polygons for polygons in result.car_regions)
+    print(
+        f"내 차 영역: YOLO 프레임 {len(result.my_car)}장 가운데 찾지 못함 {not_found}장"
+        f" / 기준 영역이 빈 구간 {empty}개 (구간 {len(result.car_regions)}개)"
+    )
 
 
 def print_blob_summary(result: DetectResult) -> None:
@@ -460,13 +492,45 @@ def draw_blob_frame(image: np.ndarray, blob_frame: BlobFrame) -> np.ndarray:
     return image
 
 
+def draw_my_car(image: np.ndarray, contours: list[np.ndarray] | None) -> np.ndarray:
+    """그 프레임의 내 차 영역을 보라로 옅게 칠한 새 그림을 돌려준다. 없으면 그대로 돌려준다."""
+    if not contours:
+        return image
+    layer = image.copy()
+    cv2.fillPoly(layer, contours, PURPLE)
+    return cv2.addWeighted(layer, _MY_CAR_ALPHA, image, 1 - _MY_CAR_ALPHA, 0)
+
+
+def _base_contours(result: DetectResult, crop: Crop) -> list[list[np.ndarray]]:
+    """구간마다의 기준 영역 테두리 (원본 좌표). 파일에 쓴 다각형을 그대로 옮긴다."""
+    return [
+        [_blob_to_original(np.array(polygon), crop) for polygon in polygons]
+        for polygons in result.car_regions
+    ]
+
+
+def _car_key_text(line: dict) -> str:
+    """트랙 줄의 차 영역 키를 "fg2650 fr0.05 lost2410"처럼 쓴다. 없는 키는 빼고 null은 "-"다."""
+    return "".join(
+        f" {name}{'-' if line[key] is None else line[key]}"
+        for key, name in _CAR_KEY_NAMES
+        if key in line
+    )
+
+
 def _track_labels(lines: list[dict]) -> list[Label]:
-    """사각형 왼쪽 위에 붙이는 "번호 클래스 신뢰도" 이름표. 채널 B 줄은 번호뿐이다 (D-258)."""
+    """사각형 왼쪽 위에 붙이는 "번호 클래스 신뢰도" 이름표. 채널 B 줄은 번호뿐이다 (D-258).
+
+    차 영역 키가 있으면 뒤에 붙인다.
+    """
     return [
         (
-            str(line["track_id"])
-            if _is_blob_track(line)
-            else f"{line['track_id']} {line['cls']} {line['conf']:.2f}",
+            (
+                str(line["track_id"])
+                if _is_blob_track(line)
+                else f"{line['track_id']} {line['cls']} {line['conf']:.2f}"
+            )
+            + _car_key_text(line),
             (line["bbox"][0], max(line["bbox"][1] - _LABEL_GAP, 0)),
             # 이름표 글씨가 흰색이라 클래스 없는 트랙은 어두운 바탕에 쓴다
             DARK if _is_blob_track(line) else _track_color(line["track_id"]),
@@ -487,11 +551,16 @@ def _frame_labels(
     blob_frame: BlobFrame,
     ranges: list[YoloRange],
     scenes: list[Scene],
+    my_car: dict[float, list[np.ndarray] | None],
 ) -> list[Label]:
     """왼쪽 위 시각 아래에 한 줄씩 쌓는 이름표."""
     texts = []
     if _range_at(ranges, time_sec) is not None:
         texts.append(("YOLO 켜짐", GREEN))
+    # YOLO를 돌린 프레임에만 쓴다. 꺼진 프레임에는 내 차를 찾아보지 않았다
+    if round(time_sec, 3) in my_car:
+        found = my_car[round(time_sec, 3)] is not None
+        texts.append(("내 차 찾음" if found else "내 차 찾지 못함", PURPLE))
     if roi_motion:
         texts.append(("ROI 움직임", RED))
         texts.append((_blob_count_text(blob_frame), DARK))
@@ -507,6 +576,7 @@ def render(
     video_path: str,
     out_video: str,
     roi: Roi,
+    spot: CarSpot | None,
     result: DetectResult,
     tracks: dict[float, list[dict]],
     scenes: list[Scene],
@@ -516,6 +586,8 @@ def render(
     width, height = size
     contours = roi_contours(roi.mask, roi.crop)
     zone_labels = _zone_labels(roi, contours)
+    spot_contours = [] if spot is None else roi_contours(spot.mask.astype(np.uint8), roi.crop)
+    base_contours = _base_contours(result, roi.crop)
     # 시간 막대 둘째 줄의 빨간 칸이 ROI 움직임 구간, 셋째 줄의 초록 칸이 YOLO 구간이다
     records = [
         FrameRecord(time_sec, roi_motion, [])
@@ -536,10 +608,19 @@ def render(
         # 덩어리 칠을 먼저 해야 그 위의 트랙 사각형과 영역 선이 흐려지지 않는다
         image = draw_blob_frame(frame.image, blob_frame)
         # 트랙 줄의 t는 소수 셋째 자리까지라 같은 자리로 맞춰 찾는다 (04장 4.8)
-        lines = tracks.get(round(frame.time_sec, 3), [])
+        time_key = round(frame.time_sec, 3)
+        image = draw_my_car(image, result.my_car.get(time_key))
+        lines = tracks.get(time_key, [])
         draw_tracks(image, lines)
         draw_zones(image, roi, contours)
-        frame_labels = _frame_labels(frame.time_sec, roi_motion, blob_frame, result.ranges, scenes)
+        cv2.polylines(image, spot_contours, True, BROWN, _CAR_SPOT_LINE)
+        # 기준 영역은 그 프레임이 속한 YOLO 구간의 것을 그린다. 구간 밖 프레임에는 없다
+        range_number = _range_at(result.ranges, frame.time_sec)
+        if range_number is not None:
+            cv2.polylines(image, base_contours[range_number - 1], True, PURPLE, _BASE_REGION_LINE)
+        frame_labels = _frame_labels(
+            frame.time_sec, roi_motion, blob_frame, result.ranges, scenes, result.my_car
+        )
         image = draw_labels(image, zone_labels + _track_labels(lines) + frame_labels)
         _draw_time(image, frame.index, frame.time_sec)
         attach_timeline(image, timeline, frame.time_sec, result.duration_sec)
@@ -574,7 +655,7 @@ def make_track_preview(
 
     out_video = os.path.join(out_dir, "tracks.mp4")
     tracks = load_tracks(tracks_path)
-    count = render(video_path, out_video, roi, result, tracks, scenes, (width, height))
+    count = render(video_path, out_video, roi, spot, result, tracks, scenes, (width, height))
     print(f"확인용 영상: {out_video} ({count}장, {SAMPLING_FPS}fps)")
 
 
