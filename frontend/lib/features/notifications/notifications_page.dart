@@ -42,8 +42,13 @@ class _Person {
   final List<VideoCase> cases;
   final ChatPeer? peer;
 
-  /// 목록에 보일 가장 최근 시각. 사건이 있으면 연결 시각, 없으면 마지막 메시지 시각이다.
-  String? get latestAt => cases.isNotEmpty ? cases.last.createdAt : peer?.lastMessage?.createdAt;
+  /// 목록에 보일 가장 최근 시각. 가장 최근 사건의 연결 시각과 마지막 메시지 시각 중 늦은 쪽이다 (C-19 ⑦).
+  /// 새 메시지가 오면 시각이 바뀌고 줄이 위로 올라온다.
+  String? get latestAt {
+    final times = [if (cases.isNotEmpty) cases.last.createdAt, ?peer?.lastMessage?.createdAt];
+    if (times.isEmpty) return null;
+    return times.reduce((a, b) => DateTime.parse(a).isAfter(DateTime.parse(b)) ? a : b);
+  }
 }
 
 class _NotificationsPageState extends ConsumerState<NotificationsPage> {
@@ -282,7 +287,9 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     bool first(_Person p) => p.cases.any(_needsAction);
     return people..sort((a, b) {
       if (first(a) != first(b)) return first(a) ? -1 : 1;
-      return (b.latestAt ?? '').compareTo(a.latestAt ?? '');
+      final at = a.latestAt, bt = b.latestAt;
+      if (at == null || bt == null) return at == null ? (bt == null ? 0 : 1) : -1;
+      return DateTime.parse(bt).compareTo(DateTime.parse(at));
     });
   }
 
