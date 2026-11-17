@@ -15,6 +15,7 @@ import numpy as np
 
 from pipeline.candidates.car_region import draw_region
 from pipeline.candidates.crop import Crop, CropError, to_reduced
+from pipeline.candidates.filter_preview import PreviewError, TrackMark, make_filter_preview
 from pipeline.candidates.floor_map import (
     CAR_END_M,
     CAR_OUT_M,
@@ -85,6 +86,7 @@ FRONT_RUN_SEC = 0.5  # 가린 프레임이 이만큼 연속이어야 한다
 CROSSED_RUN_SEC = 0.5  # 손이 닿는 구역 안에 이만큼 연속으로 있었으면 건너편으로 넘어간 것이다
 
 TRACKS_FILE = "tracks.jsonl"
+VIDEO_FILE = "tracks.mp4"  # 5-가와 5-나의 확인용 영상 이름이 같다
 RANGES_FILE = "yolo_ranges.json"
 EXCLUDED_FILE = "excluded.jsonl"
 REPORT_FILE = "filter_report.jsonl"
@@ -502,10 +504,15 @@ def run_track_filter(
 
     by_time = load_tracks(str(Path(tracks_dir) / TRACKS_FILE))
     report = []
+    marks = {}
     for track_id, lines in sorted(group_tracks(by_time).items()):
         cls = track_class([line.get("cls") for line in lines])
         frames = track_frames(lines, cls, by_time, scene)
-        report.append(report_line(track_id, cls, frames, *judge(lines, cls, frames, scene)))
+        rules, kept_by = judge(lines, cls, frames, scene)
+        report.append(report_line(track_id, cls, frames, rules, kept_by))
+        person_like = cls in PERSON_LIKE if cls in PERSON_LIKE + CAR_LIKE else None
+        visible = {f.t for f in frames if f.visible}
+        marks[track_id] = TrackMark(rules, RULE_NO_ROI not in rules, person_like, visible)
 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -526,6 +533,22 @@ def run_track_filter(
         f" · 남음 {len(report) - len(excluded)} · {trust_text(measured)}"
     )
 
+    if make_video:
+        out_video = out / VIDEO_FILE
+        count = make_filter_preview(
+            video_path,
+            str(Path(tracks_dir) / VIDEO_FILE),
+            str(out_video),
+            by_time,
+            marks,
+            # 바닥 지도를 믿지 않으면 필터가 꺼져 있으므로 구역과 거리 선을 그리지 않는다 (D-329)
+            scene.floor_map if scene.trusted else None,
+            scene.damage_edges,
+            scene.far_edges,
+            trust_text(measured),
+        )
+        print(f"확인용 영상: {out_video} ({count}장, {SAMPLING_FPS}fps)")
+
 
 if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if a != "--no-video"]
@@ -537,6 +560,6 @@ if __name__ == "__main__":
         sys.exit(2)
     try:
         run_track_filter(*args, make_video="--no-video" not in sys.argv)
-    except (InputError, CropError, RoiError, FileNotFoundError) as e:
+    except (InputError, CropError, RoiError, PreviewError, FileNotFoundError) as e:
         print(f"오류: {e}")
         sys.exit(1)

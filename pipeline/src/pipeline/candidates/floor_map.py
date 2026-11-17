@@ -87,11 +87,8 @@ def to_screen(floor_map: FloorMap, point: FloorPoint) -> Point | None:
     return (x / w, y / w)
 
 
-def edge_coords(floor_map: FloorMap, point: FloorPoint, edge: int) -> tuple[float, float]:
-    """바닥 위치를 변 edge 기준으로 읽는다: (변을 따라 시작 모서리에서 간 거리, 변에서 바깥으로 나간 거리) m.
-
-    바깥 거리가 음수면 변의 안쪽(내 차 바닥과 그 너머)이다.
-    """
+def _edge_axes(floor_map: FloorMap, edge: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """변 edge의 (시작 모서리, 변을 따라가는 방향, 바깥 방향). 두 방향은 길이 1이다."""
     start = floor_map.corners[edge]
     end = floor_map.corners[(edge + 1) % 4]
     along = (end - start) / np.linalg.norm(end - start)
@@ -99,8 +96,30 @@ def edge_coords(floor_map: FloorMap, point: FloorPoint, edge: int) -> tuple[floa
     out = np.array([along[1], -along[0]])
     if np.dot(out, floor_map.corners.mean(axis=0) - start) > 0:
         out = -out
+    return start, along, out
+
+
+def edge_coords(floor_map: FloorMap, point: FloorPoint, edge: int) -> tuple[float, float]:
+    """바닥 위치를 변 edge 기준으로 읽는다: (변을 따라 시작 모서리에서 간 거리, 변에서 바깥으로 나간 거리) m.
+
+    바깥 거리가 음수면 변의 안쪽(내 차 바닥과 그 너머)이다.
+    """
+    start, along, out = _edge_axes(floor_map, edge)
     offset = np.array(point) - start
     return float(np.dot(offset, along)), float(np.dot(offset, out))
+
+
+def edge_point(floor_map: FloorMap, edge: int, along_m: float, out_m: float) -> FloorPoint:
+    """edge_coords의 반대: 변 edge 기준 (변을 따라 간 거리, 바깥으로 나간 거리)를 바닥 위치로 바꾼다."""
+    start, along, out = _edge_axes(floor_map, edge)
+    point = start + along * along_m + out * out_m
+    return float(point[0]), float(point[1])
+
+
+def nearest_on_edge(floor_map: FloorMap, point: FloorPoint, edge: int) -> FloorPoint:
+    """변 edge(선분) 위에서 바닥 위치 point에 가장 가까운 점. 확인용 영상의 거리 선 끝점이다."""
+    along, _ = edge_coords(floor_map, point, edge)
+    return edge_point(floor_map, edge, min(max(along, 0.0), edge_length(floor_map, edge)), 0.0)
 
 
 def edge_length(floor_map: FloorMap, edge: int) -> float:
@@ -125,7 +144,7 @@ def in_strip(floor_map: FloorMap, point: FloorPoint, edge: int, out_m: float, en
     return -end_m <= along <= edge_length(floor_map, edge) + end_m and 0 <= out <= out_m
 
 
-def _segment_points(a: FloorPoint, b: FloorPoint) -> list[FloorPoint]:
+def segment_points(a: FloorPoint, b: FloorPoint) -> list[FloorPoint]:
     """바닥의 선분 a–b를 촘촘한 점으로 나눈다. 화면의 직선은 바닥에서도 직선이라 양 끝점만 바꿔 오면 된다."""
     return [
         (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
@@ -137,12 +156,12 @@ def segment_in_strip(
     floor_map: FloorMap, a: FloorPoint, b: FloorPoint, edge: int, out_m: float, end_m: float
 ) -> bool:
     """바닥의 선분 a–b가 일부라도 변 edge의 띠 안에 있는지. 차의 bbox 아래 변에 쓴다 (D-330)."""
-    return any(in_strip(floor_map, p, edge, out_m, end_m) for p in _segment_points(a, b))
+    return any(in_strip(floor_map, p, edge, out_m, end_m) for p in segment_points(a, b))
 
 
 def segment_distance(floor_map: FloorMap, a: FloorPoint, b: FloorPoint, edge: int) -> float:
     """바닥의 선분 a–b에서 변 edge까지의 가장 짧은 거리 (m). 차의 bbox 아래 변에 쓴다 (D-325)."""
-    return min(distance_to_edge(floor_map, p, edge) for p in _segment_points(a, b))
+    return min(distance_to_edge(floor_map, p, edge) for p in segment_points(a, b))
 
 
 def _trust_point(floor_map: FloorMap, edge: int) -> Point | None:
