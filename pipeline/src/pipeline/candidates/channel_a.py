@@ -129,6 +129,11 @@ def track_lines(
 def process_frame(
     channel: ChannelA, reduced: np.ndarray, time_sec: float, crop: Crop
 ) -> list[dict]:
-    """줄인 프레임 한 장을 탐지·추적해 그 프레임의 트랙 줄들을 돌려준다."""
-    tracked = channel.tracker.update(detect(channel, reduced))
+    """줄인 프레임 한 장을 탐지·추적해 그 프레임의 트랙 줄들을 돌려준다.
+
+    프레임은 시간순으로 넣는다. 앞선 시각을 넣으면 추적기가 그 프레임을 건너뛴다.
+    """
+    # 시각을 줘서 YOLO가 꺼져 있던 시간만큼 추적기도 시간이 흐르게 한다 (D-313).
+    # 주지 않으면 호출 1번을 1프레임으로 세어, 공백 뒤 같은 자리에 온 다른 물체가 앞 번호를 이어받는다
+    tracked = channel.tracker.update(detect(channel, reduced), timestamp=time_sec)
     return track_lines(tracked, channel.model.names, time_sec, crop)
