@@ -26,6 +26,7 @@ from pipeline.candidates.floor_map import (
     distance_to_edge,
     edge_coords,
     in_strip,
+    is_trusted,
     segment_distance,
     segment_in_strip,
     to_floor,
@@ -36,6 +37,7 @@ from pipeline.candidates.inputs import InputError, load_input
 from pipeline.candidates.preview import video_size
 from pipeline.candidates.roi import Roi, RoiError, build_roi, camera_side_edges
 from pipeline.candidates.track_preview import load_tracks
+from pipeline.candidates.video import SAMPLING_FPS
 
 # 06장 "물체 종류별 구역과 기준 거리": 어느 기준으로 재는지 (D-196, D-245)
 PERSON_LIKE = (  # 바닥점 = bbox 아래 변의 가운데. 새를 뺀 동물은 사람과 같은 기준을 쓴다
@@ -59,8 +61,16 @@ KEEP_ON_TIE = ("truck", "bus")
 # 바닥점 닿음 여유: 분석 크롭 짧은 변의 이 비율 이하로 가까우면 닿은 것이다 (시작값, D-256)
 TOUCH_RATIO = 0.01
 
+# 가장 가까운 순간의 앞과 뒤로 이만큼을 "그 앞뒤"로 본다. 차 앞 트랙 빼기의 연속 시간과 같은 길이다 (D-332 나-1)
+NEAR_WINDOW_SEC = 0.5
+
+# 제외 기록에 쓰는 규칙 이름 (04장 4.8, D-331)
+RULE_NO_ROI = "ROI 미접촉"
+RULE_FLOOR = "바닥점 필터"
+
 TRACKS_FILE = "tracks.jsonl"
 RANGES_FILE = "yolo_ranges.json"
+EXCLUDED_FILE = "excluded.jsonl"
 REPORT_FILE = "filter_report.jsonl"
 
 _TIME_EPS = 1e-6
@@ -78,6 +88,7 @@ class Frame:
         float | None
     )  # 바닥점에서 파손 변까지의 거리. 재지 않는 종류이거나 바닥 지도 바깥이면 None
     in_zone: bool  # 손이 닿는 구역 안인지
+    on_region: bool  # bbox 아래 변이 기준 영역에 닿았는지. 기준 영역이 없는 구간이면 True다
 
 
 @dataclass(frozen=True)
@@ -89,6 +100,7 @@ class Scene:
     damage_edges: list[int]
     far_edges: list[int]  # 건너편 변 (카메라 쪽 변이 아닌 변)
     regions: list[tuple[float, float, np.ndarray | None]]  # YOLO 구간의 (시작, 끝, 기준 영역)
+    trusted: bool  # 바닥 지도를 믿을 수 있는지 (D-329)
 
 
 def group_tracks(by_time: dict[float, list[dict]]) -> dict[int, list[dict]]:
@@ -133,6 +145,12 @@ def touches_edge(box: Box, size: tuple[int, int], margin: float) -> bool:
     """bbox 아래 변이 분석 크롭 가장자리에 닿았는지. size는 줄인 프레임 (폭, 높이)다."""
     x1, _, x2, y2 = box
     return x1 <= margin or x2 >= size[0] - margin or y2 <= margin or y2 >= size[1] - margin
+
+
+def cut_by_edge(box: Box, size: tuple[int, int], margin: float) -> bool:
+    """bbox의 네 변 가운데 하나라도 분석 크롭 가장자리에 닿았는지. 화면에 들어오고 나가는 트랙을 가린다."""
+    x1, y1, x2, y2 = box
+    return x1 <= margin or y1 <= margin or x2 >= size[0] - margin or y2 >= size[1] - margin
 
 
 def touches_box(box: Box, other: Box, margin: float) -> bool:
@@ -232,15 +250,84 @@ def track_frames(
             if other["track_id"] != line["track_id"]
         ]
         dist, in_zone = measure(line["bbox"], cls, scene)
-        shown = floor_point_visible(
-            reduced_box(line["bbox"], crop), others, _region_at(scene, line["t"]), crop.reduced_size
-        )
+        box = reduced_box(line["bbox"], crop)
+        region = _region_at(scene, line["t"])
+        shown = floor_point_visible(box, others, region, crop.reduced_size)
+        on_region = touches_region(box, region, min(crop.reduced_size) * TOUCH_RATIO)
         # 바닥 지도 바깥이라 거리를 못 잰 프레임은 바닥점이 안 보인 것으로 친다 (06장 "바닥 지도 바깥")
-        frames.append(Frame(line["t"], shown and dist is not None, dist, in_zone))
+        frames.append(Frame(line["t"], shown and dist is not None, dist, in_zone, on_region))
     return frames
 
 
-def report_line(track_id: int, cls: str | None, roi_touch: bool, frames: list[Frame]) -> dict:
+def seen_near_closest(frames: list[Frame]) -> bool | None:
+    """조건 1: 가장 가까운 순간과 그 앞뒤로 바닥점이 보였는지 (D-332 나-1). 거리를 잰 프레임이 없으면 None.
+
+    가장 가까운 순간은 가려졌는지와 상관없이 거리가 가장 작은 프레임이다.
+    """
+    measured = [f for f in frames if f.dist_m is not None]
+    if not measured:
+        return None
+    closest = min(measured, key=lambda f: f.dist_m)
+    near = [f for f in frames if abs(f.t - closest.t) <= NEAR_WINDOW_SEC + _TIME_EPS]
+    return all(f.visible for f in near)
+
+
+def _normal_end(line: dict, range_times: list[float], scene: Scene) -> bool:
+    """트랙의 첫 줄이나 마지막 줄이 정상인지: bbox가 분석 크롭 가장자리에 닿았거나 YOLO 구간의 경계에 있다."""
+    size = scene.roi.crop.reduced_size
+    if cut_by_edge(reduced_box(line["bbox"], scene.roi.crop), size, min(size) * TOUCH_RATIO):
+        return True
+    # YOLO가 켜지거나 꺼진 순간이면 트랙이 끊긴 것이 아니다. 분석 프레임 한 칸까지는 같은 순간으로 본다
+    one_frame = 1 / SAMPLING_FPS
+    return any(abs(line["t"] - t) <= one_frame + _TIME_EPS for t in range_times)
+
+
+def seen_whole(lines: list[dict], scene: Scene) -> bool:
+    """조건 2: 처음부터 끝까지 한 물체로 봤는지 (D-332 나-2). 시작이나 끝이 정상이 아니면 끊긴 트랙이다."""
+    starts = [start for start, _, _ in scene.regions]
+    ends = [end for _, end, _ in scene.regions]
+    return _normal_end(lines[0], starts, scene) and _normal_end(lines[-1], ends, scene)
+
+
+def floor_filter_keeps(
+    lines: list[dict], cls: str | None, frames: list[Frame], scene: Scene
+) -> list[str]:
+    """바닥점 필터에서 이 트랙을 남기는 이유들 (06장 "빼는 조건"). 비어 있으면 다섯 조건을 모두 만족해 뺀다."""
+    if not scene.trusted:
+        return ["조건 5: 바닥 지도 믿지 않음"]
+    if cls not in PERSON_LIKE and cls not in CAR_LIKE:
+        return ["거리를 재지 않는 종류"]
+    seen = seen_near_closest(frames)
+    if seen is None:
+        return ["거리를 잰 프레임 없음"]
+    keeps = []
+    if not seen:
+        keeps.append("조건 1: 가장 가까운 순간 앞뒤로 바닥점 안 보임")
+    if not seen_whole(lines, scene):
+        keeps.append("조건 2: 끊긴 트랙")
+    if any(f.in_zone for f in frames):
+        keeps.append("조건 3: 구역 안")
+    if any(f.on_region for f in frames):
+        keeps.append("조건 4: 내 차에 가려짐")
+    return keeps
+
+
+def judge(lines: list[dict], cls: str | None, frames: list[Frame], scene: Scene) -> tuple:
+    """트랙에 걸린 규칙 이름 목록과, 규칙마다 남긴 이유를 낸다.
+
+    ROI 자격이 없는 트랙에는 다른 규칙을 적용하지 않는다.
+    """
+    if not touches_roi(lines, scene.roi):
+        return [RULE_NO_ROI], {}
+    keeps = floor_filter_keeps(lines, cls, frames, scene)
+    if not keeps:
+        return [RULE_FLOOR], {}
+    return [], {RULE_FLOOR: ", ".join(keeps)}
+
+
+def report_line(
+    track_id: int, cls: str | None, frames: list[Frame], rules: list[str], kept_by: dict[str, str]
+) -> dict:
     """filter_report.jsonl의 한 줄 (D-332 가-3)."""
     dists = [f.dist_m for f in frames if f.dist_m is not None]
     return {
@@ -249,11 +336,11 @@ def report_line(track_id: int, cls: str | None, roi_touch: bool, frames: list[Fr
         "frames": len(frames),
         "start_sec": frames[0].t,
         "end_sec": frames[-1].t,
-        "roi_touch": roi_touch,
+        "roi_touch": RULE_NO_ROI not in rules,
         "min_dist_m": round(min(dists), 2) if dists else None,
         "zone_frames": sum(f.in_zone for f in frames),
-        "rules": [],
-        "kept_by": {},
+        "rules": rules,
+        "kept_by": kept_by,
     }
 
 
@@ -292,6 +379,7 @@ def run_track_filter(
         data.damage_edges,
         [e for e in range(len(data.floor_corners)) if e not in near_edges],
         _load_regions(Path(tracks_dir) / RANGES_FILE, roi.crop),
+        is_trusted(measured),
     )
 
     by_time = load_tracks(str(Path(tracks_dir) / TRACKS_FILE))
@@ -299,7 +387,7 @@ def run_track_filter(
     for track_id, lines in sorted(group_tracks(by_time).items()):
         cls = track_class([line.get("cls") for line in lines])
         frames = track_frames(lines, cls, by_time, scene)
-        report.append(report_line(track_id, cls, touches_roi(lines, roi), frames))
+        report.append(report_line(track_id, cls, frames, *judge(lines, cls, frames, scene)))
 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -307,9 +395,17 @@ def run_track_filter(
     for name in (TRACKS_FILE, RANGES_FILE):
         shutil.copyfile(Path(tracks_dir) / name, out / name)
     _write_jsonl(out / REPORT_FILE, report)
+    # 제외 기록은 매번 전체를 새로 쓴다. 뺀 트랙이 없어도 빈 파일을 쓴다 (D-331)
+    excluded = [
+        {"track_id": line["track_id"], "rules": line["rules"]} for line in report if line["rules"]
+    ]
+    _write_jsonl(out / EXCLUDED_FILE, excluded)
 
-    no_roi = sum(not line["roi_touch"] for line in report)
-    print(f"트랙 {len(report)} · ROI 미접촉 {no_roi} · {trust_text(measured)}")
+    counts = Counter(rule for line in excluded for rule in line["rules"])
+    print(
+        f"트랙 {len(report)} · {RULE_NO_ROI} {counts[RULE_NO_ROI]} · {RULE_FLOOR} {counts[RULE_FLOOR]}"
+        f" · 남음 {len(report) - len(excluded)} · {trust_text(measured)}"
+    )
 
 
 if __name__ == "__main__":
