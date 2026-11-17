@@ -49,13 +49,16 @@ from pipeline.candidates.channel_b import (
     has_oversized_blob,
     has_roi_motion,
 )
-from pipeline.candidates.crop import CropError, crop_frame
+from pipeline.candidates.crop import Crop, CropError, crop_frame, to_original
 from pipeline.candidates.inputs import InputError, load_input
 from pipeline.candidates.motion_preview import (
+    _BLOB_ALPHA,
     _LABEL_GAP,
+    DARK,
     GRAY,
     SCENE_BLUE,
     Scene,
+    _blob_to_original,
     _range_at,
     _scene_at,
     _zone_labels,
@@ -65,7 +68,9 @@ from pipeline.candidates.motion_preview import (
     make_timeline,
 )
 from pipeline.candidates.preview import (
+    GREEN,
     RED,
+    WHITE,
     _draw_time,
     _format_time,
     draw_labels,
@@ -96,6 +101,20 @@ _HUE_STEP = 47
 _TRACK_COLOR_VALUE = 190  # 흰 글씨가 읽히게 조금 어둡게 한다
 _TRACK_LINE = 2
 
+# 붙이기 결과별 덩어리 칠 색 (BGR)
+_STATUS_COLORS = {ATTACHED: GREEN, PASSED: RED, SKIPPED: GRAY}
+_FED_BOX_LINE = 1  # 채널 B 추적기에 넣은 사각형 (얇은 흰 선)
+_BLOB_TRACK_LINE = 4  # 클래스 없는 트랙 (굵은 흰 선)
+
+
+@dataclass(frozen=True)
+class BlobFrame:
+    """분석 프레임 한 장의 채널 B 결과. 확인용 영상에 그릴 때만 쓴다. 좌표는 원본 기준이다."""
+
+    # ROI에 닿은 덩어리마다 (바깥 테두리, 붙이기 결과)
+    blobs: list[tuple[np.ndarray, str]]
+    boxes: list[Box]  # 채널 B 추적기에 넣은 사각형
+
 
 @dataclass
 class DetectResult:
@@ -110,6 +129,7 @@ class DetectResult:
     blob_counts: dict[str, int] = field(default_factory=lambda: dict.fromkeys(BLOB_STATUSES, 0))
     # 클래스 없는 트랙 번호 → [처음 시각, 마지막 시각, 줄 수]
     blob_tracks: dict[int, list] = field(default_factory=dict)
+    blob_frames: list[BlobFrame] = field(default_factory=list)  # 분석 프레임마다의 채널 B 결과
 
     @property
     def frame_count(self) -> int:
@@ -157,6 +177,24 @@ def judge_blobs(
                 # 상한에 걸린 묶음은 추적기에 넣지 않는다 (D-315 결정 3)
                 statuses[index] = SKIPPED if oversized else PASSED
     return statuses, boxes_for_tracker(blobs, groups, attached, shape)
+
+
+def _box_to_original(box: Box, crop: Crop) -> Box:
+    x1, y1 = to_original((box[0], box[1]), crop)
+    x2, y2 = to_original((box[2], box[3]), crop)
+    return (round(x1), round(y1), round(x2), round(y2))
+
+
+def _blob_frame(
+    blobs: list[Blob], statuses: list[str | None], boxes: list[Box], crop: Crop
+) -> BlobFrame:
+    """그릴 때 쓸 것만 원본 좌표로 바꿔 남긴다. 덩어리 마스크는 들고 가지 않는다."""
+    drawn = [
+        (_blob_to_original(blob.contour, crop), status)
+        for blob, status in zip(blobs, statuses, strict=True)
+        if status is not None
+    ]
+    return BlobFrame(drawn, [_box_to_original(box, crop) for box in boxes])
 
 
 def _count_blob_tracks(result: DetectResult, lines: list[dict]) -> None:
@@ -221,6 +259,7 @@ def detect(
         for status in statuses:
             if status is not None:
                 result.blob_counts[status] += 1
+        result.blob_frames.append(_blob_frame(blobs, statuses, boxes, roi.crop))
         # 넣을 사각형이 없어도 매 프레임 불러야 사라진 트랙이 1초 뒤 끝난다 (D-315 결정 5)
         tracked = track_boxes(blob_tracker, boxes)
         blob_lines = blob_track_lines(tracked, frame.time_sec, roi.crop)
@@ -303,29 +342,63 @@ def _track_color(track_id: int) -> tuple[int, int, int]:
     return int(b), int(g), int(r)
 
 
+def _is_blob_track(line: dict) -> bool:
+    """클래스 없는 트랙 줄인가. 클래스가 없는 줄이 채널 B 줄이다 (D-257)."""
+    return "cls" not in line
+
+
 def draw_tracks(image: np.ndarray, lines: list[dict]) -> None:
-    """트랙 사각형을 그린다 (image를 직접 고친다). bbox는 원본 좌표라 그대로 쓴다."""
+    """트랙 사각형을 그린다 (image를 직접 고친다). bbox는 원본 좌표라 그대로 쓴다.
+
+    채널 A 트랙은 번호마다 다른 색 선, 클래스 없는 트랙은 굵은 흰 선이다.
+    """
     for line in lines:
         x1, y1, x2, y2 = line["bbox"]
-        cv2.rectangle(image, (x1, y1), (x2, y2), _track_color(line["track_id"]), _TRACK_LINE)
+        if _is_blob_track(line):
+            cv2.rectangle(image, (x1, y1), (x2, y2), WHITE, _BLOB_TRACK_LINE)
+        else:
+            cv2.rectangle(image, (x1, y1), (x2, y2), _track_color(line["track_id"]), _TRACK_LINE)
+
+
+def draw_blob_frame(image: np.ndarray, blob_frame: BlobFrame) -> np.ndarray:
+    """ROI 덩어리를 붙이기 결과 색으로 반투명하게 칠하고, 추적기에 넣은 사각형을 얇은 흰 선으로 그린다."""
+    if blob_frame.blobs:
+        layer = image.copy()
+        for contour, status in blob_frame.blobs:
+            cv2.fillPoly(layer, [contour], _STATUS_COLORS[status])
+        image = cv2.addWeighted(layer, _BLOB_ALPHA, image, 1 - _BLOB_ALPHA, 0)
+    for x1, y1, x2, y2 in blob_frame.boxes:
+        cv2.rectangle(image, (x1, y1), (x2, y2), WHITE, _FED_BOX_LINE)
+    return image
 
 
 def _track_labels(lines: list[dict]) -> list[Label]:
     """사각형 왼쪽 위에 붙이는 "번호 클래스 신뢰도" 이름표. 채널 B 줄은 번호뿐이다 (D-258)."""
     return [
         (
-            f"{line['track_id']} {line['cls']} {line['conf']:.2f}"
-            if "cls" in line
-            else str(line["track_id"]),
+            str(line["track_id"])
+            if _is_blob_track(line)
+            else f"{line['track_id']} {line['cls']} {line['conf']:.2f}",
             (line["bbox"][0], max(line["bbox"][1] - _LABEL_GAP, 0)),
-            _track_color(line["track_id"]),
+            # 이름표 글씨가 흰색이라 클래스 없는 트랙은 어두운 바탕에 쓴다
+            DARK if _is_blob_track(line) else _track_color(line["track_id"]),
         )
         for line in lines
     ]
 
 
+def _blob_count_text(blob_frame: BlobFrame) -> str:
+    """이 프레임 ROI 덩어리의 붙이기 결과 수. 예: "붙음 2 · 넘김 1 · 건너뜀 0"."""
+    statuses = [status for _, status in blob_frame.blobs]
+    return " · ".join(f"{status} {statuses.count(status)}" for status in BLOB_STATUSES)
+
+
 def _frame_labels(
-    time_sec: float, roi_motion: bool, ranges: list[YoloRange], scenes: list[Scene]
+    time_sec: float,
+    roi_motion: bool,
+    blob_frame: BlobFrame,
+    ranges: list[YoloRange],
+    scenes: list[Scene],
 ) -> list[Label]:
     """왼쪽 위 시각 아래에 한 줄씩 쌓는 이름표."""
     texts = []
@@ -333,6 +406,7 @@ def _frame_labels(
         texts.append(("YOLO 켜짐", RED))
     if roi_motion:
         texts.append(("ROI 움직임", RED))
+        texts.append((_blob_count_text(blob_frame), DARK))
     if time_sec < MOG2_STABLE_SEC:
         texts.append(("안정 전", GRAY))
     scene = _scene_at(scenes, time_sec)
@@ -350,7 +424,7 @@ def render(
     scenes: list[Scene],
     size: tuple[int, int],
 ) -> int:
-    """영상을 다시 읽으며 트랙과 영역, 이름표, 시간 막대를 그린다. 쓴 프레임 수를 돌려준다."""
+    """영상을 다시 읽으며 덩어리·트랙·영역, 이름표, 시간 막대를 그린다. 쓴 프레임 수를 돌려준다."""
     width, height = size
     contours = roi_contours(roi.mask, roi.crop)
     zone_labels = _zone_labels(roi, contours)
@@ -362,13 +436,16 @@ def render(
     )
     count = 0
     # 같은 함수로 같은 영상을 읽으므로 프레임 순서가 탐지 때와 같다
-    for frame, roi_motion in zip(iter_analysis_frames(video_path), result.roi_motion, strict=False):
-        image = frame.image
+    for frame, roi_motion, blob_frame in zip(
+        iter_analysis_frames(video_path), result.roi_motion, result.blob_frames, strict=False
+    ):
+        # 덩어리 칠을 먼저 해야 그 위의 트랙 사각형과 영역 선이 흐려지지 않는다
+        image = draw_blob_frame(frame.image, blob_frame)
         # 트랙 줄의 t는 소수 셋째 자리까지라 같은 자리로 맞춰 찾는다 (04장 4.8)
         lines = tracks.get(round(frame.time_sec, 3), [])
         draw_tracks(image, lines)
         draw_zones(image, roi, contours)
-        frame_labels = _frame_labels(frame.time_sec, roi_motion, result.ranges, scenes)
+        frame_labels = _frame_labels(frame.time_sec, roi_motion, blob_frame, result.ranges, scenes)
         image = draw_labels(image, zone_labels + _track_labels(lines) + frame_labels)
         _draw_time(image, frame.index, frame.time_sec)
         attach_timeline(image, timeline, frame.time_sec, result.duration_sec)
