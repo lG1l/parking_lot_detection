@@ -39,7 +39,7 @@ class RoiError(Exception):
 
 @dataclass(frozen=True)
 class Roi:
-    crop: Crop  # 분석 크롭 (보여줄 크롭 기준, D-308)
+    crop: Crop  # 분석 크롭 (보여줄 크롭 기준, D-318)
     mask: np.ndarray  # 분석 크롭을 줄인 프레임 크기로 만든 ROI (안쪽 255)
     strip: np.ndarray  # 파손 변 바깥 바닥 띠. 위로 옮기기 전의 다각형, 원본 픽셀 (N, 2) int32
     display: Crop  # 보여줄 크롭 (ROI 기준)
@@ -180,7 +180,7 @@ def _roi_mask_original(
 def build_roi(data: AnalysisInput, frame: tuple[int, int]) -> Roi:
     """ROI, 바닥 띠, 보여줄 크롭, 분석 크롭을 이 순서로 만든다.
 
-    보여줄 크롭은 ROI 기준(D-302), 분석 크롭은 보여줄 크롭 기준이다(D-308).
+    보여줄 크롭은 ROI 기준(D-302), 분석 크롭은 보여줄 크롭 기준이다(D-318).
     그래서 ROI ⊂ 보여줄 ⊂ 분석(D-95)이 늘 지켜진다. 마스크는 분석 크롭을 줄인 프레임 크기다 (안쪽 255, D-201).
     """
     full, strip = _roi_mask_original(data, frame)

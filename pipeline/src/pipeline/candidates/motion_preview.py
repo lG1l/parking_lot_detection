@@ -1,4 +1,4 @@
-"""채널 B만 돌려 ROI 움직임 구간 목록과 확인용 영상을 만든다 (2단계, D-307). 명령의 진입점이다.
+"""채널 B만 돌려 ROI 움직임 구간 목록과 확인용 영상을 만든다 (2단계, D-317). 명령의 진입점이다.
 
 흐름은 탐지 → 구간 판정 → 그리기 순서다 (D-250). 탐지하는 동안에는 구간을 정하지 않는다.
 그리기는 영상 전체의 구간이 정해진 뒤 영상을 한 번 더 읽어 한다. MOG2는 다시 돌리지 않는다.
@@ -71,7 +71,7 @@ class Scene:
 
 
 def load_scenes(path: str) -> list[Scene]:
-    """장면 파일(JSON 배열, 개발 확인용, D-307)을 읽는다."""
+    """장면 파일(JSON 배열, 개발 확인용, D-317)을 읽는다."""
     with open(path, encoding="utf-8") as f:
         return [Scene(s["label"], float(s["start_sec"]), float(s["end_sec"])) for s in json.load(f)]
 
@@ -97,7 +97,7 @@ def detect(video_path: str, roi: Roi) -> list[FrameRecord]:
 def write_ranges(
     path: str, video_path: str, records: list[FrameRecord], ranges: list[MotionRange]
 ) -> None:
-    """구간 목록 파일 motion_ranges.json을 쓴다 (D-307 결정 3)."""
+    """구간 목록 파일 motion_ranges.json을 쓴다 (D-317 결정 3)."""
     data = {
         "video": os.path.basename(video_path),
         "sampling_fps": SAMPLING_FPS,

@@ -1,4 +1,4 @@
-"""분석 크롭, 줄인 프레임 크기, 원본 ↔ 줄인 프레임 좌표 바꾸기 (D-201, D-308).
+"""분석 크롭, 줄인 프레임 크기, 원본 ↔ 줄인 프레임 좌표 바꾸기 (D-201, D-318).
 
 크롭은 원본 픽셀 좌표의 사각형 (x1, y1, x2, y2)이고, x2·y2는 포함하지 않는 끝이다.
 """
@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-# 분석 크롭 폭·높이 = 보여줄 크롭 폭·높이 × 이 값. 01장 1.6 "분석 크롭 크기" (시작값, D-308)
+# 분석 크롭 폭·높이 = 보여줄 크롭 폭·높이 × 이 값. 01장 1.6 "분석 크롭 크기" (시작값, D-318)
 ANALYSIS_SCALE = 1.4
 
 # 줄인 프레임. 긴 변이 REDUCED_LONG_SIDE보다 크면 REDUCED_SIZE로 줄인다. 01장 1.6 "채널 A·B 프레임 크기" (시작값)
@@ -59,7 +59,7 @@ def _place(
     """중심에 맞춰 놓고, 원본 밖으로 나가면 크기를 유지한 채 안쪽으로 민다 (D-175 결정 3)."""
     frame_w, frame_h = frame
     if width > frame_w or height > frame_h:
-        # 보여줄 크롭이 화면에 비해 너무 큰 경우다. 줄이는 규칙은 아직 없다 (D-308 한계)
+        # 보여줄 크롭이 화면에 비해 너무 큰 경우다. 줄이는 규칙은 아직 없다 (D-318 한계)
         raise CropError(
             f"분석 크롭({width}×{height})이 원본({frame_w}×{frame_h})보다 큽니다. "
             "차나 파손 영역이 화면에서 너무 큰 경우는 아직 만들지 않았습니다."
@@ -79,7 +79,7 @@ def reduced_size_for(width: int, height: int) -> tuple[int, int]:
 
 
 def analysis_crop(display: Crop, frame: tuple[int, int]) -> Crop:
-    """보여줄 크롭을 폭·높이 ANALYSIS_SCALE배로 키운 16:9 분석 크롭 (D-308). frame은 원본 (폭, 높이).
+    """보여줄 크롭을 폭·높이 ANALYSIS_SCALE배로 키운 16:9 분석 크롭 (D-318). frame은 원본 (폭, 높이).
 
     중심은 보여줄 크롭에 맞추고, 화면 밖으로 나가면 크기를 유지한 채 안쪽으로 민다.
     분석 크롭이 보여줄 크롭보다 크고 둘 다 화면 안이므로, 밀어도 보여줄 크롭을 담는다 (D-95 포함 관계).
