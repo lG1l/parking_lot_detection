@@ -29,6 +29,7 @@ class VideoCase {
     required this.createdAt,
     this.acceptedAt,
     this.pending = false,
+    this.peerUserId,
   });
 
   factory VideoCase.fromJson(Map<String, dynamic> j) => VideoCase(
@@ -40,6 +41,7 @@ class VideoCase {
     acceptedAt: j['accepted_at'] as String?,
     // 키가 없으면(지금 백엔드) 수락된 것으로 읽는다. 키가 있고 null일 때만 수락 전이다 (D-233)
     pending: j.containsKey('accepted_at') && j['accepted_at'] == null,
+    peerUserId: j['peer_user_id'] as int?,
   );
 
   final int id;
@@ -60,6 +62,10 @@ class VideoCase {
 
   /// 피해자가 아직 초대를 수락하지 않은 사건인지 (D-233).
   final bool pending;
+
+  /// 상대 계정 번호 (22·27번 `peer_user_id`, C-19 ⑧). 관리자에게는 피해자, 피해자에게는 관리자 계정이고 29번과 같은 값이다.
+  /// 21번 응답에는 없어 null이다.
+  final int? peerUserId;
 
   /// 화면 머리에 보일 상대 계정 ("피해자 홍길동", "관리자 주차장 관리자").
   String counterpart({required bool admin}) => admin ? '피해자 $victimName' : '관리자 ${adminName ?? ''}';

@@ -31,11 +31,13 @@ class NotificationsPage extends ConsumerStatefulWidget {
   ConsumerState<NotificationsPage> createState() => _NotificationsPageState();
 }
 
-/// 한 상대 계정과 묶인 사건들. 22번에 상대 계정 ID가 없어 지금은 이름으로 묶고, 29번 대화 상대([peer])를 이름으로 짝짓는다.
+/// 한 상대 계정과 묶인 사건들. 22번 `peer_user_id`로 묶고, 29번 대화 상대([peer])도 같은 번호로 짝짓는다 (C-19 ⑧).
 /// 사건을 모두 숨긴 상대는 [cases]가 비고 [peer]만 있다. 수락한 사건이 없어 29번에 없는 상대는 [peer]가 null이다 (D-303).
 class _Person {
-  _Person(this.name, this.cases, this.peer);
+  _Person(this.id, this.name, this.cases, this.peer);
 
+  /// 상대 계정 번호. 이름이 같은 두 계정을 구분한다.
+  final int id;
   final String name;
 
   /// 오래된 사건부터 (대화는 위에서 아래로 시간 순).
@@ -59,7 +61,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   List<ChatMessage> _chat = []; // 고른 사람과의 최근 메시지 (30번)
   bool _sending = false;
   final _input = TextEditingController();
-  String? _selected;
+  int? _selected; // 고른 상대 계정 번호
   final _accepting = <int>{}; // [수락]을 누른 사건. 다시 누르지 못하게 막는다
   ChatSocket? _socket; // 33번
   StreamSubscription<ChatEvent>? _socketSub;
@@ -168,15 +170,15 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   }
 
   /// 고른 사람의 최근 메시지를 읽고(30번), 화면에 그린 뒤 읽음으로 알린다(32번) (D-303).
-  Future<void> _openChat(String? name) async {
-    final peer = name == null ? null : peerOf(name, _peers);
+  Future<void> _openChat(int? id) async {
+    final peer = id == null ? null : peerOf(id, _peers);
     if (peer == null) {
       if (mounted) setState(() => _chat = []);
       return;
     }
     try {
       final messages = await ref.read(apiProvider).chatMessages(peer.peerUserId); // 30
-      if (!mounted || _selected != name) return; // 그 사이 다른 사람을 골랐다
+      if (!mounted || _selected != id) return; // 그 사이 다른 사람을 골랐다
       setState(() => _chat = messages);
       WidgetsBinding.instance.addPostFrameCallback((_) => _markRead(peer, messages));
     } catch (e) {
@@ -203,8 +205,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   }
 
   void _select(_Person p) {
-    setState(() => _selected = p.name);
-    _openChat(p.name);
+    setState(() => _selected = p.id);
+    _openChat(p.id);
   }
 
   /// 메시지 보내기 (31번). 응답 메시지를 대화에 합치고, 목록 요약을 위해 29번을 다시 읽는다.
@@ -254,8 +256,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         _peers = peers;
         final people = _grouped();
         // 처음은 맨 위 사람이다(피해자는 수락할 초대가 있는 관리자가 맨 위에 온다)
-        if (_selected == null || !people.any((p) => p.name == _selected)) {
-          _selected = people.firstOrNull?.name;
+        if (_selected == null || !people.any((p) => p.id == _selected)) {
+          _selected = people.firstOrNull?.id;
         }
       });
       await _openChat(_selected);
@@ -270,19 +272,29 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   bool _needsAction(VideoCase c) =>
       _admin ? adminTodoCount(_videos.where((v) => v.caseId == c.id).toList()) > 0 : c.pending;
 
-  /// 상대 계정별로 묶는다. 할 일이 있는 사람이 먼저이고, 그다음 최근 시각 순이다.
+  /// 상대 계정 번호(22·29번 `peer_user_id`)별로 묶는다. 이름이 같아도 번호가 다르면 다른 줄이다 (C-19 ⑧).
+  /// 할 일이 있는 사람이 먼저이고, 그다음 최근 시각 순이다.
   /// 29번에만 있는 상대(사건을 모두 숨긴 경우)도 한 줄로 붙인다 (D-303).
   List<_Person> _grouped() {
-    final byName = <String, List<VideoCase>>{};
+    final byId = <int, List<VideoCase>>{};
+    final names = <int, String>{};
     for (final c in _cases ?? <VideoCase>[]) {
-      byName.putIfAbsent(_nameOf(c), () => []).add(c);
+      final id = c.peerUserId ?? -c.id; // 번호가 없는 응답(옛 서버)은 사건마다 따로 둔다
+      byId.putIfAbsent(id, () => []).add(c);
+      names[id] = _nameOf(c);
     }
     for (final p in _peers) {
-      byName.putIfAbsent(p.peerName, () => []);
+      byId.putIfAbsent(p.peerUserId, () => []);
+      names.putIfAbsent(p.peerUserId, () => p.peerName);
     }
     final people = [
-      for (final e in byName.entries)
-        _Person(e.key, e.value..sort((a, b) => a.createdAt.compareTo(b.createdAt)), peerOf(e.key, _peers)),
+      for (final e in byId.entries)
+        _Person(
+          e.key,
+          names[e.key]!,
+          e.value..sort((a, b) => a.createdAt.compareTo(b.createdAt)),
+          peerOf(e.key, _peers),
+        ),
     ];
     bool first(_Person p) => p.cases.any(_needsAction);
     return people..sort((a, b) {
@@ -339,11 +351,11 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         child: StateCard(icon: Icons.notifications_none, title: '새 알림이 없습니다'),
       );
     }
-    final selected = people.firstWhere((p) => p.name == _selected, orElse: () => people.first);
+    final selected = people.firstWhere((p) => p.id == _selected, orElse: () => people.first);
     final list = _PersonList(
       admin: _admin,
       people: people,
-      selectedName: selected.name,
+      selectedId: selected.id,
       summaryOf: _summaryOf,
       onSelect: _select,
     );
@@ -394,14 +406,14 @@ class _PersonList extends StatelessWidget {
   const _PersonList({
     required this.admin,
     required this.people,
-    required this.selectedName,
+    required this.selectedId,
     required this.summaryOf,
     required this.onSelect,
   });
 
   final bool admin;
   final List<_Person> people;
-  final String selectedName;
+  final int selectedId;
   final String Function(_Person) summaryOf;
   final ValueChanged<_Person> onSelect;
 
@@ -417,13 +429,13 @@ class _PersonList extends StatelessWidget {
           // 카드 상자 없이 hair 줄 목록. 고른 줄은 옅은 파란 바탕 + 왼쪽 파란 막대 (캔버스 새 컨셉, D-305)
           for (final p in people)
             Material(
-              color: p.name == selectedName ? const Color(0x143D8BFF) : Colors.transparent,
+              color: p.id == selectedId ? const Color(0x143D8BFF) : Colors.transparent,
               child: InkWell(
                 onTap: () => onSelect(p),
                 child: Container(
                   decoration: BoxDecoration(
                     border: Border(
-                      left: BorderSide(color: p.name == selectedName ? focusLineColor : Colors.transparent, width: 3),
+                      left: BorderSide(color: p.id == selectedId ? focusLineColor : Colors.transparent, width: 3),
                       bottom: const BorderSide(color: lineColor),
                     ),
                   ),

@@ -38,6 +38,7 @@ Map<String, Object?> case3() => {
   'admin_name': 'parking_admin',
   'victim_name': 'victim02',
   'created_at': '2026-11-01T14:03:00+09:00',
+  'peer_user_id': 12, // 관리자에게 보이는 피해자 계정 (C-19 ⑧). 피해자 화면은 관리자 번호로 덮어쓴다
 };
 
 /// 29·30·31번의 메시지 한 건 (05장 5.12).
@@ -334,10 +335,10 @@ void main() {
         'items': [
           {...case3(), 'case_name': '첫 사건', 'accepted_at': '2026-11-02T10:00:00+09:00'},
           {...case3(), 'id': 4, 'case_name': '둘째 사건', 'created_at': '2026-11-05T09:00:00+09:00', 'accepted_at': null},
-          {...case3(), 'id': 5, 'victim_name': 'victim03', 'created_at': '2026-11-03T09:00:00+09:00', 'accepted_at': null},
+          {...case3(), 'id': 5, 'victim_name': 'victim03', 'peer_user_id': 13, 'created_at': '2026-11-03T09:00:00+09:00', 'accepted_at': null},
         ],
       }),
-      // 22번에는 상대 계정 ID가 없어 이름으로 29번과 짝짓는다 (D-303). victim03은 수락한 사건이 없어 29번에 없다
+      // 22번 peer_user_id로 29번과 짝짓는다 (C-19 ⑧). victim03은 수락한 사건이 없어 29번에 없다
       'GET /api/chats': (_) => json({
         'items': [chatPeer(12, 'victim02', last: first)],
         'unread_total': 0,
@@ -366,6 +367,36 @@ void main() {
     expect(backend.screenCalls.where((c) => c.contains('/api/chats/') && c.contains('/messages')).length, 1);
   });
 
+  testWidgets('이름이 같은 두 피해자 계정은 계정 번호로 나눠 두 줄로 보인다 (2.11, C-19 ⑧)', (tester) async {
+    final backend = FakeBackend({
+      'GET /api/videos': (_) => json([]),
+      'GET /api/cases': (_) => json({
+        'items': [
+          {...case3(), 'victim_name': '홍길동', 'accepted_at': '2026-11-02T10:00:00+09:00'},
+          {...case3(), 'id': 4, 'victim_name': '홍길동', 'peer_user_id': 13, 'accepted_at': '2026-11-03T10:00:00+09:00'},
+        ],
+      }),
+      'GET /api/chats': (_) => json({
+        'items': [
+          chatPeer(12, '홍길동', last: chatMsg(1, '첫째 계정 메시지', mine: false, at: '2026-11-04T10:00:00+09:00')),
+          chatPeer(13, '홍길동', last: chatMsg(2, '둘째 계정 메시지', mine: false, at: '2026-11-05T10:00:00+09:00')),
+        ],
+        'unread_total': 0,
+      }),
+      'GET /api/chats/12/messages': (_) => json({'items': [], 'has_more': false}),
+      'GET /api/chats/13/messages': (_) => json({'items': [], 'has_more': false}),
+    });
+    await pumpApp(tester, backend, '/notifications');
+    expect(find.textContaining('첫째 계정 메시지'), findsOneWidget);
+    expect(find.textContaining('둘째 계정 메시지'), findsOneWidget);
+    // 마지막 메시지가 늦은 13번 계정이 위에 오고 먼저 열린다 (C-19 ⑦)
+    expect(backend.count('GET /api/chats/13/messages'), 1);
+    expect(backend.count('GET /api/chats/12/messages'), 0);
+    await tester.tap(find.textContaining('첫째 계정 메시지'));
+    await settle(tester);
+    expect(backend.count('GET /api/chats/12/messages'), 1);
+  });
+
   testWidgets('채팅은 기존 메시지를 좌우로 나눠 보이고, 보내면 31번 뒤 29번을 다시 읽는다 (2.11, D-303)', (tester) async {
     final messages = <Map<String, Object?>>[chatMsg(1, '영상을 올렸습니다', mine: false, at: '2026-11-02T10:00:00+09:00')];
     Object? readBody;
@@ -373,7 +404,7 @@ void main() {
       'GET /api/videos': (_) => json([]),
       'GET /api/cases': (_) => json({
         'items': [
-          {...case3(), 'accepted_at': '2026-11-02T09:00:00+09:00'},
+          {...case3(), 'peer_user_id': 1, 'accepted_at': '2026-11-02T09:00:00+09:00'},
         ],
       }),
       'GET /api/chats': (_) => json({
@@ -416,7 +447,7 @@ void main() {
       'GET /api/cases': (_) => json({
         'items': [
           {...case3(), 'accepted_at': '2026-11-02T10:00:00+09:00'},
-          {...case3(), 'id': 5, 'victim_name': 'victim03', 'created_at': '2026-10-20T09:00:00+09:00', 'accepted_at': '2026-10-20T10:00:00+09:00'},
+          {...case3(), 'id': 5, 'victim_name': 'victim03', 'peer_user_id': 13, 'created_at': '2026-10-20T09:00:00+09:00', 'accepted_at': '2026-10-20T10:00:00+09:00'},
         ],
       }),
       'GET /api/chats': (_) => json({
@@ -460,7 +491,7 @@ void main() {
       'GET /api/cases': (_) => json({
         'items': [
           {...case3(), 'accepted_at': '2026-11-02T10:00:00+09:00'},
-          {...case3(), 'id': 5, 'victim_name': 'victim03', 'created_at': '2026-10-20T09:00:00+09:00', 'accepted_at': '2026-10-20T10:00:00+09:00'},
+          {...case3(), 'id': 5, 'victim_name': 'victim03', 'peer_user_id': 13, 'created_at': '2026-10-20T09:00:00+09:00', 'accepted_at': '2026-10-20T10:00:00+09:00'},
         ],
       }),
       'GET /api/chats': (_) => json({
@@ -561,7 +592,7 @@ void main() {
       'GET /api/videos': (_) => json([]),
       'GET /api/cases': (_) => json({
         'items': [
-          {...case3(), 'accepted_at': '2026-11-02T09:00:00+09:00'},
+          {...case3(), 'peer_user_id': 1, 'accepted_at': '2026-11-02T09:00:00+09:00'},
         ],
       }),
       'GET /api/chats': (_) => json({

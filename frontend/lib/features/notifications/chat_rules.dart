@@ -12,11 +12,11 @@ List<ChatMessage> mergeMessages(List<ChatMessage> old, List<ChatMessage> incomin
   return byId.values.toList()..sort((a, b) => a.id.compareTo(b.id));
 }
 
-/// 22번의 상대 이름과 같은 이름의 29번 대화 상대. 22번에 상대 계정 ID가 없어 이름으로 짝짓는다 (D-303).
+/// 22번 `peer_user_id`와 같은 번호의 29번 대화 상대 (C-19 ⑧). 이름이 같은 두 계정도 번호로 구분한다.
 /// 없으면 null이다. 수락한 사건이 없어 29번에 없는 상대다.
-ChatPeer? peerOf(String name, List<ChatPeer> peers) {
+ChatPeer? peerOf(int peerUserId, List<ChatPeer> peers) {
   for (final p in peers) {
-    if (p.peerName == name) return p;
+    if (p.peerUserId == peerUserId) return p;
   }
   return null;
 }
