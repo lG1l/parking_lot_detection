@@ -14,11 +14,16 @@ from pipeline.candidates.inputs import AnalysisInput
 
 # 01장 1.6 "0단계 필터 시작값"의 내 차 고르기 값 (시작값, D-264)
 CAR_SPOT_SIDE_RATIO = 0.1  # 좌우 여유: 내 차 자리를 차량 bbox 폭의 이 배씩 좌우로 넓힌다
+CAR_SPOT_INSIDE_RATIO = 0.8  # 안쪽: 마스크 픽셀의 이 비율 이상이 내 차 자리 안에 있어야 한다
+CAR_SPOT_BELOW_RATIO = (
+    0.1  # 아래 여유: 내 차 자리 아래 경계보다 차량 bbox 높이의 이 배까지는 내려가도 된다
+)
 
 
 @dataclass(frozen=True)
 class CarSpot:
     mask: np.ndarray  # 내 차 자리. 줄인 프레임 크기, 안쪽 True
+    too_low: np.ndarray  # 내 차 자리의 세로줄에서 아래 경계 + 아래 여유보다 더 아래인 칸 (True)
 
 
 def _spot_original(data: AnalysisInput, frame: tuple[int, int]) -> np.ndarray:
@@ -58,4 +63,37 @@ def build_car_spot(data: AnalysisInput, frame: tuple[int, int], crop: Crop) -> C
     full = _spot_original(data, frame)
     x1, y1, x2, y2 = crop.rect
     small = cv2.resize(full[y1:y2, x1:x2], crop.reduced_size, interpolation=cv2.INTER_AREA)
-    return CarSpot(small >= 128)
+    mask = small >= 128
+    # 아래 여유 픽셀 수도 줄인 배율로 바꾼다
+    scale_y = crop.reduced_size[1] / crop.height
+    margin = (data.vehicle_bbox[3] - data.vehicle_bbox[1]) * CAR_SPOT_BELOW_RATIO * scale_y
+    return CarSpot(mask, _too_low(mask, margin))
+
+
+def _too_low(spot: np.ndarray, margin: float) -> np.ndarray:
+    """내 차 자리의 세로줄마다 아래 경계에서 margin 넘게 내려간 칸을 True로 칠한다.
+
+    내 차를 가리는 차는 카메라에 더 가까워 화면에서 더 아래에 닿는다. 이 칸에 닿은 마스크는 내 차가 아니다 (D-264 원리).
+    """
+    height = spot.shape[0]
+    has_spot = spot.any(axis=0)
+    bottom = height - 1 - np.argmax(spot[::-1], axis=0)
+    rows = np.arange(height)[:, None]
+    return has_spot & (rows > bottom + margin)
+
+
+def pick_my_car(masks: np.ndarray, spot: CarSpot) -> np.ndarray | None:
+    """차량 마스크들 가운데 내 차 자리에 선 것을 전부 합쳐 그 프레임의 내 차 영역을 만든다 (D-264 결정 3).
+
+    masks는 (차량 탐지 수, 높이, 폭)의 참·거짓 그림이다. 두 조건을 모두 만족하는 마스크가 없으면
+    "찾지 못함"으로 None을 돌려준다. 프레임마다 처음부터 다시 고르고 앞 프레임 결과를 이어받지 않는다.
+    """
+    picked = np.zeros(spot.mask.shape, bool)
+    for mask in masks:
+        area = np.count_nonzero(mask)
+        if area == 0:
+            continue
+        inside = np.count_nonzero(mask & spot.mask) / area
+        if inside >= CAR_SPOT_INSIDE_RATIO and not (mask & spot.too_low).any():
+            picked |= mask
+    return picked if picked.any() else None

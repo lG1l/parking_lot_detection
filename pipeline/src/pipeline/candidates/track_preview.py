@@ -257,7 +257,7 @@ def detect(
             # 거슬러 돌릴 프레임을 먼저, 지금 프레임을 마지막에. 추적기에는 시간순으로 넣어야 한다 (D-313)
             to_run = [*_backfill_frames(ring, decision), (frame.time_sec, small)]
             for time_sec, image in to_run:
-                lines, tracks = process_frame(channel, image, time_sec, roi.crop)
+                lines, tracks, _ = process_frame(channel, image, time_sec, roi.crop)
                 _write_lines(tracks_file, lines)
                 # 거슬러 돌린 프레임의 위치도 적어야 켜자마자 멈춘 차를 알아본다 (D-314 결정 4)
                 remember_positions(history, time_sec, tracks)

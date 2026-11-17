@@ -1,6 +1,6 @@
 """채널 A 한 프레임 처리: YOLO11m-seg 탐지 → ByteTrack → 트랙 줄 (06장 6.5, D-196, D-200, D-260).
 
-줄인 프레임 한 장을 받아 트랙 파일(04장 4.8)에 쓸 줄들을 만든다.
+줄인 프레임 한 장을 받아 트랙 파일(04장 4.8)에 쓸 줄들과 차량 클래스 마스크를 만든다.
 언제 돌릴지(켜고 끄기)는 yolo_switch가 정하고, 파일에 쓰는 일은 명령 쪽이 한다.
 """
 
@@ -47,6 +47,10 @@ CLASS_NAMES = (
 )
 
 
+# 내 차 영역을 고를 때 보는 차량 클래스 (06장 6.5 "내 차 찾기", D-264). 내 차가 다른 차량 클래스로 잡혀도 된다
+MASK_CLASS_NAMES = ("car", "motorcycle", "bus", "truck")
+
+
 class ModelError(Exception):
     """모델을 열 수 없을 때. 메시지는 사용자에게 그대로 보여 준다."""
 
@@ -66,6 +70,7 @@ class ChannelA:
 
     model: YOLO
     class_ids: list[int]  # CLASS_NAMES에 해당하는 모델의 클래스 번호
+    mask_class_ids: list[int]  # MASK_CLASS_NAMES에 해당하는 모델의 클래스 번호
     device: str
     tracker: ByteTrackTracker
 
@@ -86,11 +91,16 @@ def open_channel_a(weights: Path) -> ChannelA:
         minimum_consecutive_frames=TRACK_CONFIRM_FRAMES,
     )
     device = "mps" if torch.backends.mps.is_available() else "cpu"
-    return ChannelA(model, class_ids, device, tracker)
+    mask_class_ids = [number for number, name in model.names.items() if name in MASK_CLASS_NAMES]
+    return ChannelA(model, class_ids, mask_class_ids, device, tracker)
 
 
-def detect(channel: ChannelA, reduced: np.ndarray) -> sv.Detections:
-    """줄인 프레임 한 장에서 사각형·신뢰도·클래스 번호를 얻는다. 좌표는 줄인 프레임 기준이다."""
+def detect(channel: ChannelA, reduced: np.ndarray) -> tuple[sv.Detections, np.ndarray]:
+    """줄인 프레임 한 장에서 사각형·신뢰도·클래스 번호와 차량 클래스 마스크를 얻는다.
+
+    좌표는 줄인 프레임 기준이다. 마스크는 (차량 탐지 수, 높이, 폭)의 참·거짓 그림이고,
+    추적기를 거치기 전의 탐지 전부에서 꺼낸다. 내 차를 고르는 데는 트랙 번호가 필요 없다 (D-264).
+    """
     result = channel.model(
         reduced,
         conf=YOLO_CONF,
@@ -98,14 +108,22 @@ def detect(channel: ChannelA, reduced: np.ndarray) -> sv.Detections:
         classes=channel.class_ids,
         device=channel.device,
         verbose=False,
+        # 기본 설정이면 마스크가 모델 입력 크기(패딩 포함 640×384)로 나온다.
+        # 켜면 넣은 이미지 크기(640×360)로 나와 줄인 프레임과 픽셀 자리가 맞는다
+        retina_masks=True,
     )[0]
     boxes = result.boxes
-    # 마스크는 이번에 쓰지 않으므로 옮기지 않는다 (4단계에서 내 차 것만 쓴다)
-    return sv.Detections(
+    class_id = boxes.cls.cpu().numpy().astype(int)
+    detections = sv.Detections(
         xyxy=boxes.xyxy.cpu().numpy(),
         confidence=boxes.conf.cpu().numpy(),
-        class_id=boxes.cls.cpu().numpy().astype(int),
+        class_id=class_id,
     )
+    if result.masks is None:
+        # 탐지가 하나도 없으면 마스크 자체가 없다
+        return detections, np.zeros((0, *reduced.shape[:2]), bool)
+    is_vehicle = np.isin(class_id, channel.mask_class_ids)
+    return detections, result.masks.data.cpu().numpy()[is_vehicle] > 0
 
 
 def track_lines(
@@ -146,14 +164,15 @@ def track_boxes(tracked: sv.Detections, names: dict[int, str]) -> list[TrackBox]
 
 def process_frame(
     channel: ChannelA, reduced: np.ndarray, time_sec: float, crop: Crop
-) -> tuple[list[dict], list[TrackBox]]:
-    """줄인 프레임 한 장을 탐지·추적해 그 프레임의 트랙 줄들과 확정 트랙들을 돌려준다.
+) -> tuple[list[dict], list[TrackBox], np.ndarray]:
+    """줄인 프레임 한 장을 탐지·추적해 트랙 줄들, 확정 트랙들, 차량 클래스 마스크들을 돌려준다.
 
-    트랙 줄은 파일에 쓸 원본 좌표이고, 확정 트랙은 채널 B 덩어리를 붙일 때 볼 줄인 좌표다.
+    트랙 줄은 파일에 쓸 원본 좌표이고, 확정 트랙과 마스크는 줄인 좌표다.
     프레임은 시간순으로 넣는다. 앞선 시각을 넣으면 추적기가 그 프레임을 건너뛴다.
     """
+    detections, vehicle_masks = detect(channel, reduced)
     # 시각을 줘서 YOLO가 꺼져 있던 시간만큼 추적기도 시간이 흐르게 한다 (D-313).
     # 주지 않으면 호출 1번을 1프레임으로 세어, 공백 뒤 같은 자리에 온 다른 물체가 앞 번호를 이어받는다
-    tracked = channel.tracker.update(detect(channel, reduced), timestamp=time_sec)
+    tracked = channel.tracker.update(detections, timestamp=time_sec)
     names = channel.model.names
-    return track_lines(tracked, names, time_sec, crop), track_boxes(tracked, names)
+    return track_lines(tracked, names, time_sec, crop), track_boxes(tracked, names), vehicle_masks

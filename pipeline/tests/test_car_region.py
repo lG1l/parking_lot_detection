@@ -2,7 +2,7 @@ import dataclasses
 
 import numpy as np
 
-from pipeline.candidates.car_region import build_car_spot
+from pipeline.candidates.car_region import build_car_spot, pick_my_car
 from pipeline.candidates.crop import Crop
 from pipeline.candidates.inputs import AnalysisInput
 
@@ -35,3 +35,39 @@ def test_내_차_자리는_아래_경계에서_bbox_위_변까지_채우고_좌�
 def test_bbox_위_변이_네_모서리보다_아래면_내_차_자리를_만들지_않는다():
     data = dataclasses.replace(DATA, vehicle_bbox=(190, 300, 470, 350))
     assert build_car_spot(data, FRAME, CROP) is None
+
+
+def _rect_mask(x1, y1, x2, y2):
+    mask = np.zeros((FRAME[1], FRAME[0]), bool)
+    mask[y1:y2, x1:x2] = True
+    return mask
+
+
+# D-264 예시 표의 마스크 넷. 내 차 자리는 가로 172~488, 위 120, 아래 경계 약 250~270, 아래 여유 15픽셀이다
+LEFT_PIECE = _rect_mask(200, 130, 260, 260)  # 자리 안 약 94%, 아래 경계보다 10픽셀쯤 내려감
+RIGHT_PIECE = _rect_mask(300, 130, 440, 225)  # 자리 안 100%, 내려가지 않음
+FRONT_CAR = _rect_mask(250, 200, 450, 310)  # 자리 안 약 55%, 40픽셀 넘게 내려감
+NEXT_CAR = _rect_mask(470, 130, 640, 230)  # 자리 안 약 11%, 내려가지 않음
+
+
+def test_내_차_자리에_선_마스크만_뽑아_하나로_합친다():
+    spot = build_car_spot(DATA, FRAME, CROP)
+    masks = np.stack([LEFT_PIECE, RIGHT_PIECE, FRONT_CAR, NEXT_CAR])
+
+    picked = pick_my_car(masks, spot)
+
+    assert np.array_equal(picked, LEFT_PIECE | RIGHT_PIECE)
+
+
+def test_내_차_자리에_선_마스크가_없으면_찾지_못함이다():
+    spot = build_car_spot(DATA, FRAME, CROP)
+    assert pick_my_car(np.stack([FRONT_CAR, NEXT_CAR]), spot) is None
+    assert pick_my_car(np.zeros((0, FRAME[1], FRAME[0]), bool), spot) is None
+
+
+def test_자리_안_비율이_높아도_아래_여유보다_더_내려가면_내_차가_아니다():
+    spot = build_car_spot(DATA, FRAME, CROP)
+    # x=300~400의 아래 경계는 약 259~268. 자리 안 약 85%지만 아래로 20픽셀 넘게 내려간다
+    tall = _rect_mask(300, 120, 400, 290)
+    assert np.count_nonzero(tall & spot.mask) / np.count_nonzero(tall) >= 0.8
+    assert pick_my_car(tall[None], spot) is None
