@@ -9,6 +9,7 @@ import 'package:parking_lot_frontend/core/constants.dart';
 import 'package:parking_lot_frontend/core/models/message.dart';
 import 'package:parking_lot_frontend/core/settings.dart';
 import 'package:parking_lot_frontend/features/damage_input/still_canvas.dart';
+import 'package:parking_lot_frontend/features/video_status/supervision_dialog.dart';
 
 import '../fake_backend.dart';
 
@@ -70,9 +71,9 @@ Future<void> agreeUpload(WidgetTester tester) async {
   await settle(tester);
 }
 
-/// 관리·감독 안내창에서 체크하고 [동의하고 열람]을 누른다 (2.7).
+/// 관리·감독 안내창에서 서약 문장을 입력하고 [동의하고 열람]을 누른다 (2.7, D-309).
 Future<void> agreeSupervision(WidgetTester tester) async {
-  await tester.tap(find.byType(CheckboxListTile));
+  await tester.enterText(find.byKey(const Key('supervision-pledge')), supervisionPledge);
   await tester.pump();
   await tester.tap(find.widgetWithText(FilledButton, '동의하고 열람'));
   await settle(tester);
@@ -1060,7 +1061,7 @@ void main() {
     await unmount(tester);
   });
 
-  testWidgets('관리자가 후보 화면에 들어가면 안내창에 체크해야 23번을 부르고 연다 (2.7, D-204)', (tester) async {
+  testWidgets('관리자가 후보 화면에 들어가면 안내창에 서약 문장을 입력해야 23번을 부르고 연다 (2.7, D-204, D-309)', (tester) async {
     final backend = FakeBackend({
       'GET /api/videos/7': (_) => json(video('ready')),
       'POST /api/videos/7/viewing-agreement': (req) {
@@ -1074,6 +1075,11 @@ void main() {
     expect(find.text('피해자와 함께 열람하고, 함께 고정합니다'), findsOneWidget);
     expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '동의하고 열람')).onPressed, isNull);
     expect(backend.calls, isNot(contains('GET /api/videos/7/batch')));
+
+    // 문장이 다르면 버튼이 꺼진 채로 있다
+    await tester.enterText(find.byKey(const Key('supervision-pledge')), '본인은 서약합니다');
+    await tester.pump();
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '동의하고 열람')).onPressed, isNull);
 
     await agreeSupervision(tester);
     expect(backend.calls, contains('POST /api/videos/7/viewing-agreement'));
