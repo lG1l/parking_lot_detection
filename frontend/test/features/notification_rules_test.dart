@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:parking_lot_frontend/core/models/account.dart';
 import 'package:parking_lot_frontend/core/models/video.dart';
+import 'package:parking_lot_frontend/features/notifications/chat_rules.dart';
 import 'package:parking_lot_frontend/features/notifications/notification_rules.dart';
 
 VideoCase _case({bool pending = false}) => VideoCase(
@@ -62,6 +63,16 @@ void main() {
     );
   });
 
+  test('같은 쪽에서 같은 분에 연달아 오면 맨 아래 칸에만 시각을 붙인다', () {
+    const a = '2026-11-16T17:42:10+09:00', b = '2026-11-16T17:42:50+09:00', c = '2026-11-16T17:43:00+09:00';
+    expect(showTimeStamp(a, true, nextAt: b, nextMine: true), isFalse); // 같은 분·같은 쪽 → 위 칸은 뺀다
+    expect(showTimeStamp(b, true), isTrue); // 맨 아래
+    expect(showTimeStamp(a, true, nextAt: c, nextMine: true), isTrue); // 분이 다르다
+    expect(showTimeStamp(a, true, nextAt: b, nextMine: false), isTrue); // 쪽이 다르다
+    expect(showTimeStamp(a, true, nextAt: null, nextMine: true), isTrue); // 아래 칸에 시각이 없다
+    expect(showTimeStamp(null, true), isFalse);
+  });
+
   test('할 일이 남은 영상 상태 알림만 버튼 문구가 있고, 진행이 끝난 알림은 없다 (D-304)', () {
     String? action(String status, {required bool admin}) => statusNoticeOf(_video(status), admin: admin)?.action;
 
@@ -69,6 +80,7 @@ void main() {
     expect(action(VideoStatus.ready, admin: false), '결과 확인');
     expect(action(VideoStatus.finished, admin: false), isNull); // 최종 완료는 버튼이 없다
     expect(action(VideoStatus.failed, admin: false), isNull);
+    expect(action(VideoStatus.stage2Running, admin: true), isNull); // 분석 시작은 버튼이 없다
     expect(action(VideoStatus.ready, admin: true), '후보 선택');
     expect(action(VideoStatus.uploadFailed, admin: true), '상태 확인');
   });

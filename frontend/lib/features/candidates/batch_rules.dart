@@ -40,9 +40,5 @@ String? tabDoneMessage(Map<String, ListSummary> lists, String tab) {
       : '이 목록의 후보를 모두 확인했습니다. 후보에 확인할 후보가 남아 있습니다.';
 }
 
-/// 묶음의 열람 불가 안내 (D-109). 없으면 null.
-String? unavailableMessage(Batch batch) {
-  if (batch.unavailable == 0) return null;
-  if (batch.candidates.isEmpty) return '이 묶음의 후보는 모두 영상을 준비하지 못했습니다.';
-  return '이 묶음에 영상을 준비하지 못해 볼 수 없는 후보가 ${batch.unavailable}건 있습니다.';
-}
+/// 묶음의 열람 불가 수를 탭 줄 오른쪽에 누를 수 없는 연한 글자로 보인다 (D-109). 없으면 null.
+String? unavailableLabel(Batch batch) => batch.unavailable == 0 ? null : '볼 수 없는 후보 ${batch.unavailable}';

@@ -219,18 +219,21 @@ class _VideoListPageState extends ConsumerState<VideoListPage> {
             )
           : rows.isEmpty
           ? _EmptyNote(title: '검색 결과가 없습니다', messages: ['‘$query’와 일치하는 사건 이름이 없습니다.\n이름을 다시 확인해 주세요.'])
-          : LineTable(
-              header: _folded(context) ? null : _HeaderRow(admin: admin),
-              rows: [
-                for (final r in orderRows(rows))
-                  _VideoRow(
-                    r,
-                    admin: admin,
-                    onTap: _onTap(r, admin),
-                    onRename: _actionsOf(r) ? () => _rename(r.videoCase!) : null,
-                    onDelete: _actionsOf(r) ? () => _delete(r) : null,
-                  ),
-              ],
+          : Padding(
+              padding: const EdgeInsets.only(top: 10), // 제목 "사건 N건"과 목록 사이를 조금 띄운다
+              child: LineTable(
+                header: _folded(context) ? null : _HeaderRow(admin: admin),
+                rows: [
+                  for (final r in orderRows(rows))
+                    _VideoRow(
+                      r,
+                      admin: admin,
+                      onTap: _onTap(r, admin),
+                      onRename: _actionsOf(r) ? () => _rename(r.videoCase!) : null,
+                      onDelete: _actionsOf(r) ? () => _delete(r) : null,
+                    ),
+                ],
+              ),
             ),
     );
   }

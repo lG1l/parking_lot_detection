@@ -331,7 +331,7 @@ class _AdminUploadPageState extends ConsumerState<AdminUploadPage> {
             ),
             style: TextStyle(fontSize: 15, height: 1.6),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 32),
           const Text('영상 파일', style: label),
           const SizedBox(height: 6),
           Wrap(
@@ -349,7 +349,7 @@ class _AdminUploadPageState extends ConsumerState<AdminUploadPage> {
             const SizedBox(height: 6),
             Text(_fileError!, style: const TextStyle(fontSize: 14, color: failColor)),
           ],
-          const SizedBox(height: 18),
+          const SizedBox(height: 32),
           const Text('녹화 시작 시각 (선택)', style: label),
           const SizedBox(height: 6),
           SizedBox(
@@ -397,15 +397,10 @@ class _AdminUploadPageState extends ConsumerState<AdminUploadPage> {
               ),
             ),
           ],
-          const SizedBox(height: 18),
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              FilledButton(onPressed: file == null || _uploading ? null : _upload, child: const Text('업로드')),
-              const SmallText('업로드가 끝나면 영상 상태 화면으로 넘어갑니다.'),
-            ],
+          const SizedBox(height: 32),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton(onPressed: file == null || _uploading ? null : _upload, child: const Text('업로드')),
           ),
         ],
       ),
@@ -414,9 +409,9 @@ class _AdminUploadPageState extends ConsumerState<AdminUploadPage> {
       main: main,
       side: const SideSteps(
         items: [
-          (title: '영상 파일 고르기', text: '.mp4 · .avi · .mkv · .mov, 5GB 이하'),
-          (title: '시작 시각 적기', text: '영상 첫 장면의 실제 날짜·시각입니다. 비워도 됩니다.'),
-          (title: '업로드', text: '끊기면 같은 사건에 다시 올려 주세요.'),
+          (title: '영상 파일 고르기', text: '.mp4 · .avi · .mkv · .mov'),
+          (title: '시작 시각 적기 (선택)', text: '영상 첫 장면의 실제 날짜·시각입니다.'),
+          (title: '업로드', text: '실패 시 같은 사건에 다시 업로드해 주세요.'),
         ],
       ),
     );

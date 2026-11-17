@@ -220,9 +220,7 @@ class _VideoStatusPageState extends ConsumerState<VideoStatusPage> {
             action: _admin && d.status == VideoStatus.uploadFailed ? _uploadButton() : null,
           ),
         },
-        const SizedBox(height: 16),
-        // 열람기한은 제목 위 작은 글자로 옮겼다 (D-211)
-        if (screen != StatusScreen.expired && d.durationSec != null) SmallText('영상 길이 ${formatElapsed(d.durationSec!)}'),
+        // 열람기한은 제목 위 작은 글자로 옮겼다 (D-211). 영상 길이는 어느 화면에도 보이지 않는다
       ],
     );
   }

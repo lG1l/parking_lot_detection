@@ -73,6 +73,23 @@ def test_create_case_and_list_for_both_accounts():
         assert items[0]["admin_name"] == "관리자" and items[0]["victim_name"] == "홍길동"
 
 
+def test_peer_user_id_is_the_other_account():
+    """채팅 화면이 이름이 아니라 번호로 상대를 묶는다 (C-19)"""
+    admin_id = make_user(login_id="admin1", name="관리자", role="admin")
+    victim_id = make_user(login_id="victim1", name="홍길동", role="victim")
+    admin, victim = make_client(), make_client()
+    admin.post("/api/auth/login", json={"login_id": "admin1", "password": "demo-password"})
+    victim.post("/api/auth/login", json={"login_id": "victim1", "password": "demo-password"})
+    case_id = admin.post(
+        "/api/cases", json={"victim_login_id": "victim1", "case_name": "사건"}
+    ).json()["id"]
+
+    assert admin.get("/api/cases").json()["items"][0]["peer_user_id"] == victim_id
+    assert victim.get("/api/cases").json()["items"][0]["peer_user_id"] == admin_id
+    renamed = admin.patch(f"/api/cases/{case_id}", json={"case_name": "새 이름"}).json()
+    assert renamed["peer_user_id"] == victim_id
+
+
 def test_cases_list_excludes_other_accounts_cases():
     admin = login("admin1", "admin", "관리자")
     make_user(login_id="victim1", name="홍길동", role="victim")

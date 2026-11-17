@@ -31,19 +31,26 @@ class NotificationsPage extends ConsumerStatefulWidget {
   ConsumerState<NotificationsPage> createState() => _NotificationsPageState();
 }
 
-/// 한 상대 계정과 묶인 사건들. 22번에 상대 계정 ID가 없어 지금은 이름으로 묶고, 29번 대화 상대([peer])를 이름으로 짝짓는다.
+/// 한 상대 계정과 묶인 사건들. 22번 `peer_user_id`로 묶고, 29번 대화 상대([peer])도 같은 번호로 짝짓는다 (C-19 ⑧).
 /// 사건을 모두 숨긴 상대는 [cases]가 비고 [peer]만 있다. 수락한 사건이 없어 29번에 없는 상대는 [peer]가 null이다 (D-303).
 class _Person {
-  _Person(this.name, this.cases, this.peer);
+  _Person(this.id, this.name, this.cases, this.peer);
 
+  /// 상대 계정 번호. 이름이 같은 두 계정을 구분한다.
+  final int id;
   final String name;
 
   /// 오래된 사건부터 (대화는 위에서 아래로 시간 순).
   final List<VideoCase> cases;
   final ChatPeer? peer;
 
-  /// 목록에 보일 가장 최근 시각. 사건이 있으면 연결 시각, 없으면 마지막 메시지 시각이다.
-  String? get latestAt => cases.isNotEmpty ? cases.last.createdAt : peer?.lastMessage?.createdAt;
+  /// 목록에 보일 가장 최근 시각. 가장 최근 사건의 연결 시각과 마지막 메시지 시각 중 늦은 쪽이다 (C-19 ⑦).
+  /// 새 메시지가 오면 시각이 바뀌고 줄이 위로 올라온다.
+  String? get latestAt {
+    final times = [if (cases.isNotEmpty) cases.last.createdAt, ?peer?.lastMessage?.createdAt];
+    if (times.isEmpty) return null;
+    return times.reduce((a, b) => DateTime.parse(a).isAfter(DateTime.parse(b)) ? a : b);
+  }
 }
 
 class _NotificationsPageState extends ConsumerState<NotificationsPage> {
@@ -54,7 +61,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   List<ChatMessage> _chat = []; // 고른 사람과의 최근 메시지 (30번)
   bool _sending = false;
   final _input = TextEditingController();
-  String? _selected;
+  int? _selected; // 고른 상대 계정 번호
   final _accepting = <int>{}; // [수락]을 누른 사건. 다시 누르지 못하게 막는다
   ChatSocket? _socket; // 33번
   StreamSubscription<ChatEvent>? _socketSub;
@@ -163,15 +170,15 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   }
 
   /// 고른 사람의 최근 메시지를 읽고(30번), 화면에 그린 뒤 읽음으로 알린다(32번) (D-303).
-  Future<void> _openChat(String? name) async {
-    final peer = name == null ? null : peerOf(name, _peers);
+  Future<void> _openChat(int? id) async {
+    final peer = id == null ? null : peerOf(id, _peers);
     if (peer == null) {
       if (mounted) setState(() => _chat = []);
       return;
     }
     try {
       final messages = await ref.read(apiProvider).chatMessages(peer.peerUserId); // 30
-      if (!mounted || _selected != name) return; // 그 사이 다른 사람을 골랐다
+      if (!mounted || _selected != id) return; // 그 사이 다른 사람을 골랐다
       setState(() => _chat = messages);
       WidgetsBinding.instance.addPostFrameCallback((_) => _markRead(peer, messages));
     } catch (e) {
@@ -198,8 +205,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   }
 
   void _select(_Person p) {
-    setState(() => _selected = p.name);
-    _openChat(p.name);
+    setState(() => _selected = p.id);
+    _openChat(p.id);
   }
 
   /// 메시지 보내기 (31번). 응답 메시지를 대화에 합치고, 목록 요약을 위해 29번을 다시 읽는다.
@@ -249,8 +256,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         _peers = peers;
         final people = _grouped();
         // 처음은 맨 위 사람이다(피해자는 수락할 초대가 있는 관리자가 맨 위에 온다)
-        if (_selected == null || !people.any((p) => p.name == _selected)) {
-          _selected = people.firstOrNull?.name;
+        if (_selected == null || !people.any((p) => p.id == _selected)) {
+          _selected = people.firstOrNull?.id;
         }
       });
       await _openChat(_selected);
@@ -265,24 +272,36 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   bool _needsAction(VideoCase c) =>
       _admin ? adminTodoCount(_videos.where((v) => v.caseId == c.id).toList()) > 0 : c.pending;
 
-  /// 상대 계정별로 묶는다. 할 일이 있는 사람이 먼저이고, 그다음 최근 시각 순이다.
+  /// 상대 계정 번호(22·29번 `peer_user_id`)별로 묶는다. 이름이 같아도 번호가 다르면 다른 줄이다 (C-19 ⑧).
+  /// 할 일이 있는 사람이 먼저이고, 그다음 최근 시각 순이다.
   /// 29번에만 있는 상대(사건을 모두 숨긴 경우)도 한 줄로 붙인다 (D-303).
   List<_Person> _grouped() {
-    final byName = <String, List<VideoCase>>{};
+    final byId = <int, List<VideoCase>>{};
+    final names = <int, String>{};
     for (final c in _cases ?? <VideoCase>[]) {
-      byName.putIfAbsent(_nameOf(c), () => []).add(c);
+      final id = c.peerUserId ?? -c.id; // 번호가 없는 응답(옛 서버)은 사건마다 따로 둔다
+      byId.putIfAbsent(id, () => []).add(c);
+      names[id] = _nameOf(c);
     }
     for (final p in _peers) {
-      byName.putIfAbsent(p.peerName, () => []);
+      byId.putIfAbsent(p.peerUserId, () => []);
+      names.putIfAbsent(p.peerUserId, () => p.peerName);
     }
     final people = [
-      for (final e in byName.entries)
-        _Person(e.key, e.value..sort((a, b) => a.createdAt.compareTo(b.createdAt)), peerOf(e.key, _peers)),
+      for (final e in byId.entries)
+        _Person(
+          e.key,
+          names[e.key]!,
+          e.value..sort((a, b) => a.createdAt.compareTo(b.createdAt)),
+          peerOf(e.key, _peers),
+        ),
     ];
     bool first(_Person p) => p.cases.any(_needsAction);
     return people..sort((a, b) {
       if (first(a) != first(b)) return first(a) ? -1 : 1;
-      return (b.latestAt ?? '').compareTo(a.latestAt ?? '');
+      final at = a.latestAt, bt = b.latestAt;
+      if (at == null || bt == null) return at == null ? (bt == null ? 0 : 1) : -1;
+      return DateTime.parse(bt).compareTo(DateTime.parse(at));
     });
   }
 
@@ -332,11 +351,11 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         child: StateCard(icon: Icons.notifications_none, title: '새 알림이 없습니다'),
       );
     }
-    final selected = people.firstWhere((p) => p.name == _selected, orElse: () => people.first);
+    final selected = people.firstWhere((p) => p.id == _selected, orElse: () => people.first);
     final list = _PersonList(
       admin: _admin,
       people: people,
-      selectedName: selected.name,
+      selectedId: selected.id,
       summaryOf: _summaryOf,
       onSelect: _select,
     );
@@ -387,14 +406,14 @@ class _PersonList extends StatelessWidget {
   const _PersonList({
     required this.admin,
     required this.people,
-    required this.selectedName,
+    required this.selectedId,
     required this.summaryOf,
     required this.onSelect,
   });
 
   final bool admin;
   final List<_Person> people;
-  final String selectedName;
+  final int selectedId;
   final String Function(_Person) summaryOf;
   final ValueChanged<_Person> onSelect;
 
@@ -407,48 +426,34 @@ class _PersonList extends StatelessWidget {
         children: [
           // 어느 상대를 골라도 항상 보이게 목록 위에 둔다 (D-288, D-303)
           const Padding(padding: EdgeInsets.only(bottom: 4), child: SmallText('메시지는 보낸 지 30일이 지나면 지워집니다.')),
-          // 카드 상자 없이 hair 줄 목록. 고른 줄은 옅은 파란 바탕 + 왼쪽 파란 막대 (캔버스 새 컨셉, D-305)
+          // 카드 상자 없이 hair 줄 목록. 왼쪽에 라디오 버튼 같은 점을 두고, 고른 줄은 파란 점 + 파란 이름이다
           for (final p in people)
-            Material(
-              color: p.name == selectedName ? const Color(0x143D8BFF) : Colors.transparent,
+            Semantics(
+              selected: p.id == selectedId,
               child: InkWell(
                 onTap: () => onSelect(p),
                 child: Container(
-                  decoration: BoxDecoration(
-                    border: Border(
-                      left: BorderSide(color: p.name == selectedName ? focusLineColor : Colors.transparent, width: 3),
-                      bottom: const BorderSide(color: lineColor),
-                    ),
+                  decoration: const BoxDecoration(
+                    border: Border(bottom: BorderSide(color: lineColor)),
                   ),
-                  padding: const EdgeInsets.fromLTRB(12, 14, 8, 14),
-                  child: Column(
+                  padding: const EdgeInsets.fromLTRB(4, 14, 8, 14),
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    spacing: 6,
+                    spacing: 10,
                     children: [
-                      Row(
-                        spacing: 8,
-                        children: [
-                          Expanded(
-                            child: Text(p.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                      // 이름 줄 가운데에 맞춘 점
+                      Padding(
+                        padding: const EdgeInsets.only(top: 7),
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: p.id == selectedId ? focusLineColor : hairColor,
                           ),
-                          if (p.latestAt case final at?) SmallText(formatKstMinute(at).substring(5)), // "MM-DD HH:mm"
-                        ],
+                        ),
                       ),
-                      // 시간 아래까지 한 줄을 쓰고, 넘치면 "..."로 줄인다. 안 읽은 수는 그 줄 오른쪽 끝에 둔다 (D-297, D-303)
-                      Row(
-                        spacing: 8,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              summaryOf(p),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 13, color: subColor, height: 1.5),
-                            ),
-                          ),
-                          if ((p.peer?.unread ?? 0) > 0) _UnreadDot(p.peer!.unread),
-                        ],
-                      ),
+                      Expanded(child: _rowText(p)),
                     ],
                   ),
                 ),
@@ -456,6 +461,44 @@ class _PersonList extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+
+  /// 한 줄의 글자: 이름 · 시각, 그 아래 요약 · 안 읽은 수.
+  Widget _rowText(_Person p) {
+    final selected = p.id == selectedId;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 6,
+      children: [
+        Row(
+          spacing: 8,
+          children: [
+            Expanded(
+              child: Text(
+                p.name,
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: selected ? pillColor : inkColor),
+              ),
+            ),
+            if (p.latestAt case final at?) SmallText(formatKstMinute(at).substring(5)), // "MM-DD HH:mm"
+          ],
+        ),
+        // 시간 아래까지 한 줄을 쓰고, 넘치면 "..."로 줄인다. 안 읽은 수는 그 줄 오른쪽 끝에 둔다 (D-297, D-303)
+        Row(
+          spacing: 8,
+          children: [
+            Expanded(
+              child: Text(
+                summaryOf(p),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13, color: subColor, height: 1.5),
+              ),
+            ),
+            if ((p.peer?.unread ?? 0) > 0) _UnreadDot(p.peer!.unread),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -528,10 +571,27 @@ class _Conversation extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             spacing: 12,
+            // 구분선은 날짜가 바뀔 때만 긋는다. 알림과 채팅 사이에도 날짜가 같으면 선이 없다
             children: [
-              for (final c in person.cases) ..._caseMessages(context, c),
-              const Divider(color: lineColor),
-              for (final m in chat) _Bubble(message: m, mine: m.mine),
+              for (final (i, c) in person.cases.indexed)
+                ..._caseMessages(
+                  context,
+                  c,
+                  withDate: i == 0 || formatKstDate(person.cases[i - 1].createdAt) != formatKstDate(c.createdAt),
+                ),
+              for (final (i, m) in chat.indexed) ...[
+                if (_dateChanged(i, m)) _DateDivider(m.createdAt),
+                _Bubble(
+                  message: m,
+                  mine: m.mine,
+                  showTime: showTimeStamp(
+                    m.createdAt,
+                    m.mine,
+                    nextAt: i + 1 < chat.length ? chat[i + 1].createdAt : null,
+                    nextMine: i + 1 < chat.length ? chat[i + 1].mine : null,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -544,35 +604,53 @@ class _Conversation extends StatelessWidget {
     ],
   );
 
-  List<Widget> _caseMessages(BuildContext context, VideoCase c) {
+  /// 이 메시지 앞에서 날짜가 바뀌었는지. 앞 메시지(없으면 마지막 사건, 사건도 없으면 첫 칸)와 날짜가 다르면 선을 긋는다.
+  bool _dateChanged(int i, ChatMessage m) {
+    final before = i > 0 ? chat[i - 1].createdAt : person.cases.lastOrNull?.createdAt;
+    return before == null || formatKstDate(before) != formatKstDate(m.createdAt);
+  }
+
+  /// 알림 카드의 시각. 영상 상태 알림은 8번에 상태가 바뀐 시각이 없어 null이다.
+  String? _noticeAt(NoticeMessage m, VideoCase c) => switch (m) {
+    NoticeInvite() => c.createdAt,
+    NoticeAccepted() => c.acceptedAt ?? c.createdAt,
+    NoticeStatus() => null,
+  };
+
+  List<Widget> _caseMessages(BuildContext context, VideoCase c, {required bool withDate}) {
     final title = _caseTitle(c, admin: admin);
+    final notices = messagesOf(c);
+    // 같은 쪽에서 같은 분에 연달아 온 카드는 맨 아래 것에만 시각을 붙인다
+    String? atOf(int i) {
+      final m = notices[i];
+      final next = i + 1 < notices.length ? notices[i + 1] : null;
+      final at = _noticeAt(m, c);
+      final shown = showTimeStamp(
+        at,
+        noticeIsMine(m, admin: admin),
+        nextAt: next == null ? null : _noticeAt(next, c),
+        nextMine: next == null ? null : noticeIsMine(next, admin: admin),
+      );
+      return shown ? at : null;
+    }
+
     return [
-      Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: Row(
-          spacing: 12,
-          children: [
-            const Expanded(child: Divider(color: lineColor)),
-            SmallText(formatKstDate(c.createdAt)), // 날짜는 짧으니 양쪽 선이 남는 폭을 반씩 채운다
-            const Expanded(child: Divider(color: lineColor)),
-          ],
-        ),
-      ),
-      for (final m in messagesOf(c))
+      if (withDate) _DateDivider(c.createdAt),
+      for (final (i, m) in notices.indexed)
         switch (m) {
           NoticeAccepted() => _NoticeCard(
             title: acceptedTitle(admin: admin),
             emoji: acceptedEmoji,
             caseLine: title,
             mine: noticeIsMine(m, admin: admin),
-            at: c.acceptedAt ?? c.createdAt,
+            at: atOf(i),
           ),
           NoticeInvite() => _NoticeCard(
             title: inviteTitle(admin: admin),
             emoji: inviteEmoji,
             caseLine: title,
             mine: noticeIsMine(m, admin: admin),
-            at: c.createdAt,
+            at: atOf(i),
             // 수락하면 오른쪽에 수락 카드가 따로 붙으므로, 요청 카드에는 수락 전 [수락]만 둔다
             footer: !admin && c.pending
                 ? _NoticeButton(label: '수락', onPressed: accepting.contains(c.id) ? null : () => onAccept(c))
@@ -592,6 +670,26 @@ class _Conversation extends StatelessWidget {
         },
     ];
   }
+}
+
+/// 날짜가 바뀌는 곳의 구분선. 가운데에 날짜(YYYY-MM-DD)만 둔다.
+class _DateDivider extends StatelessWidget {
+  const _DateDivider(this.at);
+
+  final String at;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 8),
+    child: Row(
+      spacing: 12,
+      children: [
+        const Expanded(child: Divider(color: lineColor)),
+        SmallText(formatKstDate(at)), // 날짜는 짧으니 양쪽 선이 남는 폭을 반씩 채운다
+        const Expanded(child: Divider(color: lineColor)),
+      ],
+    ),
+  );
 }
 
 /// 알림 카드. 제목과 오른쪽 이모지, 아래 작은 글씨로 사건 이름만 적는다.
@@ -693,14 +791,17 @@ class _NoticeButton extends StatelessWidget {
 
 /// 메시지 말풍선. 내 것은 오른쪽, 상대 것은 왼쪽이고 시각(HH:mm)을 옆에 붙인다 (D-297).
 class _Bubble extends StatelessWidget {
-  const _Bubble({required this.message, required this.mine});
+  const _Bubble({required this.message, required this.mine, this.showTime = true});
 
   final ChatMessage message;
   final bool mine;
 
+  /// 같은 쪽에서 같은 분에 연달아 보냈으면 맨 아래 말풍선에만 시각을 붙인다.
+  final bool showTime;
+
   @override
   Widget build(BuildContext context) {
-    final time = SmallText(formatKstMinute(message.createdAt).substring(11)); // "HH:mm"
+    final time = showTime ? SmallText(formatKstMinute(message.createdAt).substring(11)) : null; // "HH:mm"
     final box = Flexible(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
@@ -721,7 +822,7 @@ class _Bubble extends StatelessWidget {
       mainAxisAlignment: mine ? MainAxisAlignment.end : MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.end,
       spacing: 8,
-      children: mine ? [time, box] : [box, time],
+      children: mine ? [?time, box] : [box, ?time],
     );
   }
 }

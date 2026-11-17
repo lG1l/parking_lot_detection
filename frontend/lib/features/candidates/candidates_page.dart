@@ -183,23 +183,28 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
   /// 다른 탭도 끝났으면 영상 전체가 끝나(exhausted) 완료 또는 결과 화면으로 간다.
   /// 다른 탭에 후보가 남았으면 이 탭만 끝나고, 이 페이지에 "모두 확인했습니다" 안내가 뜬다.
   Future<void> _endTab() async {
-    final whole = needsLastBatchConfirm(_lists!, _tab);
-    final other = CandidateList.other(_tab) == CandidateList.main ? '후보' : '점수 미산출';
-    final ok = whole
-        ? await confirm(
-            context,
-            '모든 후보를 확인한 것으로 끝냅니다. 끝낸 뒤에는 더는 [찾음]을 누를 수 없습니다. 고정한 장면은 결과 화면에서 볼 수 있습니다.',
-            title: '후보 확인을 끝낼까요?',
-            okLabel: '끝내기',
-          )
-        : await confirm(
-            context,
-            '이 목록의 후보를 모두 확인한 것으로 끝냅니다. $other 탭에 확인할 후보가 남아 있습니다.',
-            title: '이 목록의 확인을 끝낼까요?',
-            okLabel: '끝내기',
-          );
-    if (ok && mounted) await _fetchNext();
+    if (await _confirmEnd() && mounted) await _fetchNext();
   }
+
+  /// [확인 끝내기]의 확인창. 어느 탭에서 누르든, 이 탭만 끝나든 영상 전체가 끝나든 같다.
+  /// 되돌릴 수 없다는 첫 줄만 빨간 글씨다.
+  Future<bool> _confirmEnd() => confirm(
+    context,
+    '종료 시 다시 선택할 수 없습니다.\n후보, 점수 미산출 모두 확인해 보시는 것을 권장드립니다.',
+    title: '확인을 종료할까요?',
+    okLabel: '끝내기',
+    content: const Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: '종료 시 다시 선택할 수 없습니다.',
+            style: TextStyle(color: dangerColor, fontWeight: FontWeight.w600),
+          ),
+          TextSpan(text: '\n후보, 점수 미산출 모두 확인해 보시는 것을 권장드립니다.'),
+        ],
+      ),
+    ),
+  );
 
   /// 두 탭이 모두 끝났는데 ready일 때의 [다음 ▶]. 확인창 뒤 13번으로 끝낸다 (D-203, 07장 2.7).
   Future<void> _endAll() async {
@@ -234,14 +239,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
   }
 
   Future<void> _finish() async {
-    if (!await confirm(
-      context,
-      '끝낸 뒤에는 더는 [찾음]을 누를 수 없습니다. 고정한 장면은 결과 화면에서 볼 수 있습니다.',
-      title: '후보 확인을 끝낼까요?',
-      okLabel: '끝내기',
-    )) {
-      return;
-    }
+    if (!await _confirmEnd()) return;
     if (!mounted) return;
     // 백엔드 연결 필요: 17번 확인 끝내기
     await backendNotice(context, ref, '확인 끝내기');
@@ -277,7 +275,6 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
   Widget _body(BuildContext context, Batch batch) {
     final lists = _lists!;
     final tab = lists[_tab]!;
-    final unavailable = unavailableMessage(batch);
     final doneMessage = tabDoneMessage(lists, _tab);
     final other = CandidateList.other(_tab);
     final fixed = _fixedLayout(context);
@@ -303,7 +300,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _tabs(lists),
+        _tabs(lists, unavailableLabel(batch)),
         const SizedBox(height: 12),
         Text(
           _tab == CandidateList.main
@@ -332,30 +329,6 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
           ),
           const SizedBox(height: 14),
         ],
-        if (unavailable != null) ...[
-          // 작은 안내 띠 (D-190)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: hairColor),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                spacing: 8,
-                children: [
-                  const Icon(Icons.videocam_off_outlined, size: 16, color: subColor),
-                  Flexible(
-                    child: Text(unavailable, style: const TextStyle(fontSize: 13, color: subColor)),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-        ],
         if (fixed) Expanded(child: SingleChildScrollView(child: clips)) else clips,
         const SizedBox(height: 12),
         // 오른쪽 아래 묶음 이동. 열람기한은 제목 위로 옮겼다 (캔버스 2.7)
@@ -372,7 +345,8 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
   }
 
   /// 밑줄형 탭 두 개 (캔버스 2.7): 고른 탭은 파란 밑줄 2px, 아래 hair 선 (D-305).
-  Widget _tabs(Map<String, ListSummary> lists) {
+  /// 묶음에 열람 불가 후보가 있으면 [점수 미산출] 옆에 "볼 수 없는 후보 N"을 누를 수 없는 연한 글자로 둔다.
+  Widget _tabs(Map<String, ListSummary> lists, String? unavailable) {
     Widget tabButton(String t) {
       final selected = t == _tab;
       final enabled = tabEnabled(lists, t);
@@ -409,17 +383,27 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
       child: Row(
         children: [
           for (final t in [CandidateList.main, CandidateList.parseFailed]) tabButton(t),
+          if (unavailable != null)
+            Container(
+              constraints: const BoxConstraints(minHeight: 44),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              alignment: Alignment.center,
+              child: Text(
+                unavailable,
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: progressColor),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  /// 넓으면 3열, 좁아지면 2열·1열.
+  /// 넓으면 2열, 좁아지면 1열.
   Widget _grid(List<CandidateClip> candidates) {
     const gap = 28.0;
     return LayoutBuilder(
       builder: (context, c) {
-        final columns = c.maxWidth >= 900 ? 3 : (c.maxWidth >= 560 ? 2 : 1);
+        final columns = c.maxWidth >= 560 ? 2 : 1; // 넓어도 2열까지
         final width = (c.maxWidth - gap * (columns - 1)) / columns;
         return Wrap(
           spacing: gap,
@@ -504,21 +488,21 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
         SmallText('남은 후보 ${tab.remaining}건'),
         OutlinedButton(
           onPressed: _busy || batch.batchNo <= 1 ? null : () => _run(() => _loadBatch(batchNo: batch.batchNo - 1)),
-          child: const Text('◀ 이전'),
+          child: const _ArrowLabel('이전', next: false),
         ),
         Text('묶음 ${batch.batchNo} / $latest', style: const TextStyle(fontWeight: FontWeight.w600)),
         if (showFetch)
           // 이름은 [다음 ▶]과 같다. 받은 묶음이 끝이면 13번으로 새 묶음을 받는다 (D-190)
           OutlinedButton(
             onPressed: _busy ? null : (tab.done ? _endAll : _fetchNext),
-            child: const Text('다음 ▶'),
+            child: const _ArrowLabel('다음', next: true),
           )
         else
           OutlinedButton(
             onPressed: _busy || batch.batchNo >= latest
                 ? null
                 : () => _run(() => _loadBatch(batchNo: batch.batchNo + 1)),
-            child: const Text('다음 ▶'),
+            child: const _ArrowLabel('다음', next: true),
           ),
         // [확인 끝내기]는 늘 보인다 (D-190). 마지막 페이지면 이 탭을 끝내고(13번),
         // 그 전에는 고정이 1개 이상일 때 영상 전체를 끝낸다(17번). 둘 다 아니면 막는다.
@@ -536,6 +520,24 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// [◀ 이전]·[다음 ▶] 버튼 글자. ◀▶ 글자는 브라우저가 이모지로 그려 버리므로 같은 모양의 아이콘을 붙인다.
+class _ArrowLabel extends StatelessWidget {
+  const _ArrowLabel(this.label, {required this.next});
+
+  final String label;
+  final bool next;
+
+  @override
+  Widget build(BuildContext context) {
+    final arrow = RotatedBox(quarterTurns: next ? 0 : 2, child: const Icon(Icons.play_arrow, size: 16));
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      spacing: 4,
+      children: next ? [Text(label), arrow] : [arrow, Text(label)],
     );
   }
 }

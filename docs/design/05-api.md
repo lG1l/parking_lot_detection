@@ -360,10 +360,11 @@ PUT upload_url (파일 본문) ────────────────�
 성공: `200`
 
 ```json
-{"items": [{"id": 3, "admin_name": "주차장 관리자", "victim_name": "홍길동", "case_name": "홍길동 11/5", "created_at": "2026-11-01T14:03:00+09:00", "accepted_at": null}]}
+{"items": [{"id": 3, "admin_name": "주차장 관리자", "victim_name": "홍길동", "case_name": "홍길동 11/5", "created_at": "2026-11-01T14:03:00+09:00", "accepted_at": null, "peer_user_id": 5}]}
 ```
 
 - `accepted_at`은 수락 시각이고, 수락 전에는 `null`이다.
+- `peer_user_id`는 상대 계정 번호다. 관리자에게는 피해자 계정, 피해자에게는 관리자 계정이다. 29번의 `peer_user_id`와 같은 값이라, 채팅 화면이 이름이 같은 계정을 구분해 사건을 상대별로 묶는 데 쓴다 (C-19).
 - `case_name`은 부른 계정이 붙인 이름이다. 상대 계정의 이름은 주지 않는다. 이름이 없는 옛 사건은 `null`이다 (D-240).
 
 ### 26. `POST /api/cases/{case_id}/accept` 사건 초대 수락

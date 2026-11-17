@@ -153,7 +153,11 @@ class DemoApi extends Api {
       c == null || c[_deletedKey] != null || (!_admin && !pendingVisible && c['accepted_at'] == null);
 
   /// 22번 항목. `case_name`은 지금 계정 쪽 이름이다 (D-240)
-  VideoCase _caseOf(Map<String, Object?> c) => VideoCase.fromJson({...c, 'case_name': c[_nameKey]});
+  VideoCase _caseOf(Map<String, Object?> c) => VideoCase.fromJson({
+    ...c,
+    'case_name': c[_nameKey],
+    'peer_user_id': _admin ? _victimUserId(c['victim_name'] as String) : _adminUserId, // 22번처럼 상대 계정 번호 (C-19 ⑧)
+  });
 
   /// 지금 계정에서 감출 영상인지. 수락 전 사건(피해자)과 이 계정이 지운 사건의 영상이다 (D-233, D-239)
   bool _hidden(Map<String, Object?> v) => _caseHidden(_cases[v['case_id']]);

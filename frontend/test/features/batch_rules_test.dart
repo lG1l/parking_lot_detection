@@ -63,9 +63,9 @@ void main() {
     expect(tabDoneMessage({'main': s(2, 0, true), 'parse_failed': s(null, 0, true)}, 'main'), isNull);
   });
 
-  test('열람 불가 안내 (D-109)', () {
-    expect(unavailableMessage(batch(1)), isNull);
-    expect(unavailableMessage(batch(1, unavailable: 2)), contains('2건'));
-    expect(unavailableMessage(batch(1, unavailable: 3, count: 0)), '이 묶음의 후보는 모두 영상을 준비하지 못했습니다.');
+  test('열람 불가 수는 탭 줄의 "볼 수 없는 후보 N" (D-109)', () {
+    expect(unavailableLabel(batch(1)), isNull);
+    expect(unavailableLabel(batch(1, unavailable: 2)), '볼 수 없는 후보 2');
+    expect(unavailableLabel(batch(1, unavailable: 3, count: 0)), '볼 수 없는 후보 3');
   });
 }

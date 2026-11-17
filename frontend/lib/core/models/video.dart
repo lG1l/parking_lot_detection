@@ -22,7 +22,8 @@ String statusLabel(String status, {bool admin = true}) => switch (status) {
   VideoStatus.uploadFailed => '업로드 확인 안 됨',
   VideoStatus.queued => '대기 중',
   VideoStatus.stillsRunning => '준비 중',
-  VideoStatus.stage1Done => '사전 입력 필요',
+  // 관리자에게는 피해자의 입력을 기다리는 상태라 할 일처럼 보이지 않게 한다
+  VideoStatus.stage1Done => admin ? '입력 대기 중' : '사전 입력 필요',
   VideoStatus.stage2Running => '분석 중',
   VideoStatus.ready || VideoStatus.batchRunning => admin ? '후보 선택 가능' : '분석 완료',
   VideoStatus.finished => '확인 완료',
@@ -35,7 +36,7 @@ String statusLabel(String status, {bool admin = true}) => switch (status) {
 enum StatusGroup { todo, problem, waiting, done, ended }
 
 StatusGroup statusGroup(String status, {bool admin = true}) => switch (status) {
-  VideoStatus.stage1Done => StatusGroup.todo,
+  VideoStatus.stage1Done => admin ? StatusGroup.waiting : StatusGroup.todo,
   VideoStatus.ready || VideoStatus.batchRunning => admin ? StatusGroup.todo : StatusGroup.done,
   VideoStatus.uploadFailed || VideoStatus.failed => StatusGroup.problem,
   VideoStatus.finished || VideoStatus.exhausted => StatusGroup.done,

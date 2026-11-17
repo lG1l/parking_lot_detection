@@ -37,9 +37,12 @@ _COLS = {
     "victim": ("victim_user_id", "victim_case_name", "victim_deleted_at"),
 }
 
+# 상대 계정 번호. 채팅 화면이 29번의 상대와 사건을 짝짓는다 (C-19)
+_PEER_COL = {"admin": "victim_user_id", "victim": "admin_user_id"}
+
 _ITEM = """
 SELECT c.id, a.name AS admin_name, v.name AS victim_name, c.created_at, c.accepted_at,
-       c.{name_col} AS case_name
+       c.{name_col} AS case_name, c.{peer_col} AS peer_user_id
   FROM cases c JOIN users a ON a.id = c.admin_user_id
   JOIN users v ON v.id = c.victim_user_id
  WHERE c.{user_col} = :u AND c.{deleted_col} IS NULL
@@ -54,12 +57,18 @@ def _item(r) -> dict:
         "case_name": r.case_name,
         "created_at": _iso(r.created_at),
         "accepted_at": _iso(r.accepted_at) if r.accepted_at else None,
+        "peer_user_id": r.peer_user_id,
     }
 
 
 def _item_sql(role: str, where: str = "") -> str:
     user_col, name_col, deleted_col = _COLS[role]
-    return _ITEM.format(user_col=user_col, name_col=name_col, deleted_col=deleted_col) + where
+    return (
+        _ITEM.format(
+            user_col=user_col, name_col=name_col, deleted_col=deleted_col, peer_col=_PEER_COL[role]
+        )
+        + where
+    )
 
 
 def _my_case(conn, case_id: int, user: dict) -> None:
