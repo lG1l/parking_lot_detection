@@ -51,6 +51,15 @@ class ModelError(Exception):
     """모델을 열 수 없을 때. 메시지는 사용자에게 그대로 보여 준다."""
 
 
+@dataclass(frozen=True)
+class TrackBox:
+    """한 프레임의 확정된 채널 A 트랙 하나. 채널 B 덩어리를 붙일 때 본다 (D-314)."""
+
+    track_id: int
+    cls: str  # 그 프레임에 YOLO가 낸 클래스 이름
+    bbox: tuple[float, float, float, float]  # 줄인 프레임 좌표 (x1, y1, x2, y2)
+
+
 @dataclass
 class ChannelA:
     """영상 하나에 하나 만든다. 추적기는 껐다 켜도 끝까지 같은 것을 쓴다 (D-257)."""
