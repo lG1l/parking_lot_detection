@@ -107,8 +107,8 @@ enum FailureAction { retry, upload, none }
       return (message: '서비스 문제로 분석을 완료하지 못했습니다. 주차장 관리자에게 다시 시도를 요청해 주세요.', action: FailureAction.none);
     }
     final message = d.errorKind == 'temporary'
-        ? '일시적인 서비스 문제로 분석을 완료하지 못했습니다. 다시 시도해 주세요. 문제가 계속되면 운영 담당자에게 문의해 주세요.'
-        : '서비스 문제로 분석을 완료하지 못했습니다. 다시 시도해 주세요. 문제가 계속되면 운영 담당자에게 문의해 주세요.';
+        ? '일시적인 서비스 문제로 분석을 완료하지 못했습니다. 다시 시도해 주세요.\n문제가 계속되면 운영 담당자에게 문의해 주세요.'
+        : '서비스 문제로 분석을 완료하지 못했습니다. 다시 시도해 주세요.\n문제가 계속되면 운영 담당자에게 문의해 주세요.';
     return (message: message, action: FailureAction.retry);
   }
   if ((d.retryLeft ?? 0) <= 0) {

@@ -61,7 +61,8 @@ NoticeStatus? statusNoticeOf(VideoSummary v, {required bool admin}) {
   if (v.maskedDeleted) return null; // 보관 기간이 끝난 영상은 뺀다
   if (admin) {
     return switch (v.status) {
-      VideoStatus.stage2Running => NoticeStatus(v, '분석 시작', '영상 분석을 시작했어요!', '🔍', action: '진행 상황'),
+      // 분석 중에는 관리자가 할 일이 없어 버튼이 없다
+      VideoStatus.stage2Running => NoticeStatus(v, '분석 시작', '영상 분석을 시작했어요!', '🔍'),
       VideoStatus.ready || VideoStatus.batchRunning => NoticeStatus(v, '후보 선정', '후보를 고를 수 있어요!', '🎯', action: '후보 선택'),
       VideoStatus.failed => NoticeStatus(v, '분석 실패', '영상 분석에 실패했어요', '⚠️', problem: true, action: '상태 확인'),
       VideoStatus.uploadFailed => NoticeStatus(v, '업로드 실패', '업로드를 확인하지 못했어요', '📤', problem: true, action: '상태 확인'),

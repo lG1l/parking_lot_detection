@@ -699,12 +699,13 @@ typedef StatusDotStyle = ({Color? dot, Color text});
 
 /// 상태 글자(07장 2.2)에서 점 모양을 고른다. 모르는 글자는 회색 점이다.
 StatusDotStyle statusDotStyle(String label) => switch (label) {
-  '사전 입력 필요' || '확인 완료' => (dot: pointColor, text: pointColor),
-  '후보 선택 가능' => (dot: focusLineColor, text: pointColor),
+  '확인 완료' => (dot: pointColor, text: pointColor),
+  // 내가 할 일: 관리자의 업로드 필요·후보 선택 가능, 피해자의 사전 입력 필요. 파란 점
+  '후보 선택 가능' || '업로드 필요' || '사전 입력 필요' => (dot: focusLineColor, text: pointColor),
   '분석 완료' => (dot: inkColor, text: inkColor), // 피해자 계정의 분석 완료
   '분석 실패' || '업로드 확인 안 됨' => (dot: failChipColor, text: failChipColor),
   '수락 대기 중' || '종료됨' => (dot: null, text: subColor),
-  _ => (dot: progressColor, text: pointColor), // 업로드 중·대기 중·분석 중·업로드 필요, 그 밖
+  _ => (dot: progressColor, text: pointColor), // 업로드 중·대기 중·입력 대기 중·분석 중, 그 밖
 };
 
 /// 상태를 점(7px) + 글자로 보인다. 칩 대신 쓴다 (D-305).

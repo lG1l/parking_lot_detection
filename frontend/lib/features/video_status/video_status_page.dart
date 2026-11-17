@@ -220,16 +220,10 @@ class _VideoStatusPageState extends ConsumerState<VideoStatusPage> {
             action: _admin && d.status == VideoStatus.uploadFailed ? _uploadButton() : null,
           ),
         },
-        const SizedBox(height: 16),
-        // 열람기한은 제목 위 작은 글자로 옮겼다 (D-211). 관리자가 피해자 입력을 기다리는 화면에는 영상 길이도 없다
-        if (screen != StatusScreen.expired && d.durationSec != null && !_waitingVictimInput(d))
-          SmallText('영상 길이 ${formatElapsed(d.durationSec!)}'),
+        // 열람기한은 제목 위 작은 글자로 옮겼다 (D-211). 영상 길이는 어느 화면에도 보이지 않는다
       ],
     );
   }
-
-  /// 관리자가 피해자의 차량 입력을 기다리는 화면('입력 필요')인지.
-  bool _waitingVictimInput(VideoDetail d) => _admin && d.status == VideoStatus.stage1Done && !d.inputDone;
 
   /// 대기·분석 중: 윗선 아래에 진행 표시(또는 아이콘) + 첫 문구를 크게, 나머지를 작게 (D-190, D-305).
   Widget _waiting(List<String> messages, {IconData? icon, Widget? action}) {

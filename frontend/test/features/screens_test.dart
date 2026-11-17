@@ -743,6 +743,7 @@ void main() {
     expect(scaleOf(), 1.0);
     expect(browser.local, isEmpty);
 
+    await tester.ensureVisible(find.text('크게')); // 구역 사이가 넓어 화면 아래에 있다
     await tester.tap(find.text('크게'));
     await settle(tester);
     expect(picker().groupValue, TextSize.large);
@@ -1291,7 +1292,7 @@ void main() {
     // 점수 미산출 옆 연한 글자. 누를 수 없다
     expect(find.text('볼 수 없는 후보 1'), findsOneWidget);
     expect(find.ancestor(of: find.text('볼 수 없는 후보 1'), matching: find.byType(InkWell)), findsNothing);
-    expect(find.text('다음 ▶'), findsOneWidget); // 새 묶음을 받는 버튼도 이름은 [다음 ▶] (D-190)
+    expect(find.text('다음'), findsOneWidget); // 새 묶음을 받는 버튼도 이름은 [다음 ▶] (D-190)
     expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '확인 끝내기')).onPressed, isNull); // 늘 보이지만 막힘
 
     await tester.tap(find.widgetWithText(FilledButton, '찾음'));
@@ -1325,11 +1326,11 @@ void main() {
       'POST /api/videos/7/batch/next': (_) => json({'status': 'exhausted', 'lists': lists(mainRemaining: 0)}),
     });
     await pumpApp(tester, backend, '/videos/7/candidates');
-    expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, '다음 ▶')).onPressed, isNull);
+    expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, '다음')).onPressed, isNull);
 
     await tester.tap(find.widgetWithText(FilledButton, '확인 끝내기')); // 고정이 없어도 보인다
     await settle(tester);
-    expect(find.text('후보 확인을 끝낼까요?'), findsOneWidget);
+    expect(find.text('확인을 종료할까요?'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, '끝내기'));
     await settle(tester);
     expect(backend.calls, contains('POST /api/videos/7/batch/next'));
@@ -1356,7 +1357,7 @@ void main() {
     await pumpApp(tester, backend, '/videos/7/candidates');
     expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '확인 끝내기')).onPressed, isNull);
 
-    await tester.tap(find.widgetWithText(OutlinedButton, '다음 ▶'));
+    await tester.tap(find.widgetWithText(OutlinedButton, '다음'));
     await settle(tester);
     expect(find.textContaining('마지막 묶음입니다.'), findsOneWidget);
     expect(backend.calls, isNot(contains('POST /api/videos/7/batch/next')));

@@ -7,8 +7,9 @@ void main() {
     expect(statusDotStyle('업로드 중').dot, progressColor);
     expect(statusDotStyle('대기 중').dot, progressColor);
     expect(statusDotStyle('분석 중').dot, progressColor);
-    expect(statusDotStyle('업로드 필요').dot, progressColor);
-    expect(statusDotStyle('사전 입력 필요').dot, pointColor);
+    expect(statusDotStyle('입력 대기 중').dot, progressColor); // 관리자가 피해자 입력을 기다림
+    expect(statusDotStyle('업로드 필요').dot, focusLineColor); // 관리자 할 일
+    expect(statusDotStyle('사전 입력 필요').dot, focusLineColor); // 피해자 할 일
     expect(statusDotStyle('확인 완료').dot, pointColor);
     expect(statusDotStyle('후보 선택 가능').dot, focusLineColor);
     expect(statusDotStyle('분석 실패').dot, failChipColor);

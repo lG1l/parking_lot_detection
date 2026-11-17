@@ -7,7 +7,7 @@ const subColor = Color(0xFF4A5568); // 보조 글자 · 확인 완료
 const progressColor = Color(0xFFA0AEC0); // 업로드 중 · 대기 중 · 분석 중
 const lineColor = Color(0xFFE2E8F0); // 테두리 · 구분선 · 종료됨
 const offWhiteColor = Color(0xFFF9F9F9); // 모든 배경 · 진한 바탕 위 글자
-const pointLightColor = Color(0xFFE4E8EF); // 포인트색을 연하게. 내가 보낸 채팅 말풍선 바탕 (D-297)
+const pointLightColor = Color(0xFFDDEBFF); // 연한 하늘색. 내가 보낸 채팅 말풍선 바탕 (D-297). 검은 글자와 대비 15.5:1
 const failColor = Color(0xFF93000A); // 분석 실패
 
 // 화면 겉모습 "새 컨셉" (D-305). 캔버스 색은 흰 글자 대비가 모자라 같은 파랑 계열에서 더 진하게 잡았다.
