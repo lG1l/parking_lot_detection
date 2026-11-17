@@ -3,7 +3,10 @@ import dataclasses
 import numpy as np
 
 from pipeline.candidates.car_region import (
+    FramePixels,
+    base_region,
     build_car_spot,
+    car_keys,
     draw_region,
     pick_my_car,
     region_polygons,
@@ -110,3 +113,74 @@ def test_기준_영역은_조각마다_바깥_윤곽_다각형이고_다시_그�
 
 def test_빈_다각형_목록을_그리면_빈_그림이다():
     assert not draw_region([], (FRAME[1], FRAME[0])).any()
+
+
+# 10×10 기준 영역을 20×20 프레임의 (5,5)~(15,15)에 둔다. 아래쪽 1/2은 y 10~14다
+SMALL = (20, 20)
+BASE = base_region([[[5, 5], [14, 5], [14, 14], [5, 14]]], SMALL)
+RIGHT_HALF = (10.0, 0.0, 20.0, 20.0)  # 기준 영역의 오른쪽 절반(x 10~14)을 덮는 트랙 bbox
+
+
+def _small_mask(x1, y1, x2, y2):
+    mask = np.zeros(SMALL, bool)
+    mask[y1:y2, x1:x2] = True
+    return mask
+
+
+# bbox 안 아래쪽 전경 5칸, bbox 안 위쪽 그림자 4칸, bbox 밖 전경 1칸
+PIXELS = FramePixels(
+    foreground=_small_mask(10, 12, 15, 13) | _small_mask(6, 6, 7, 7),
+    shadow=_small_mask(10, 6, 14, 7),
+)
+# 그 프레임의 내 차 영역: 기준 영역에서 bbox 안 10칸(x 10~14, y 5~6)이 빠졌다
+MY_CAR = BASE.mask & ~_small_mask(10, 5, 15, 7)
+
+
+def test_차_영역_키_네_개를_손으로_센_값대로_잰다():
+    assert np.count_nonzero(BASE.mask) == 100
+    assert car_keys(RIGHT_HALF, BASE, MY_CAR, PIXELS, stable=True) == {
+        "car_fg_px": 9,  # 전경 5 + 그림자 4
+        "car_front_fg": 0.05,  # 아래쪽 전경 5칸 ÷ 기준 영역 100칸 (D-321)
+        "car_out_fg": 0.02,  # bbox 밖 전경 1칸 ÷ bbox 밖 기준 영역 50칸
+        "car_lost_px": 10,
+    }
+
+
+def test_차_영역_키는_상황마다_없거나_null이다():
+    nothing = FramePixels(np.zeros(SMALL, bool), np.zeros(SMALL, bool))
+    # 변화가 없으면 키가 없다
+    assert car_keys(RIGHT_HALF, BASE, BASE.mask, nothing, stable=True) == {}
+    # bbox가 기준 영역과 겹치지 않음
+    assert car_keys((0.0, 0.0, 5.0, 5.0), BASE, MY_CAR, PIXELS, stable=True) == {}
+    # 거슬러 돈 프레임: 전경이 없어 영역 줄어듦만 잰다
+    assert car_keys(RIGHT_HALF, BASE, MY_CAR, None, stable=True) == {"car_lost_px": 10}
+    # MOG2 안정 전: 전경을 쓰는 키 셋은 측정 불가
+    assert car_keys(RIGHT_HALF, BASE, MY_CAR, PIXELS, stable=False) == {
+        "car_fg_px": None,
+        "car_front_fg": None,
+        "car_out_fg": None,
+        "car_lost_px": 10,
+    }
+    # 그 프레임에서 내 차를 찾지 못함
+    assert car_keys(RIGHT_HALF, BASE, None, PIXELS, stable=True) == {
+        "car_fg_px": 9,
+        "car_front_fg": 0.05,
+        "car_out_fg": 0.02,
+        "car_lost_px": None,
+    }
+    # 기준 영역이 없는 구간
+    assert base_region([], SMALL) is None
+    assert car_keys(RIGHT_HALF, None, MY_CAR, PIXELS, stable=True) == {}
+
+
+def test_bbox가_기준_영역을_다_덮으면_car_out_fg는_null이다():
+    whole = (0.0, 0.0, 20.0, 20.0)
+    keys = car_keys(whole, BASE, BASE.mask, PIXELS, stable=True)
+    assert keys == {"car_fg_px": 10, "car_front_fg": 0.05, "car_out_fg": None}
+
+
+def test_bbox가_아래쪽_절반과_겹치지_않으면_car_front_fg를_쓰지_않는다():
+    top = (0.0, 0.0, 20.0, 10.0)  # 기준 영역의 위쪽 절반만 덮는다
+    keys = car_keys(top, BASE, BASE.mask, PIXELS, stable=True)
+    assert "car_front_fg" not in keys
+    assert keys["car_fg_px"] == 5  # 그림자 4 + bbox 밖이던 전경 1

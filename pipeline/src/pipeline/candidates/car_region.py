@@ -138,3 +138,120 @@ def draw_region(polygons: list[Polygon], shape: tuple[int, int]) -> np.ndarray:
     canvas = np.zeros(shape, np.uint8)
     cv2.fillPoly(canvas, [np.array(polygon, np.int32) for polygon in polygons], 1)
     return canvas > 0
+
+
+@dataclass(frozen=True)
+class BaseRegion:
+    """YOLO 구간 하나의 기준 영역 (D-259). 트랙 줄의 차 영역 키는 이것과 견줘 잰다."""
+
+    mask: np.ndarray  # 기준 영역. 줄인 프레임 크기, 안쪽 True
+    lower: np.ndarray  # 기준 영역의 아래쪽 1/2 (D-219)
+
+
+@dataclass(frozen=True)
+class FramePixels:
+    """분석 프레임 한 장의 MOG2 결과. 줄인 프레임 크기의 참·거짓 그림이다 (D-319 결정 3)."""
+
+    foreground: np.ndarray  # 전경. 채널 B가 덩어리를 찾는 그림과 같다 (그림자 제외, 열기 연산 뒤)
+    shadow: np.ndarray  # 그림자. MOG2 원본 값이 127인 칸
+
+
+def _lower_half(region: np.ndarray) -> np.ndarray:
+    """영역의 아래쪽 1/2. 세로줄마다 영역의 위 끝과 아래 끝의 가운데보다 아래쪽이다 (D-219).
+
+    영역 전체의 세로 가운데로 자르지 않는다. 차를 비스듬히 보면 가까운 쪽 끝에서 유리까지 들어온다.
+    """
+    height = region.shape[0]
+    top = np.argmax(region, axis=0)
+    bottom = height - 1 - np.argmax(region[::-1], axis=0)
+    rows = np.arange(height)[:, None]
+    # 영역이 없는 세로줄은 region이 모두 False라 결과도 False다
+    return region & (rows > (top + bottom) / 2)
+
+
+def base_region(polygons: list[Polygon], shape: tuple[int, int]) -> BaseRegion | None:
+    """다각형 목록을 다시 그려 구간의 기준 영역을 만든다. 빈 목록(내 차를 찾지 못함)이면 None이다."""
+    if not polygons:
+        return None
+    mask = draw_region(polygons, shape)
+    return BaseRegion(mask, _lower_half(mask))
+
+
+def redraw(region: np.ndarray) -> np.ndarray:
+    """그 프레임의 내 차 영역을 기준 영역과 같은 방법(바깥 윤곽 → 다시 그리기)으로 만든 모양으로 바꾼다.
+
+    기준 영역은 구멍이 채워진 모양이다. 마스크를 그대로 견주면 구멍 때문에
+    가린 것이 없어도 영역 줄어듦이 생긴다 (D-319 결정 4).
+    """
+    return draw_region(region_polygons(region), region.shape)
+
+
+def _inside_bbox(bbox: tuple[float, float, float, float], shape: tuple[int, int]) -> np.ndarray:
+    """줄인 프레임 좌표의 bbox 안쪽을 True로 칠한 그림. bbox는 가장 가까운 픽셀 경계로 맞춘다."""
+    x1, y1, x2, y2 = (max(round(value), 0) for value in bbox)
+    inside = np.zeros(shape, bool)
+    inside[y1:y2, x1:x2] = True
+    return inside
+
+
+def _ratio(count: int, total: int) -> float:
+    """비율을 소수 둘째 자리로 반올림한다 (04장 4.8 예시와 같은 자리)."""
+    return round(count / total, 2)
+
+
+def car_keys(
+    bbox: tuple[float, float, float, float],
+    base: BaseRegion | None,
+    my_car: np.ndarray | None,
+    pixels: FramePixels | None,
+    stable: bool,
+) -> dict:
+    """트랙 줄 하나에 쓸 차 영역 키를 잰다 (04장 4.8, D-262, D-319, D-321).
+
+    bbox는 줄인 프레임 좌표다. base는 그 프레임이 속한 구간의 기준 영역(없으면 None),
+    my_car는 그 프레임의 내 차 영역(다시 그린 모양, 찾지 못했으면 None),
+    pixels는 그 프레임의 MOG2 결과(거슬러 돈 프레임은 MOG2를 다시 돌리지 않아 None),
+    stable은 MOG2가 안정된 뒤인지다.
+    값이 0인 키는 넣지 않는다(키가 없으면 변화 없음). 잴 수 없는 키는 None(파일에서는 null)이다.
+    """
+    if base is None:
+        # 기준 영역이 없는 구간에서는 잴 것이 없다
+        return {}
+    inside = _inside_bbox(bbox, base.mask.shape)
+    overlap = base.mask & inside
+    if not overlap.any():
+        return {}
+
+    keys: dict = {}
+    if pixels is not None and not stable:
+        # 안정 전 전경은 믿을 수 없어 전경을 쓰는 키 셋은 측정 불가다 (06장 6.5 구현 주의사항)
+        keys.update(car_fg_px=None, car_front_fg=None, car_out_fg=None)
+    elif pixels is not None:
+        fg_px = np.count_nonzero(overlap & (pixels.foreground | pixels.shadow))
+        if fg_px:
+            keys["car_fg_px"] = fg_px
+        # 분모는 기준 영역 전체 넓이다. bbox가 조금만 걸친 물체는 값이 작게 나온다 (D-321)
+        front = _ratio(
+            np.count_nonzero(base.lower & inside & pixels.foreground),
+            np.count_nonzero(base.mask),
+        )
+        if front:
+            keys["car_front_fg"] = front
+        outside = base.mask & ~inside
+        out_area = np.count_nonzero(outside)
+        if out_area == 0:
+            # bbox가 기준 영역을 다 덮으면 "차 전체가 함께 변했는지"를 알 수 없다 (D-319 결정 5)
+            keys["car_out_fg"] = None
+        else:
+            out = _ratio(np.count_nonzero(outside & pixels.foreground), out_area)
+            if out:
+                keys["car_out_fg"] = out
+
+    if my_car is None:
+        # 그 프레임의 내 차 영역이 없으면 영역 줄어듦을 잴 수 없다
+        keys["car_lost_px"] = None
+    else:
+        lost_px = np.count_nonzero(overlap & ~my_car)
+        if lost_px:
+            keys["car_lost_px"] = lost_px
+    return keys

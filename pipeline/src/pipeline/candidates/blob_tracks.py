@@ -126,6 +126,18 @@ def track_boxes(tracker: ByteTrackTracker, boxes: list[Box]) -> sv.Detections:
     return tracker.update(detections)
 
 
+def blob_track_boxes(tracked: sv.Detections) -> list[tuple[float, float, float, float]]:
+    """확정된 클래스 없는 트랙의 사각형을 줄인 프레임 좌표 그대로 꺼낸다. blob_track_lines와 순서가 같다.
+
+    차 영역 키는 줄인 프레임에서 재므로 원본 좌표로 바꾸기 전의 사각형이 필요하다 (D-262).
+    """
+    return [
+        tuple(float(v) for v in xyxy)
+        for xyxy, tracker_id in zip(tracked.xyxy, tracked.tracker_id)
+        if tracker_id >= 0
+    ]
+
+
 def blob_track_lines(tracked: sv.Detections, time_sec: float, crop: Crop) -> list[dict]:
     """채널 B 추적기가 돌려준 결과를 클래스 없는 트랙 줄로 바꾼다 (04장 4.8)."""
     lines = []

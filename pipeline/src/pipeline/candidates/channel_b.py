@@ -31,6 +31,7 @@ _TIME_EPS = 1e-6
 
 # MOG2 마스크 값. detectShadows를 켜면 그림자를 127로 따로 표시한다
 FOREGROUND = 255
+SHADOW = 127
 
 # 자잘한 점 지우기(열기)에 쓰는 3×3 사각형. 설계에 크기가 없어 가장 작은 값을 쓴다 (Task.md 가정 6)
 _OPEN_KERNEL = np.ones((3, 3), np.uint8)

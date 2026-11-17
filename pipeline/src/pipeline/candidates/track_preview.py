@@ -25,16 +25,22 @@ from trackers import ByteTrackTracker
 from pipeline.candidates.blob_tracks import (
     History,
     attach_target,
+    blob_track_boxes,
     blob_track_lines,
     open_blob_tracker,
     remember_positions,
     track_boxes,
 )
 from pipeline.candidates.car_region import (
+    BaseRegion,
     CarSpot,
+    FramePixels,
     Polygon,
+    base_region,
     build_car_spot,
+    car_keys,
     pick_my_car,
+    redraw,
     region_polygons,
 )
 from pipeline.candidates.channel_a import (
@@ -46,6 +52,7 @@ from pipeline.candidates.channel_a import (
 )
 from pipeline.candidates.channel_b import (
     MOG2_STABLE_SEC,
+    SHADOW,
     Blob,
     Box,
     FrameRecord,
@@ -158,10 +165,14 @@ class DetectResult:
 
 def _find_frame_blobs(
     mog2: cv2.BackgroundSubtractorMOG2, small: np.ndarray, roi: Roi
-) -> list[Blob]:
-    """줄인 프레임 한 장을 MOG2에 넣고 덩어리를 찾는다 (채널 B)."""
-    binary = clean_foreground(mog2.apply(small))
-    return find_blobs(binary, roi.mask)
+) -> tuple[list[Blob], FramePixels]:
+    """줄인 프레임 한 장을 MOG2에 넣고 덩어리를 찾는다 (채널 B).
+
+    차 영역 키를 잴 전경·그림자 그림도 함께 돌려준다. 덩어리를 만든 전경과 같은 그림이다 (D-319 결정 3).
+    """
+    raw = mog2.apply(small)
+    binary = clean_foreground(raw)
+    return find_blobs(binary, roi.mask), FramePixels(binary > 0, raw == SHADOW)
 
 
 def judge_blobs(
@@ -240,12 +251,25 @@ def _write_lines(tracks_file: TextIO, lines: list[dict]) -> None:
     tracks_file.writelines(json.dumps(line, ensure_ascii=False) + "\n" for line in lines)
 
 
-def _base_region(vehicle_masks: np.ndarray, spot: CarSpot | None) -> list[Polygon]:
-    """구간 첫 프레임의 차량 마스크에서 기준 영역 다각형 목록을 만든다. 내 차를 찾지 못하면 빈 목록이다."""
+def _my_car(vehicle_masks: np.ndarray, spot: CarSpot | None) -> np.ndarray | None:
+    """그 프레임의 내 차 영역 (다시 그린 모양). 내 차를 찾지 못하면 None이다."""
     if spot is None:
-        return []
-    my_car = pick_my_car(vehicle_masks, spot)
-    return [] if my_car is None else region_polygons(my_car)
+        return None
+    picked = pick_my_car(vehicle_masks, spot)
+    return None if picked is None else redraw(picked)
+
+
+def _add_car_keys(
+    lines: list[dict],
+    bboxes: list[tuple[float, float, float, float]],
+    base: BaseRegion | None,
+    my_car: np.ndarray | None,
+    pixels: FramePixels | None,
+    stable: bool,
+) -> None:
+    """트랙 줄마다 차 영역 키를 더한다 (lines를 직접 고친다). bboxes는 lines와 자리가 같은 줄인 좌표다."""
+    for line, bbox in zip(lines, bboxes, strict=True):
+        line.update(car_keys(bbox, base, my_car, pixels, stable))
 
 
 def detect(
@@ -262,15 +286,20 @@ def detect(
     switch = YoloSwitch()
     ring: deque[TimedFrame] = deque(maxlen=RING_FRAMES)
     result = DetectResult(ranges=switch.ranges)
+    # 지금 구간의 기준 영역. 구간이 열릴 때마다 바뀐다. 내 차를 찾지 못한 구간은 None이다
+    base: BaseRegion | None = None
     for frame in iter_analysis_frames(video_path):
         small = crop_frame(frame.image, roi.crop)
         # MOG2는 켜고 끄기와 상관없이 모든 프레임을 한 번씩만 본다 (D-192)
-        blobs = _find_frame_blobs(mog2, small, roi)
+        blobs, pixels = _find_frame_blobs(mog2, small, roi)
+        stable = frame.time_sec >= MOG2_STABLE_SEC
         roi_motion = has_roi_motion(blobs)
         decision = switch.step(frame.time_sec, roi_motion)
         # 이 프레임의 확정된 채널 A 트랙. YOLO가 꺼진 프레임에는 없다.
         # ROI 움직임이 있으면 YOLO를 반드시 돌리므로, 붙이기 판정에는 늘 이 프레임의 결과가 있다 (규칙 6)
         tracks: list[TrackBox] = []
+        # 이 프레임의 내 차 영역. YOLO가 꺼진 프레임에는 없다
+        my_car: np.ndarray | None = None
         if decision.run:
             # 거슬러 돌릴 프레임을 먼저, 지금 프레임을 마지막에. 추적기에는 시간순으로 넣어야 한다 (D-313)
             to_run = [*_backfill_frames(ring, decision), (frame.time_sec, small)]
@@ -281,8 +310,21 @@ def detect(
             for index, (time_sec, image) in enumerate(to_run):
                 lines, tracks, vehicle_masks = process_frame(channel, image, time_sec, roi.crop)
                 # 기준 영역은 구간의 첫 프레임에서 한 번만 만든다 (D-259). 이어 붙은 구간은 다시 만들지 않는다
+                my_car = _my_car(vehicle_masks, spot)
                 if new_range and index == 0:
-                    result.car_regions.append(_base_region(vehicle_masks, spot))
+                    polygons = [] if my_car is None else region_polygons(my_car)
+                    result.car_regions.append(polygons)
+                    base = base_region(polygons, small.shape[:2])
+                # 거슬러 돈 프레임은 MOG2를 다시 돌리지 않아 전경이 없다. 마지막이 지금 프레임이다
+                is_current = index == len(to_run) - 1
+                _add_car_keys(
+                    lines,
+                    [track.bbox for track in tracks],
+                    base,
+                    my_car,
+                    pixels if is_current else None,
+                    stable,
+                )
                 _write_lines(tracks_file, lines)
                 # 거슬러 돌린 프레임의 위치도 적어야 켜자마자 멈춘 차를 알아본다 (D-314 결정 4)
                 remember_positions(history, time_sec, tracks)
@@ -298,6 +340,8 @@ def detect(
         # 넣을 사각형이 없어도 매 프레임 불러야 사라진 트랙이 1초 뒤 끝난다 (D-315 결정 5)
         tracked = track_boxes(blob_tracker, boxes)
         blob_lines = blob_track_lines(tracked, frame.time_sec, roi.crop)
+        # 채널 B 줄에도 같은 규칙으로 쓴다 (D-319 결정 2)
+        _add_car_keys(blob_lines, blob_track_boxes(tracked), base, my_car, pixels, stable)
         _write_lines(tracks_file, blob_lines)
         _count_blob_tracks(result, blob_lines)
         ring.append((frame.time_sec, small))
