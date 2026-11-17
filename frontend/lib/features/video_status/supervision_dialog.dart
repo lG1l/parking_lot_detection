@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 
-/// 관리·감독 안내창 (07장 2.7, D-204, D-216). 후보 확인·완료·결과 화면에 들어갈 때마다 띄운다.
-/// 체크해야 [동의하고 열람]이 켜진다. 동의하면 true, [취소]면 false.
+/// 관리자가 직접 입력해야 하는 서약 문장 (D-326).
+const supervisionPledge = '본인은 비식별화 누락 부분을 가려 노출을 막고 피해자의 촬영과 유포를 통제할 것을 서약합니다';
+
+/// 관리·감독 안내창 (07장 2.7, D-204, D-216, D-326). 후보 확인·완료·결과 화면에 들어갈 때마다 띄운다.
+/// 서약 문장을 그대로 입력해야 [동의하고 열람]이 켜진다. 동의하면 true, [취소]면 false.
 Future<bool> askSupervision(BuildContext context) async {
   final ok = await showDialog<bool>(
     context: context,
@@ -21,14 +24,18 @@ class _SupervisionDialog extends StatefulWidget {
 }
 
 class _SupervisionDialogState extends State<_SupervisionDialog> {
-  bool _checked = false;
+  String _typed = '';
+
+  /// 앞뒤 공백과 띄어쓰기 개수 차이는 봐준다. 글자는 서약 문장과 같아야 한다.
+  bool get _matched => _normalize(_typed) == _normalize(supervisionPledge);
+
+  static String _normalize(String s) => s.trim().replaceAll(RegExp(r'\s+'), ' ');
 
   @override
   Widget build(BuildContext context) {
     const body = TextStyle(fontSize: 15, height: 1.6);
     const lines = [
-      '피해자가 함께 있는 자리에서 화면을 열어 주세요.',
-      '후보 클립은 피해자와 함께 보면서 확인해 주세요.',
+      '피해자가 함께 있는 자리에서 화면을 열고 클립을 확인해 주세요.',
       '[찾음]은 피해자와 함께 장면을 확인하고 합의한 뒤에 눌러 주세요.',
       '가려지지 않은 얼굴이나 번호판이 보이면, 그 부분을 가린 채로 보여 주세요.',
     ];
@@ -71,16 +78,27 @@ class _SupervisionDialogState extends State<_SupervisionDialog> {
                     ],
                   ),
                 ),
-              const SizedBox(height: 12),
-              CheckboxListTile(
-                value: _checked,
-                onChanged: (v) => setState(() => _checked = v ?? false),
-                title: const Text(
-                  '관리자로서 피해자와 함께 열람하고, 고정할 장면도 피해자와 함께 확인하겠습니다.',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: inkColor),
+              const SizedBox(height: 20),
+              const Text('아래 문장을 그대로 입력해야 열 수 있습니다.', style: body),
+              const SizedBox(height: 6),
+              const Text(
+                supervisionPledge,
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: inkColor, height: 1.6),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                key: const Key('supervision-pledge'),
+                autofocus: true,
+                minLines: 1,
+                maxLines: 3,
+                // 붙여넣기로 넘기지 않게 선택·붙여넣기 메뉴를 끈다 (D-326)
+                enableInteractiveSelection: false,
+                onChanged: (v) => setState(() => _typed = v),
+                decoration: InputDecoration(
+                  hintText: '서약 문장을 입력하세요',
+                  border: const OutlineInputBorder(),
+                  suffixIcon: _matched ? const Icon(Icons.check_circle, color: Colors.green) : null,
                 ),
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: EdgeInsets.zero,
               ),
             ],
           ),
@@ -89,7 +107,7 @@ class _SupervisionDialogState extends State<_SupervisionDialog> {
       actions: [
         OutlinedButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
         FilledButton(
-          onPressed: _checked ? () => Navigator.pop(context, true) : null,
+          onPressed: _matched ?() => Navigator.pop(context, true) : null,
           child: const Text('동의하고 열람'),
         ),
       ],

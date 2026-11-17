@@ -263,22 +263,17 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
       eyebrowNotes: _filename == null ? const [] : [...counterpartNote(ref, _id), viewExpiresText(_viewExpiresAt)],
       title: _filename ?? '후보 확인',
       titleStrong: withoutExtension(_filename),
-      scrollBody: !_fixedLayout(context),
+      // 창 크기와 상관없이 화면 전체를 함께 스크롤한다(scrollBody 기본값). 영상 목록만 따로 스크롤하지 않는다 (D-327)
       child: batch == null ? const Center(child: CircularProgressIndicator()) : _body(context, batch),
     );
   }
-
-  /// 창이 충분히 높으면 위쪽(제목·탭·안내·묶음 준비 상자)과 아래 이동 줄을 고정하고 영상 목록만 스크롤한다 (D-190).
-  /// 낮은 창에서는 고정 부분이 화면을 다 차지하므로 지금처럼 화면 전체를 스크롤한다.
-  bool _fixedLayout(BuildContext context) => MediaQuery.sizeOf(context).height >= 640;
 
   Widget _body(BuildContext context, Batch batch) {
     final lists = _lists!;
     final tab = lists[_tab]!;
     final doneMessage = tabDoneMessage(lists, _tab);
     final other = CandidateList.other(_tab);
-    final fixed = _fixedLayout(context);
-    // 묶음의 영상(최대 10개)과 탭을 다 봤을 때 안내. 창이 충분히 높으면 이 부분만 스크롤한다
+    // 묶음의 영상(최대 10개)과 탭을 다 봤을 때 안내
     final clips = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -329,7 +324,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
           ),
           const SizedBox(height: 14),
         ],
-        if (fixed) Expanded(child: SingleChildScrollView(child: clips)) else clips,
+        clips,
         const SizedBox(height: 12),
         // 오른쪽 아래 묶음 이동. 열람기한은 제목 위로 옮겼다 (캔버스 2.7)
         Container(

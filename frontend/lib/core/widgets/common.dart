@@ -142,7 +142,7 @@ class PageFrame extends StatelessWidget {
   final Future<bool> Function()? canLeave;
 
   /// false면 본문 전체를 스크롤하지 않고 창 높이에 맞춘다. [child]가 남은 높이를 채우고 스크롤할 곳을 스스로 정한다
-  /// (후보 확인 화면: 위쪽은 고정, 영상 목록만 스크롤).
+  /// (알림 화면).
   final bool scrollBody;
 
   /// [title] 안에서 굵게 보일 부분 (예: "사건 12건"의 "12"). 없으면 제목 전체를 굵게 둔다 (D-305).
