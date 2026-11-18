@@ -54,6 +54,24 @@ def test_worker_normal_makes_three_main_candidates(me):
     assert sql("SELECT count(*) FROM candidate_clips WHERE status = 'done'").scalar_one() == 3
 
 
+def test_worker_demo_makes_fourteen_candidates_by_score(me):
+    _, job = make_ready(me, "demo")
+    assert job_row(job).status == "ready"
+    main = sql(
+        "SELECT batch_no, count(*) FROM candidates WHERE list_kind = 'main' GROUP BY batch_no "
+        "ORDER BY batch_no"
+    ).all()
+    assert [tuple(r) for r in main] == [(1, 10), (2, 4)]
+    scores = sql("SELECT vlm_score FROM candidates ORDER BY rank").scalars().all()
+    assert scores == [c["vlm_score"] for c in fake_worker.DEMO_CANDIDATES]
+    assert sql("SELECT DISTINCT crop_bbox FROM candidate_clips").scalar_one() == [
+        655,
+        336,
+        1580,
+        856,
+    ]
+
+
 def test_worker_many_numbers_two_batches_ahead(me):
     make_ready(me, "many")
     main = sql(

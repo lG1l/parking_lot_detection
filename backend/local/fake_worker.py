@@ -20,7 +20,9 @@ from app.storage import storage_root
 
 STEP_SECONDS = 2  # 상태를 바꾸는 UPDATE 사이의 대기 (D-160)
 POLL_SECONDS = 1
-STILL = Path(__file__).parent / "still.jpg"  # 합성 이미지 1920x1080. 팀장 fixtures가 오면 교체한다
+STILL = Path(__file__).parent / "still.jpg"  # 시연 영상의 첫 장면 1920x1080. 비식별화는 하지 않았다
+# 정지 장면에서 탐지된 차량. yolo11m-seg 마스크의 볼록 껍질을 polygon으로 쓴다
+DETECTIONS = json.loads((Path(__file__).parent / "still_detections.json").read_text())
 
 # 허용 목록 (D-161 2번)
 SCENARIOS = (
@@ -38,31 +40,23 @@ SCENARIOS = (
     "stage2_fail_always",
     "batch_fail_once",
     "batch_fail_always",
+    "demo",
 )
 # 다음 묶음이 있어야 [다음]이 next_batch를 넣으므로 batch_fail도 many의 후보 수를 쓴다
 MANY = ("many", "batch_fail_once", "batch_fail_always")
 CLIP_TRIES = 3  # 최초 포함 (D-109)
 
-# 정지 장면에서 탐지된 차량. 이미지 속 사각형 위치와 같다
-DETECTIONS = [
-    {
-        "det_id": 1,
-        "bbox": [810, 440, 960, 620],
-        "conf": 0.91,
-        "polygon": [[812, 441], [958, 445], [956, 618], [814, 615]],
-    },
-    {
-        "det_id": 2,
-        "bbox": [950, 435, 1120, 625],
-        "conf": 0.88,
-        "polygon": [[952, 438], [1118, 440], [1116, 622], [953, 620]],
-    },
-]
 # ffmpeg가 없는 환경에서도 돌도록 클립 파일은 자리표시 바이트다. API·상태 흐름만 확인하며 재생은 안 된다.
 FAKE_CLIP = b"fake mp4 clip for local api checks"
 CROP_BBOX = [800, 430, 1130, 630]
 BATCH_SIZE = 10  # 01장 1.6
 FAKE_VIDEO = {"d": 86400.0, "f": 30.0, "w": 1920, "h": 1080}  # 길이(초)·fps·가로·세로
+
+# demo 시나리오: 시연 영상의 6단계 후보 14개와 Haiku 점수(점수순). 클립은 보여줄 크롭을 소리 없이 복사한 것으로,
+# 용량 때문에 Git에 넣지 않고 local_storage에 둔다. 파일이 없으면 자리표시 바이트를 쓴다.
+DEMO_CANDIDATES = json.loads((Path(__file__).parent / "demo_candidates.json").read_text())
+DEMO_CROP_BBOX = [655, 336, 1580, 856]
+DEMO_VIDEO = {"d": 668.27, "f": 29.92, "w": 1920, "h": 1080}
 
 
 class Worker:
@@ -155,7 +149,7 @@ class Worker:
                     text(
                         "UPDATE videos SET duration_sec = :d, fps = :f, width = :w, height = :h WHERE id = :v"
                     ),
-                    {"v": row.video_id, **FAKE_VIDEO},
+                    {"v": row.video_id, **(DEMO_VIDEO if self.scenario == "demo" else FAKE_VIDEO)},
                 )
                 conn.execute(
                     text(
@@ -210,6 +204,28 @@ class Worker:
                 text("SELECT 1 FROM candidates WHERE analysis_job_id = :j LIMIT 1"), {"j": job_id}
             ).first():
                 return  # 재전달된 메시지가 후보를 두 번 만들지 않는다
+            if self.scenario == "demo":
+                for rank, c in enumerate(DEMO_CANDIDATES, 1):
+                    conn.execute(
+                        text(
+                            "INSERT INTO candidates (analysis_job_id, start_sec, end_sec, track_ids, "
+                            "motion_ranges, likely_moments, vlm_pass1, vlm_score, list_kind, rank) "
+                            "VALUES (:j, :s, :e, :tr, CAST(:mr AS jsonb), CAST(:lm AS jsonb), "
+                            "true, :sc, 'main', :rk)"
+                        ),
+                        {
+                            "j": job_id,
+                            "s": c["start_sec"],
+                            "e": c["end_sec"],
+                            "tr": c["track_ids"],
+                            "mr": json.dumps(c["motion_ranges"]),
+                            "lm": json.dumps(c["likely_moments"]),
+                            "sc": c["vlm_score"],
+                            "rk": rank,
+                        },
+                    )
+                self.number_batches(conn, job_id, ("main",), upto=2)
+                return
             for i in range(main_count + failed_count):
                 failed = i >= main_count
                 conn.execute(
@@ -273,7 +289,10 @@ class Worker:
                         text(
                             "INSERT INTO candidate_clips (candidate_id, crop_bbox) VALUES (:c, :box)"
                         ),
-                        {"c": row.id, "box": CROP_BBOX},
+                        {
+                            "c": row.id,
+                            "box": DEMO_CROP_BBOX if self.scenario == "demo" else CROP_BBOX,
+                        },
                     )
                 if upto is None:
                     break
@@ -319,6 +338,19 @@ class Worker:
                     {"d": candidate_id},
                 )
 
+    def demo_clip(self, list_kind: str, rank: int) -> Path | None:
+        """demo 시나리오에서 이 순위 후보의 실제 클립 파일. 없으면 None."""
+        if self.scenario != "demo" or list_kind != "main":
+            return None
+        path = (
+            storage_root()
+            / "scratch"
+            / "backend"
+            / "demo_clips"
+            / DEMO_CANDIDATES[rank - 1]["clip"]
+        )
+        return path if path.is_file() else None
+
     def make_pending_clips(self, job_id: int) -> None:
         """pending 클립을 하나씩 가져가(pending → running) 파일을 쓰고 done으로 바꾼다."""
         while True:
@@ -351,7 +383,11 @@ class Worker:
             key = f"videos/{video_id}/clips/{clip.id}.mp4"
             target = storage_root() / "masked" / key
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(FAKE_CLIP)
+            demo = self.demo_clip(info.list_kind, info.rank)
+            if demo is not None:
+                shutil.copyfile(demo, target)
+            else:
+                target.write_bytes(FAKE_CLIP)
             with self.engine.begin() as conn:
                 conn.execute(
                     text(
