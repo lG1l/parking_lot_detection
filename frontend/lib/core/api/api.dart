@@ -66,6 +66,10 @@ class Api {
   Future<void> markChatRead(int peerUserId, int lastReadMessageId) =>
       _c.put('/api/chats/$peerUserId/read', {'last_read_message_id': lastReadMessageId}); // 32
 
+  /// 상대 사건의 알림을 [seenAt]까지 봤다고 알린다. 화면에 그린 카드 중 가장 늦은 카드 시각이다 (D-338)
+  Future<void> markNoticesSeen(int peerUserId, String seenAt) =>
+      _c.put('/api/chats/$peerUserId/notices-seen', {'seen_at': seenAt}); // 34
+
   Future<void> agreeViewing(int videoId) =>
       _c.post('/api/videos/$videoId/viewing-agreement', {'confirm_supervision': true}); // 23
 

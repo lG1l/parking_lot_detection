@@ -90,10 +90,27 @@ List<NoticeMessage> messagesOf(VideoCase c, List<VideoSummary> videos, {required
 ];
 
 /// 관리자 메뉴 [채팅] 배지: 보관 기간이 끝나지 않은 영상 중 할 일(후보 선택 가능·분석 실패·업로드 확인 안 됨) 수 (D-243).
-int adminTodoCount(List<VideoSummary> videos) => videos.where((v) {
+int adminTodoCount(List<VideoSummary> videos) => videos.where(_isTodo).length;
+
+bool _isTodo(VideoSummary v) {
   if (v.maskedDeleted) return false;
   return v.status == VideoStatus.ready ||
       v.status == VideoStatus.batchRunning ||
       v.status == VideoStatus.failed ||
       v.status == VideoStatus.uploadFailed;
-}).length;
+}
+
+/// 메뉴 배지의 알림 수. 관리자는 할 일 영상, 피해자는 수락 전 초대 중 그 사건 상대의 알림을 본 시각
+/// (22번 `notices_seen_at`)보다 늦게 생긴 것만 센다. 할 일을 처리하지 않아도 본 알림은 빠진다 (D-338).
+int unseenNoticeCount(List<VideoCase> cases, List<VideoSummary> videos, {required bool admin}) {
+  bool unseen(VideoCase c, String at) =>
+      c.noticesSeenAt == null || DateTime.parse(at).isAfter(DateTime.parse(c.noticesSeenAt!));
+  if (!admin) return cases.where((c) => c.pending && unseen(c, c.createdAt)).length;
+  final byId = {for (final c in cases) c.id: c};
+  return videos.where((v) {
+    if (!_isTodo(v)) return false;
+    final c = byId[v.caseId];
+    // 사건을 모르는 영상(숨긴 사건 등)은 본 시각을 알 수 없어 그대로 센다
+    return c == null || unseen(c, v.statusChangedAt ?? c.acceptedAt ?? c.createdAt);
+  }).length;
+}

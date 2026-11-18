@@ -462,13 +462,14 @@ ROI 안에서 움직임이 있던 시간대를 자른 클립 하나 (D-245). 2�
 
 ### chat_reads
 
-계정이 상대와의 대화를 어디까지 읽었는지. 계정과 상대 한 쌍에 한 행이다. (D-289)
+계정이 상대와의 대화를 어디까지 읽었고, 상대 사건의 알림을 언제까지 봤는지. 계정과 상대 한 쌍에 한 행이다. (D-289, D-338)
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
 | `user_id` | bigint FK → users | 읽은 계정 |
 | `peer_user_id` | bigint FK → users | 대화 상대 계정 |
-| `last_read_message_id` | bigint | 마지막으로 읽은 `chat_messages.id`. 앞으로만 간다 |
+| `last_read_message_id` | bigint | 마지막으로 읽은 `chat_messages.id`. 앞으로만 간다. 알림만 보고 메시지는 안 읽었으면 0 |
+| `notices_seen_at` | timestamptz NULL | 이 상대 사건의 알림 카드를 어디까지 봤는지(본 카드 중 가장 늦은 카드 시각). 앞으로만 간다. null이면 본 알림이 없다 (D-338) |
 | `updated_at` | timestamptz | 마지막으로 바꾼 시각 |
 
 - 행이 없으면 하나도 읽지 않은 것이다.
@@ -999,7 +1000,8 @@ CREATE TABLE chat_messages (                 -- D-285
 CREATE TABLE chat_reads (                    -- D-289
   user_id              bigint      NOT NULL REFERENCES users(id),
   peer_user_id         bigint      NOT NULL REFERENCES users(id),
-  last_read_message_id bigint      NOT NULL,          -- FK 없음. 메시지가 지워져도 남는다 (D-288)
+  last_read_message_id bigint      NOT NULL DEFAULT 0, -- FK 없음. 메시지가 지워져도 남는다 (D-288)
+  notices_seen_at      timestamptz,                   -- 알림 본 시각 (D-338)
   updated_at           timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, peer_user_id)
 );

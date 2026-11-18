@@ -42,9 +42,10 @@ _PEER_COL = {"admin": "victim_user_id", "victim": "admin_user_id"}
 
 _ITEM = """
 SELECT c.id, a.name AS admin_name, v.name AS victim_name, c.created_at, c.accepted_at,
-       c.{name_col} AS case_name, c.{peer_col} AS peer_user_id
+       c.{name_col} AS case_name, c.{peer_col} AS peer_user_id, r.notices_seen_at
   FROM cases c JOIN users a ON a.id = c.admin_user_id
   JOIN users v ON v.id = c.victim_user_id
+  LEFT JOIN chat_reads r ON r.user_id = :u AND r.peer_user_id = c.{peer_col}
  WHERE c.{user_col} = :u AND c.{deleted_col} IS NULL
 """
 
@@ -58,6 +59,8 @@ def _item(r) -> dict:
         "created_at": _iso(r.created_at),
         "accepted_at": _iso(r.accepted_at) if r.accepted_at else None,
         "peer_user_id": r.peer_user_id,
+        # 이 사건 상대의 알림을 내가 어디까지 봤는지. 메뉴 배지가 본 알림을 뺀다 (D-338)
+        "notices_seen_at": _iso(r.notices_seen_at) if r.notices_seen_at else None,
     }
 
 

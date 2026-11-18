@@ -1,10 +1,10 @@
-"""채팅 API 29~33 (05장 5.12, D-284~D-290)"""
+"""채팅 API 29~34 (05장 5.12, D-284~D-290, D-338)"""
 
 from typing import Annotated
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Query, WebSocket
-from pydantic import BaseModel, StringConstraints
+from pydantic import AwareDatetime, BaseModel, StringConstraints
 from sqlalchemy import text
 from starlette.concurrency import run_in_threadpool
 
@@ -43,6 +43,10 @@ class SendBody(BaseModel):
 
 class ReadBody(BaseModel):
     last_read_message_id: int
+
+
+class NoticesSeenBody(BaseModel):
+    seen_at: AwareDatetime
 
 
 def _message(r, user_id: int) -> dict:
@@ -197,6 +201,37 @@ def mark_read(peer_user_id: int, body: ReadBody, user: Annotated[dict, Depends(c
                 """  # noqa: S608 - 상수만
             ),
             {"u": user["id"], "p": peer_user_id, "m": body.last_read_message_id},
+        )
+
+
+@router.put("/{peer_user_id}/notices-seen", status_code=204)
+def mark_notices_seen(
+    peer_user_id: int, body: NoticesSeenBody, user: Annotated[dict, Depends(current_user)]
+):
+    """알림 본 시각은 앞으로만 가고, 지금보다 늦으면 지금으로 낮춘다.
+    수락 전 사건의 상대도 된다(피해자가 초대 알림을 본다). 나와 묶인 사건이 없으면 404 (D-338)"""
+    me_col, peer_col = _COLS[user["role"]]
+    with get_engine().begin() as conn:
+        found = conn.execute(
+            text(
+                f"SELECT 1 FROM cases WHERE {me_col} = :u AND {peer_col} = :p LIMIT 1"  # noqa: S608 - 상수만
+            ),
+            {"u": user["id"], "p": peer_user_id},
+        ).first()
+        if not found:
+            raise ApiError(404, "CHAT_NOT_FOUND", "chat not found")
+        conn.execute(
+            text(
+                """
+                INSERT INTO chat_reads (user_id, peer_user_id, notices_seen_at)
+                VALUES (:u, :p, LEAST(CAST(:s AS timestamptz), now()))
+                ON CONFLICT (user_id, peer_user_id) DO UPDATE
+                   SET notices_seen_at = EXCLUDED.notices_seen_at, updated_at = now()
+                 WHERE chat_reads.notices_seen_at IS NULL
+                    OR chat_reads.notices_seen_at < EXCLUDED.notices_seen_at
+                """
+            ),
+            {"u": user["id"], "p": peer_user_id, "s": body.seen_at},
         )
 
 

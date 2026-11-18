@@ -207,6 +207,27 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   void _select(_Person p) {
     setState(() => _selected = p.id);
     _openChat(p.id);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _markNoticesSeen(p));
+  }
+
+  /// 그린 대화의 알림 카드 중 가장 늦은 카드 시각까지 봤다고 알린다(34번). 수락 전 초대도 포함한다.
+  /// 실패하면 조용히 넘어간다(다음에 열 때 다시 처리) (D-338).
+  Future<void> _markNoticesSeen(_Person p) async {
+    if (p.id <= 0) return; // 상대 번호가 없는 옛 서버 응답
+    final times = [
+      for (final c in p.cases)
+        for (final m in _messagesOf(c)) DateTime.parse(noticeAt(m, c)),
+    ];
+    if (times.isEmpty) return;
+    final latest = times.reduce((a, b) => a.isAfter(b) ? a : b);
+    final seen = p.cases.map((c) => c.noticesSeenAt).nonNulls.map(DateTime.parse);
+    if (seen.isNotEmpty && !latest.isAfter(seen.reduce((a, b) => a.isAfter(b) ? a : b))) return; // 이미 봤다
+    try {
+      await ref.read(apiProvider).markNoticesSeen(p.id, latest.toUtc().toIso8601String()); // 34
+    } catch (_) {
+      return;
+    }
+    if (mounted) ref.invalidate(notificationBadgeProvider);
   }
 
   /// 메시지 보내기 (31번). 응답 메시지를 대화에 합치고, 목록 요약을 위해 29번을 다시 읽는다.
@@ -261,6 +282,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         }
       });
       await _openChat(_selected);
+      final shown = _grouped().where((p) => p.id == _selected).firstOrNull;
+      if (shown != null) WidgetsBinding.instance.addPostFrameCallback((_) => _markNoticesSeen(shown));
     } catch (e) {
       if (mounted) handleCommonError(context, e);
     }
@@ -517,7 +540,10 @@ class _UnreadDot extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6),
       alignment: Alignment.center,
       decoration: const BoxDecoration(color: failChipColor, borderRadius: BorderRadius.all(Radius.circular(10))),
-      child: Text('$count', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: offWhiteColor)),
+      child: Text(
+        '$count',
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: offWhiteColor),
+      ),
     ),
   );
 }
