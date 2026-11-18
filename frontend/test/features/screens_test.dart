@@ -27,8 +27,8 @@ Map<String, Object?> video(String status, {Map<String, Object?> extra = const {}
   ...extra,
 };
 
-Map<String, Object?> lists({int mainRemaining = 10, bool pfEmpty = true}) => {
-  'main': {'latest_batch_no': 1, 'remaining': mainRemaining, 'done': false, 'unavailable': 0},
+Map<String, Object?> lists({int mainRemaining = 10, bool pfEmpty = true, int mainUnavailable = 0}) => {
+  'main': {'latest_batch_no': 1, 'remaining': mainRemaining, 'done': false, 'unavailable': mainUnavailable},
   'parse_failed': pfEmpty
       ? {'latest_batch_no': null, 'remaining': 0, 'done': true, 'unavailable': 0}
       : {'latest_batch_no': 1, 'remaining': 2, 'done': false, 'unavailable': 0},
@@ -1080,8 +1080,16 @@ void main() {
     await tester.enterText(find.byKey(const Key('supervision-pledge')), '본인은 서약합니다');
     await tester.pump();
     expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '동의하고 열람')).onPressed, isNull);
+    // 문장이 다르면 엔터를 눌러도 창이 그대로다
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(find.text('피해자와 함께 열람하고, 함께 고정합니다'), findsOneWidget);
 
-    await agreeSupervision(tester);
+    // 문장이 맞으면 엔터가 [동의하고 열람]과 같다
+    await tester.enterText(find.byKey(const Key('supervision-pledge')), supervisionPledge);
+    await tester.pump();
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await settle(tester);
     expect(backend.calls, contains('POST /api/videos/7/viewing-agreement'));
     expect(find.text('점수: 87'), findsOneWidget);
   });
@@ -1285,7 +1293,7 @@ void main() {
             'clip_url': 'http://x/1187.mp4',
           },
         ],
-        'lists': lists(),
+        'lists': lists(mainUnavailable: 1),
       }),
       'GET /api/videos/7/pin': (_) => json([]),
       'POST /api/videos/7/pin': (_) => json([pinned1187()]),
@@ -1340,6 +1348,49 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, '끝내기'));
     await settle(tester);
     expect(backend.calls, contains('POST /api/videos/7/batch/next'));
+    await unmount(tester);
+  });
+
+  testWidgets('[다음 ▶]으로 다른 묶음을 열면 화면이 맨 위로 올라간다 (2.7)', (tester) async {
+    Map<String, Object?> page(int no) => {
+      'list': 'main',
+      'batch_no': no,
+      'unavailable': 0,
+      'candidates': [
+        for (var i = 1; i <= 10; i++)
+          {
+            'candidate_clip_id': no * 100 + i,
+            'rank': (no - 1) * 10 + i,
+            'vlm_score': 90 - i,
+            'start_sec': 100.0 * i,
+            'end_sec': 100.0 * i + 30,
+            'clip_url': 'http://x/$no-$i.mp4',
+          },
+      ],
+      'lists': {
+        'main': {'latest_batch_no': 2, 'remaining': 0, 'done': false, 'unavailable': 0},
+        'parse_failed': {'latest_batch_no': null, 'remaining': 0, 'done': true, 'unavailable': 0},
+      },
+    };
+    final backend = FakeBackend({
+      'GET /api/videos/7': (_) => json(video('ready')),
+      'GET /api/videos/7/batch': (req) => json(page(int.parse(req.url.queryParameters['batch_no'] ?? '1'))),
+      'GET /api/videos/7/pin': (_) => json([]),
+    });
+    await pumpApp(tester, backend, '/videos/7/candidates');
+    expect(find.text('묶음 1 / 2'), findsOneWidget);
+
+    // 아래로 내려 [다음 ▶]을 누르면 맨 위에서 다음 묶음을 본다
+    ScrollPosition position() =>
+        tester.state<ScrollableState>(find.ancestor(of: find.text('묶음 1 / 2'), matching: find.byType(Scrollable)).first).position;
+    final pos = position();
+    pos.jumpTo(pos.maxScrollExtent);
+    await tester.pump();
+    expect(pos.pixels, greaterThan(0));
+    await tester.tap(find.widgetWithText(OutlinedButton, '다음'));
+    await settle(tester);
+    expect(find.text('묶음 2 / 2'), findsOneWidget);
+    expect(pos.pixels, 0);
     await unmount(tester);
   });
 

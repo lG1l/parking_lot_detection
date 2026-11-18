@@ -101,11 +101,24 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
   }
 
   void _showBatch(Batch b) {
+    final prev = _batch;
+    final moved = prev != null && (prev.batchNo != b.batchNo || prev.list != b.list);
     setState(() {
       _batch = b;
       _tab = b.list;
       _lists = b.lists;
     });
+    // 다른 묶음·탭으로 넘어가면 맨 위(첫 영상)부터 보이게 화면을 올린다. 같은 묶음을 다시 그릴 때는 그대로 둔다.
+    if (moved) WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToTop());
+  }
+
+  /// 화면 전체 스크롤(D-310)을 맨 위로. 스크롤은 PageFrame 안에 있어 본문 안쪽 context로 찾는다.
+  final _bodyKey = GlobalKey();
+  void _scrollToTop() {
+    final ctx = _bodyKey.currentContext;
+    if (ctx == null) return;
+    final position = Scrollable.maybeOf(ctx)?.position;
+    if (position != null && position.pixels > 0) position.jumpTo(0);
   }
 
   void _setPins(List<PinnedIncident> pins) => setState(() => _pinned = pins.map((p) => p.candidateClipId).nonNulls.toSet());
@@ -293,9 +306,10 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
       ],
     );
     return Column(
+      key: _bodyKey,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _tabs(lists, unavailableLabel(batch)),
+        _tabs(lists, unavailableLabel(lists)),
         const SizedBox(height: 12),
         Text(
           _tab == CandidateList.main
@@ -340,7 +354,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
   }
 
   /// 밑줄형 탭 두 개 (캔버스 2.7): 고른 탭은 파란 밑줄 2px, 아래 hair 선 (D-305).
-  /// 묶음에 열람 불가 후보가 있으면 [점수 미산출] 옆에 "볼 수 없는 후보 N"을 누를 수 없는 연한 글자로 둔다.
+  /// 영상에 열람 불가 후보가 있으면 어느 묶음에서든 [점수 미산출] 옆에 "볼 수 없는 후보 N"을 누를 수 없는 연한 글자로 둔다.
   Widget _tabs(Map<String, ListSummary> lists, String? unavailable) {
     Widget tabButton(String t) {
       final selected = t == _tab;
@@ -485,7 +499,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
           onPressed: _busy || batch.batchNo <= 1 ? null : () => _run(() => _loadBatch(batchNo: batch.batchNo - 1)),
           child: const _ArrowLabel('이전', next: false),
         ),
-        Text('묶음 ${batch.batchNo} / $latest', style: const TextStyle(fontWeight: FontWeight.w600)),
+        Text('묶음 ${batch.batchNo} / ${totalBatches(tab, batch.batchNo)}', style: const TextStyle(fontWeight: FontWeight.w600)),
         if (showFetch)
           // 이름은 [다음 ▶]과 같다. 받은 묶음이 끝이면 13번으로 새 묶음을 받는다 (D-190)
           OutlinedButton(

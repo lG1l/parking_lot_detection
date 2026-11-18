@@ -63,9 +63,19 @@ void main() {
     expect(tabDoneMessage({'main': s(2, 0, true), 'parse_failed': s(null, 0, true)}, 'main'), isNull);
   });
 
-  test('열람 불가 수는 탭 줄의 "볼 수 없는 후보 N" (D-109)', () {
-    expect(unavailableLabel(batch(1)), isNull);
-    expect(unavailableLabel(batch(1, unavailable: 2)), '볼 수 없는 후보 2');
-    expect(unavailableLabel(batch(1, unavailable: 3, count: 0)), '볼 수 없는 후보 3');
+  test('전체 묶음 수는 받은 묶음 + 남은 후보를 10개씩 묶은 수', () {
+    expect(totalBatches(s(1, 20, false), 1), 3);
+    expect(totalBatches(s(1, 15, false), 1), 3);
+    expect(totalBatches(s(2, 10, false), 1), 3); // 앞 묶음을 보고 있어도 같다
+    expect(totalBatches(s(3, 0, false), 3), 3);
+  });
+
+  test('열람 불가 수는 탭 줄의 "볼 수 없는 후보 N"이고, N은 두 목록 합계라 묶음과 상관없다 (D-109)', () {
+    expect(unavailableLabel({'main': s(2, 5, false), 'parse_failed': s(null, 0, true)}), isNull);
+    expect(unavailableLabel({'main': s(2, 5, false, unavailable: 2), 'parse_failed': s(null, 0, true)}), '볼 수 없는 후보 2');
+    expect(
+      unavailableLabel({'main': s(3, 0, true, unavailable: 2), 'parse_failed': s(1, 1, false, unavailable: 1)}),
+      '볼 수 없는 후보 3',
+    );
   });
 }

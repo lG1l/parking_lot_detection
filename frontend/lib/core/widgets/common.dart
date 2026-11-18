@@ -5,11 +5,11 @@ import 'package:go_router/go_router.dart';
 import '../../app/theme.dart';
 import '../api/api.dart';
 import '../api/api_error.dart';
-import '../config.dart';
 import '../session.dart';
 
-/// 데모에서 백엔드로 보내야 하는 버튼을 눌렀을 때 팝업을 띄울지. 테스트에서는 끈다.
-final backendNoticeProvider = Provider<bool>((ref) => !useBackend);
+/// 데모에서 백엔드로 보내야 하는 버튼을 눌렀을 때 팝업을 띄울지.
+/// 데모 화면 흐름을 끊어서 기본은 끈다. 어느 버튼이 백엔드를 부르는지 보고 싶을 때만 `!useBackend`(core/config.dart)로 켠다.
+final backendNoticeProvider = Provider<bool>((ref) => false);
 
 /// 백엔드 연결 필요: 데모에서는 "눌렀다" 팝업을 한 번 띄운다. 닫으면 성공한 것처럼 이어 간다.
 /// USE_BACKEND=true면 아무것도 하지 않는다.
