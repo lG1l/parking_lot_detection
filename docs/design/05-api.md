@@ -599,16 +599,20 @@ END
 ```json
 [
   {"video_id": 18, "original_filename": "CH03_0919.mp4", "status": "uploading",
-   "masked_deleted": false, "created_at": "2026-09-20T14:05:00+09:00", "view_expires_at": null},
+   "masked_deleted": false, "created_at": "2026-09-20T14:05:00+09:00", "view_expires_at": null,
+   "status_changed_at": null},
   {"video_id": 17, "original_filename": "CH01_0918.mp4", "status": "queued",
-   "masked_deleted": false, "created_at": "2026-09-19T09:12:00+09:00", "view_expires_at": "2026-10-19T10:00:00+09:00"},
+   "masked_deleted": false, "created_at": "2026-09-19T09:12:00+09:00", "view_expires_at": "2026-10-19T10:00:00+09:00",
+   "status_changed_at": "2026-09-19T10:00:05+09:00"},
   {"video_id": 12, "original_filename": "CH01_0915.mp4", "status": "finished",
-   "masked_deleted": true, "created_at": "2026-09-15T20:41:00+09:00", "view_expires_at": "2026-10-15T21:00:00+09:00"}
+   "masked_deleted": true, "created_at": "2026-09-15T20:41:00+09:00", "view_expires_at": "2026-10-15T21:00:00+09:00",
+   "status_changed_at": "2026-09-16T11:30:00+09:00"}
 ]
 ```
 
 - 내가 묶인 사건의 영상만 나온다(`videos.case_id` → `cases`). 피해자에게는 수락한 사건의 영상만 나온다 (D-238). 내가 삭제한 사건의 영상은 나오지 않는다 (D-239). 최신순(`created_at` 내림차순)이다. 항목에 `case_id`를 함께 준다 (D-204).
 - `view_expires_at`은 열람기한이다. 업로드 완료 시각(`upload_completed_at`) + 30일을 시간대가 붙은 ISO 8601로 주고, 완료 전에는 `null`이다. `created_at`은 URL 발급 시각이라 계산에 쓰지 않는다. 예시의 완료 시각은 각각 9월 19일 10:00, 9월 15일 21:00이다 (D-92).
+- `status_changed_at`은 `status`가 지금 값으로 바뀐 시각이다. 채팅 화면이 영상 상태 알림을 채팅과 시각순으로 섞는 데 쓴다. 작업 행이 없으면 `upload_failed`는 `created_at` + 30분, `uploading`은 `null`이다 (D-334)
 - `masked_deleted`는 마스킹본을 더 볼 수 없는지다. `masked_deleted_at`이 차 있거나 `view_expires_at`이 지났으면 `true`다. 목록이 "종료됨" 칩을 고르는 데 쓴다 (D-187).
 - **"앞에 N건"(`queue_ahead`)은 목록에 넣지 않는다.** 영상마다 세는 조회라 목록에서 한꺼번에 하면 무거워진다 (D-19). 대기 순서는 영상을 연 뒤 9번에서 본다.
 - 페이지 나누기는 두지 않는다. 한 사람의 영상이 몇 건뿐인 데모 규모다. 실제 운영에서 늘어나면 `limit`·`cursor`를 더한다.

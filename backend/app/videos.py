@@ -24,11 +24,20 @@ CASE WHEN j.status IS NOT NULL                                  THEN j.status
 END
 """
 
+# 지금 status가 된 시각. 작업 행이 없으면 upload_failed는 30분이 지난 시각, uploading은 null (D-334)
+_STATUS_CHANGED_AT = """
+CASE WHEN j.status IS NOT NULL                                  THEN j.status_changed_at
+     WHEN v.created_at > now() - interval '30 minutes'          THEN NULL
+     ELSE v.created_at + interval '30 minutes'
+END
+"""
+
 _VIDEO = f"""
 SELECT v.id, v.case_id, v.original_filename, v.created_at, v.upload_completed_at, v.duration_sec,
        v.raw_deleted_at, v.masked_deleted_at, now() AS now,
        j.id AS job_id, j.failure_kind, j.user_retry_count, j.input_completed_at,
-       {_STATUS} AS status
+       {_STATUS} AS status,
+       {_STATUS_CHANGED_AT} AS status_changed_at
   FROM videos v JOIN cases c ON c.id = v.case_id
   LEFT JOIN analysis_jobs j ON j.video_id = v.id
 """  # noqa: S608 - 상수만 이어 붙인다
@@ -124,6 +133,7 @@ def list_videos(user: Annotated[dict, Depends(current_user)]):
                 "created_at": _iso(row.created_at),
                 "masked_deleted": _masked_gone(row, expires_at),
                 "view_expires_at": _iso(expires_at) if expires_at else None,
+                "status_changed_at": _iso(row.status_changed_at) if row.status_changed_at else None,
             }
         )
     return result

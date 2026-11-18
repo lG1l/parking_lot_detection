@@ -126,6 +126,23 @@ def test_list_computed_statuses_and_expiry(admin, case):
     assert by_name["up.mp4"]["view_expires_at"] is None
     assert by_name["failed-upload.mp4"]["status"] == "upload_failed"
     assert by_name["done.mp4"]["view_expires_at"].endswith("+09:00")
+    assert by_name["up.mp4"]["status_changed_at"] is None
+    # created_at + 30분 (D-334)
+    assert by_name["failed-upload.mp4"]["status_changed_at"] is not None
+
+
+def test_status_changed_at_moves_only_when_status_changes(admin, case):
+    """updated_at만 바뀌면 그대로이고, status가 바뀌면 갱신된다 (D-334)"""
+    _, job = add_video(case, "a.mp4", "queued")
+    sql(
+        "UPDATE analysis_jobs SET status_changed_at = now() - interval '1 hour' WHERE id = :j",
+        j=job,
+    )
+    before = admin.get("/api/videos").json()[0]["status_changed_at"]
+    sql("UPDATE analysis_jobs SET updated_at = now() WHERE id = :j", j=job)  # 주기 재전송처럼
+    assert admin.get("/api/videos").json()[0]["status_changed_at"] == before
+    sql("UPDATE analysis_jobs SET status = 'stills_running' WHERE id = :j", j=job)
+    assert admin.get("/api/videos").json()[0]["status_changed_at"] > before
 
 
 def test_masked_deleted_counts_expired_before_purge(admin, case):

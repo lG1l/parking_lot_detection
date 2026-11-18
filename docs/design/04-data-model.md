@@ -220,6 +220,7 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 | `current_failed_batch_no` | integer | 파싱 실패 목록에서 지금 보여주는 묶음 번호. 규칙은 `current_batch_no`와 같다. 파싱 실패 후보가 없으면 비어 있다 (D-93, D-99) |
 | `created_at` | timestamptz | 대기 순서 계산의 기준 (4.5) |
 | `updated_at` | timestamptz | 상태를 바꿀 때마다 갱신 |
+| `status_changed_at` | timestamptz | `status` 값이 실제로 바뀐 마지막 시각. DB 트리거가 갱신하므로 코드에서 쓰지 않는다. 채팅 알림 정렬에 쓴다 (D-334) |
 
 - 시각 칼럼 4개는 단계별 시작·종료와 진행 상태 점검에 사용한다. 시간당 영상 처리량 산정에는 사용하지 않는다 (D-92).
 - **재시도가 일어나면 시각이 덮어써진다.** 마지막 시도 기준 값만 남는다. 재시도·실패 이력을 행으로 남기지 않기로 했다. 이유와 바꿀 시점은 D-24에 적었다.
