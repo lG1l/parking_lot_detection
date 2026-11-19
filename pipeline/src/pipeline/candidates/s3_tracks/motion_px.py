@@ -8,7 +8,7 @@
 import cv2
 import numpy as np
 
-from pipeline.candidates.channel_b import Blob
+from pipeline.candidates.s2_motion.channel_b import Blob
 
 # 01장 1.6 "움직임 판정 시작값" (D-254). 밝기(0~255) 차이가 이 값 이상이면 달라진 픽셀이다
 MOTION_DIFF_MIN = 25

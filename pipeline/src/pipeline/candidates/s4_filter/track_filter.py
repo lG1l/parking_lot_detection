@@ -13,11 +13,19 @@ from pathlib import Path
 
 import numpy as np
 
-from pipeline.candidates.candidate_clips import has_moving_frame
-from pipeline.candidates.car_region import draw_region
-from pipeline.candidates.crop import Crop, CropError, to_reduced
-from pipeline.candidates.filter_preview import PreviewError, TrackMark, make_filter_preview
-from pipeline.candidates.floor_map import (
+from pipeline.candidates.s1_base.crop import Crop, CropError, to_reduced
+from pipeline.candidates.s1_base.inputs import InputError, load_input
+from pipeline.candidates.s1_base.preview import video_size
+from pipeline.candidates.s1_base.roi import Roi, RoiError, build_roi, camera_side_edges
+from pipeline.candidates.s1_base.video import SAMPLING_FPS
+from pipeline.candidates.s3_tracks.car_region import draw_region
+from pipeline.candidates.s3_tracks.track_preview import load_tracks
+from pipeline.candidates.s4_filter.filter_preview import (
+    PreviewError,
+    TrackMark,
+    make_filter_preview,
+)
+from pipeline.candidates.s4_filter.floor_map import (
     CAR_END_M,
     CAR_OUT_M,
     PERSON_BEYOND_M,
@@ -35,11 +43,7 @@ from pipeline.candidates.floor_map import (
     trust_range,
     trust_text,
 )
-from pipeline.candidates.inputs import InputError, load_input
-from pipeline.candidates.preview import video_size
-from pipeline.candidates.roi import Roi, RoiError, build_roi, camera_side_edges
-from pipeline.candidates.track_preview import load_tracks
-from pipeline.candidates.video import SAMPLING_FPS
+from pipeline.candidates.s5_clips.candidate_clips import has_moving_frame
 
 # 06장 "물체 종류별 구역과 기준 거리": 어느 기준으로 재는지 (D-196, D-245)
 PERSON_LIKE = (  # 바닥점 = bbox 아래 변의 가운데. 새를 뺀 동물은 사람과 같은 기준을 쓴다
@@ -559,7 +563,7 @@ if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if a != "--no-video"]
     if len(args) != 4:
         print(
-            "사용법: python -m pipeline.candidates.track_filter "
+            "사용법: python -m pipeline.candidates.s4_filter.track_filter "
             "<영상> <입력 JSON> <5-가 결과 폴더> <출력 폴더> [--no-video]"
         )
         sys.exit(2)

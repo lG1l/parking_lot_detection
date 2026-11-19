@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from pipeline.candidates.channel_b import Blob
-from pipeline.candidates.motion_px import (
+from pipeline.candidates.s2_motion.channel_b import Blob
+from pipeline.candidates.s3_tracks.motion_px import (
     BBOX_GROW_RATIO,
     MOTION_DIFF_MIN,
     blobs_moved_mask,

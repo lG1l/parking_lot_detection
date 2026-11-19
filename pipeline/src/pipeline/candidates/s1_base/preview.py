@@ -1,7 +1,7 @@
 """분석 크롭·입력을 원본 영상 위에 그린 확인용 영상을 만든다. 명령의 진입점이다.
 
 실행 (pipeline/ 폴더에서):
-    uv run python -m pipeline.candidates.preview <영상|사진> <입력 JSON> <출력 폴더>
+    uv run python -m pipeline.candidates.s1_base.preview <영상|사진> <입력 JSON> <출력 폴더>
 """
 
 import os
@@ -11,10 +11,10 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from pipeline.candidates.crop import ANALYSIS_SCALE, Crop, CropError, to_original
-from pipeline.candidates.inputs import AnalysisInput, InputError, load_input
-from pipeline.candidates.roi import STRIP_OUT_M, Roi, RoiError, build_roi, camera_side_edges
-from pipeline.candidates.video import SAMPLING_FPS, iter_analysis_frames
+from pipeline.candidates.s1_base.crop import ANALYSIS_SCALE, Crop, CropError, to_original
+from pipeline.candidates.s1_base.inputs import AnalysisInput, InputError, load_input
+from pipeline.candidates.s1_base.roi import STRIP_OUT_M, Roi, RoiError, build_roi, camera_side_edges
+from pipeline.candidates.s1_base.video import SAMPLING_FPS, iter_analysis_frames
 
 # 그림 색 (BGR)
 ORANGE = (0, 140, 255)  # 분석 크롭
@@ -187,7 +187,9 @@ def make_preview(video_path: str, input_path: str, out_dir: str) -> None:
 
 if __name__ == "__main__":
     if len(sys.argv) != 4:
-        print("사용법: python -m pipeline.candidates.preview <영상> <입력 JSON> <출력 폴더>")
+        print(
+            "사용법: python -m pipeline.candidates.s1_base.preview <영상> <입력 JSON> <출력 폴더>"
+        )
         sys.exit(2)
     try:
         make_preview(sys.argv[1], sys.argv[2], sys.argv[3])

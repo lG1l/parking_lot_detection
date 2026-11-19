@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from pipeline.candidates.crop import (
+from pipeline.candidates.s1_base.crop import (
     Crop,
     CropError,
     analysis_crop,

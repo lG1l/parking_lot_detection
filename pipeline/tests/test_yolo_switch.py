@@ -1,8 +1,8 @@
 import pytest
 
-from pipeline.candidates.channel_b import MOG2_STABLE_SEC
-from pipeline.candidates.video import SAMPLING_FPS
-from pipeline.candidates.yolo_switch import YOLO_AFTER_SEC, YOLO_BEFORE_SEC, YoloSwitch
+from pipeline.candidates.s1_base.video import SAMPLING_FPS
+from pipeline.candidates.s2_motion.channel_b import MOG2_STABLE_SEC
+from pipeline.candidates.s3_tracks.yolo_switch import YOLO_AFTER_SEC, YOLO_BEFORE_SEC, YoloSwitch
 
 # 06장 예시 표의 시각을 상수로 만든다. 지금 값으로는 100초, 112초, 117초, 122초다.
 # 첫 움직임은 안정 시각과 거슬러 올라갈 시간보다 충분히 뒤에 둔다

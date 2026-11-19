@@ -3,7 +3,9 @@ import json
 
 import numpy as np
 
-from pipeline.candidates.car_region import (
+from pipeline.candidates.s1_base.crop import Crop
+from pipeline.candidates.s1_base.inputs import AnalysisInput
+from pipeline.candidates.s3_tracks.car_region import (
     FramePixels,
     base_region,
     build_car_spot,
@@ -12,8 +14,6 @@ from pipeline.candidates.car_region import (
     pick_my_car,
     region_polygons,
 )
-from pipeline.candidates.crop import Crop
-from pipeline.candidates.inputs import AnalysisInput
 
 # D-264 예시 숫자. 줄이지 않는 크롭이라 원본 좌표 = 줄인 프레임 좌표다
 FRAME = (640, 360)

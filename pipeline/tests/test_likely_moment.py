@@ -1,4 +1,4 @@
-from pipeline.candidates.likely_moment import pick_closest
+from pipeline.candidates.s5_clips.likely_moment import pick_closest
 
 
 def test_최솟값의_동률_폭_안인_프레임을_모두_고른다():

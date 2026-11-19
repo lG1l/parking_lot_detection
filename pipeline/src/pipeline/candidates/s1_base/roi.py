@@ -13,8 +13,8 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from pipeline.candidates.crop import Crop, analysis_crop, display_crop
-from pipeline.candidates.inputs import AnalysisInput, Point
+from pipeline.candidates.s1_base.crop import Crop, analysis_crop, display_crop
+from pipeline.candidates.s1_base.inputs import AnalysisInput, Point
 
 # 찍은 변의 실제 길이로 가정하는 일반 승용차 크기 (m). D-194, D-244 한계
 CAR_WIDTH_M = 1.8

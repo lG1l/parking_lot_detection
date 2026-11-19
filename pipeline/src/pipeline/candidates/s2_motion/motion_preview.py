@@ -4,7 +4,7 @@
 그리기는 영상 전체의 구간이 정해진 뒤 영상을 한 번 더 읽어 한다. MOG2는 다시 돌리지 않는다.
 
 실행 (pipeline/ 폴더에서):
-    uv run python -m pipeline.candidates.motion_preview <영상> <입력 JSON> <출력 폴더> [장면 파일]
+    uv run python -m pipeline.candidates.s2_motion.motion_preview <영상> <입력 JSON> <출력 폴더> [장면 파일]
 """
 
 import json
@@ -15,19 +15,9 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from pipeline.candidates.channel_b import (
-    MOG2_STABLE_SEC,
-    FrameRecord,
-    MotionRange,
-    clean_foreground,
-    create_mog2,
-    find_blobs,
-    has_roi_motion,
-    merge_motion_ranges,
-)
-from pipeline.candidates.crop import Crop, CropError, crop_frame, to_original
-from pipeline.candidates.inputs import InputError, load_input
-from pipeline.candidates.preview import (
+from pipeline.candidates.s1_base.crop import Crop, CropError, crop_frame, to_original
+from pipeline.candidates.s1_base.inputs import InputError, load_input
+from pipeline.candidates.s1_base.preview import (
     CYAN,
     GREEN,
     ORANGE,
@@ -40,8 +30,18 @@ from pipeline.candidates.preview import (
     roi_contours,
     video_size,
 )
-from pipeline.candidates.roi import STRIP_OUT_M, Roi, RoiError, build_roi
-from pipeline.candidates.video import SAMPLING_FPS, iter_analysis_frames
+from pipeline.candidates.s1_base.roi import STRIP_OUT_M, Roi, RoiError, build_roi
+from pipeline.candidates.s1_base.video import SAMPLING_FPS, iter_analysis_frames
+from pipeline.candidates.s2_motion.channel_b import (
+    MOG2_STABLE_SEC,
+    FrameRecord,
+    MotionRange,
+    clean_foreground,
+    create_mog2,
+    find_blobs,
+    has_roi_motion,
+    merge_motion_ranges,
+)
 
 # 그림 색 (BGR)
 YELLOW = (0, 220, 255)  # ROI에 닿지 않은 덩어리
@@ -345,7 +345,7 @@ def make_motion_preview(
 if __name__ == "__main__":
     if len(sys.argv) not in (4, 5):
         print(
-            "사용법: python -m pipeline.candidates.motion_preview "
+            "사용법: python -m pipeline.candidates.s2_motion.motion_preview "
             "<영상> <입력 JSON> <출력 폴더> [장면 파일]"
         )
         sys.exit(2)

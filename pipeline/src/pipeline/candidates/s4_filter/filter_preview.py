@@ -10,8 +10,12 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from pipeline.candidates.crop import Point
-from pipeline.candidates.floor_map import (
+from pipeline.candidates.s1_base.crop import Point
+from pipeline.candidates.s1_base.preview import draw_labels
+from pipeline.candidates.s1_base.video import SAMPLING_FPS, select_by_time
+from pipeline.candidates.s2_motion.motion_preview import DARK, GRAY
+from pipeline.candidates.s3_tracks.track_preview import _track_color
+from pipeline.candidates.s4_filter.floor_map import (
     CAR_END_M,
     CAR_OUT_M,
     PERSON_BEYOND_M,
@@ -27,10 +31,6 @@ from pipeline.candidates.floor_map import (
     to_floor,
     to_screen,
 )
-from pipeline.candidates.motion_preview import DARK, GRAY
-from pipeline.candidates.preview import draw_labels
-from pipeline.candidates.track_preview import _track_color
-from pipeline.candidates.video import SAMPLING_FPS, select_by_time
 
 PINK = (180, 105, 255)  # 사람 구역
 TEAL = (170, 170, 0)  # 차 구역

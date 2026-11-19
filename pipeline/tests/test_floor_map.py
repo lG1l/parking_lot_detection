@@ -1,6 +1,6 @@
 import pytest
 
-from pipeline.candidates.floor_map import (
+from pipeline.candidates.s4_filter.floor_map import (
     CAR_END_M,
     CAR_OUT_M,
     PERSON_END_M,

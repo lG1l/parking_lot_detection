@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from pipeline.candidates.channel_b import (
+from pipeline.candidates.s2_motion.channel_b import (
     BLOB_MAX_AREA_RATIO,
     FrameRecord,
     MotionRange,

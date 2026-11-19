@@ -9,8 +9,8 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from pipeline.candidates.crop import Crop
-from pipeline.candidates.inputs import AnalysisInput
+from pipeline.candidates.s1_base.crop import Crop
+from pipeline.candidates.s1_base.inputs import AnalysisInput
 
 # 01장 1.6 "0단계 필터 시작값"의 내 차 고르기 값 (시작값, D-264)
 CAR_SPOT_SIDE_RATIO = 0.1  # 좌우 여유: 내 차 자리를 차량 bbox 폭의 이 배씩 좌우로 넓힌다

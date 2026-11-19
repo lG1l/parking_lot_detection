@@ -3,9 +3,9 @@ import dataclasses
 import numpy as np
 import pytest
 
-from pipeline.candidates.crop import to_original, to_reduced
-from pipeline.candidates.inputs import AnalysisInput
-from pipeline.candidates.roi import (
+from pipeline.candidates.s1_base.crop import to_original, to_reduced
+from pipeline.candidates.s1_base.inputs import AnalysisInput
+from pipeline.candidates.s1_base.roi import (
     CAR_LENGTH_M,
     CAR_WIDTH_M,
     END_FLARE_DEG,

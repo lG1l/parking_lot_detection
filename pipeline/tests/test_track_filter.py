@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from pipeline.candidates.track_filter import floor_point_visible, longest_run, track_class
+from pipeline.candidates.s4_filter.track_filter import floor_point_visible, longest_run, track_class
 
 # 줄인 프레임 640×360. 닿음 여유는 짧은 변의 1%인 3.6px다
 SIZE = (640, 360)

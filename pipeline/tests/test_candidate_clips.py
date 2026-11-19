@@ -1,6 +1,6 @@
 import pytest
 
-from pipeline.candidates.candidate_clips import (
+from pipeline.candidates.s5_clips.candidate_clips import (
     join_overlapping,
     make_clips,
     merge_near,

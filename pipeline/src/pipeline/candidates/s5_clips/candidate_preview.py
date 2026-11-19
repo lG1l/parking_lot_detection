@@ -10,16 +10,10 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from pipeline.candidates.candidate_clips import Clip
-from pipeline.candidates.crop import Point
-from pipeline.candidates.filter_preview import (
-    _HEADLINE_POS,
-    _LINE_GAP,
-    Label,
-    PreviewError,
-    analysis_times,
-)
-from pipeline.candidates.motion_preview import (
+from pipeline.candidates.s1_base.crop import Point
+from pipeline.candidates.s1_base.preview import GREEN, ORANGE, RED, WHITE, draw_labels
+from pipeline.candidates.s1_base.video import SAMPLING_FPS
+from pipeline.candidates.s2_motion.motion_preview import (
     _BAR_MIN_W,
     _BAR_ROW_GAP,
     _BAR_ROW_H,
@@ -27,8 +21,14 @@ from pipeline.candidates.motion_preview import (
     YELLOW,
     _bar_x,
 )
-from pipeline.candidates.preview import GREEN, ORANGE, RED, WHITE, draw_labels
-from pipeline.candidates.video import SAMPLING_FPS
+from pipeline.candidates.s4_filter.filter_preview import (
+    _HEADLINE_POS,
+    _LINE_GAP,
+    Label,
+    PreviewError,
+    analysis_times,
+)
+from pipeline.candidates.s5_clips.candidate_clips import Clip
 
 _CLIP_POS = (_HEADLINE_POS[0], _HEADLINE_POS[1] + _LINE_GAP)  # 5-나 "바닥 지도 믿음" 줄 바로 아래
 _MOMENT_LINE = 5  # 유력 시점 테두리 굵기

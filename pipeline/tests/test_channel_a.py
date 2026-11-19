@@ -1,8 +1,8 @@
 import numpy as np
 import supervision as sv
 
-from pipeline.candidates.channel_a import track_lines
-from pipeline.candidates.crop import Crop
+from pipeline.candidates.s1_base.crop import Crop
+from pipeline.candidates.s3_tracks.channel_a import track_lines
 
 # 원본 1280×720 영역을 640×360으로 줄인 분석 크롭. 줄인 좌표 × 2 + (400, 200) = 원본 좌표
 CROP = Crop((400, 200, 1680, 920), (640, 360))

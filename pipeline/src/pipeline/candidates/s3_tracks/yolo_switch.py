@@ -8,7 +8,7 @@
 from collections import deque
 from dataclasses import dataclass, field
 
-from pipeline.candidates.channel_b import MOG2_STABLE_SEC
+from pipeline.candidates.s2_motion.channel_b import MOG2_STABLE_SEC
 
 # 01장 1.6 "채널 A 켜는 구간" (D-247). 초기값이다
 YOLO_BEFORE_SEC = 10  # 켤 때 거슬러 올라가는 시간. 링 버퍼 길이와 같다

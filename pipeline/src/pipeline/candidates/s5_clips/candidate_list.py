@@ -1,6 +1,6 @@
 """6단계 명령: 남은 트랙으로 후보(클립)와 유력 시점을 계산해 후보 목록 파일에 쓴다 (D-333).
 
-사용법: python -m pipeline.candidates.candidate_list <영상> <입력 JSON> <빼기 결과 폴더> <출력 폴더> [장면 파일] [--no-video]
+사용법: python -m pipeline.candidates.s5_clips.candidate_list <영상> <입력 JSON> <빼기 결과 폴더> <출력 폴더> [장면 파일] [--no-video]
 트랙 파일만 읽어 한 번에 계산한다. 영상은 크기만 읽는다 (06장 6.5, D-333 가-4).
 """
 
@@ -9,24 +9,16 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from pipeline.candidates.candidate_clips import Clip, Range, make_clips, moving_times, track_ranges
-from pipeline.candidates.candidate_preview import MomentMark, clock, make_candidate_preview
-from pipeline.candidates.crop import CropError
-from pipeline.candidates.filter_preview import PreviewError
-from pipeline.candidates.floor_map import build_floor_map, is_trusted, trust_range
-from pipeline.candidates.inputs import InputError, load_input
-from pipeline.candidates.likely_moment import (
-    METHOD_SCREEN,
-    Damage,
-    build_damage,
-    measure,
-    pick_closest,
-    unit_of,
-)
-from pipeline.candidates.motion_preview import load_scenes
-from pipeline.candidates.preview import video_size
-from pipeline.candidates.roi import RoiError, build_roi, camera_side_edges
-from pipeline.candidates.track_filter import (
+from pipeline.candidates.s1_base.crop import CropError
+from pipeline.candidates.s1_base.inputs import InputError, load_input
+from pipeline.candidates.s1_base.preview import video_size
+from pipeline.candidates.s1_base.roi import RoiError, build_roi, camera_side_edges
+from pipeline.candidates.s1_base.video import SAMPLING_FPS
+from pipeline.candidates.s2_motion.motion_preview import load_scenes
+from pipeline.candidates.s3_tracks.track_preview import load_tracks
+from pipeline.candidates.s4_filter.filter_preview import PreviewError
+from pipeline.candidates.s4_filter.floor_map import build_floor_map, is_trusted, trust_range
+from pipeline.candidates.s4_filter.track_filter import (
     EXCLUDED_FILE,
     RANGES_FILE,
     TRACKS_FILE,
@@ -38,8 +30,22 @@ from pipeline.candidates.track_filter import (
     group_tracks,
     track_class,
 )
-from pipeline.candidates.track_preview import load_tracks
-from pipeline.candidates.video import SAMPLING_FPS
+from pipeline.candidates.s5_clips.candidate_clips import (
+    Clip,
+    Range,
+    make_clips,
+    moving_times,
+    track_ranges,
+)
+from pipeline.candidates.s5_clips.candidate_preview import MomentMark, clock, make_candidate_preview
+from pipeline.candidates.s5_clips.likely_moment import (
+    METHOD_SCREEN,
+    Damage,
+    build_damage,
+    measure,
+    pick_closest,
+    unit_of,
+)
 
 CANDIDATES_FILE = "candidates.jsonl"
 REPORT_FILE = "candidate_report.jsonl"
@@ -239,7 +245,7 @@ if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if a != "--no-video"]
     if len(args) not in (4, 5):
         print(
-            "사용법: python -m pipeline.candidates.candidate_list "
+            "사용법: python -m pipeline.candidates.s5_clips.candidate_list "
             "<영상> <입력 JSON> <빼기 결과 폴더> <출력 폴더> [장면 파일] [--no-video]"
         )
         sys.exit(2)

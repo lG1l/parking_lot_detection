@@ -9,10 +9,10 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from pipeline.candidates.crop import Crop, Point
-from pipeline.candidates.floor_map import FloorMap, FloorPoint, to_floor
-from pipeline.candidates.inputs import AnalysisInput
-from pipeline.candidates.track_filter import (
+from pipeline.candidates.s1_base.crop import Crop, Point
+from pipeline.candidates.s1_base.inputs import AnalysisInput
+from pipeline.candidates.s4_filter.floor_map import FloorMap, FloorPoint, to_floor
+from pipeline.candidates.s4_filter.track_filter import (
     CAR_LIKE,
     KEEP_ON_TIE,
     TOUCH_RATIO,

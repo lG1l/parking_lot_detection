@@ -10,10 +10,10 @@ import numpy as np
 import supervision as sv
 from trackers import ByteTrackTracker
 
-from pipeline.candidates.channel_a import TRACK_CONFIRM_FRAMES, TRACK_START_CONF, TrackBox
-from pipeline.candidates.channel_b import Blob, Box
-from pipeline.candidates.crop import Crop, to_original
-from pipeline.candidates.video import SAMPLING_FPS
+from pipeline.candidates.s1_base.crop import Crop, to_original
+from pipeline.candidates.s1_base.video import SAMPLING_FPS
+from pipeline.candidates.s2_motion.channel_b import Blob, Box
+from pipeline.candidates.s3_tracks.channel_a import TRACK_CONFIRM_FRAMES, TRACK_START_CONF, TrackBox
 
 # 01장 1.6 "0단계 필터 시작값"의 덩어리 붙이기 (D-256).
 # 덩어리 픽셀 중 이 비율 이상이 트랙 bbox 안에 있으면 그 트랙의 일부로 본다

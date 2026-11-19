@@ -12,8 +12,8 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from pipeline.candidates.crop import Point
-from pipeline.candidates.roi import CAR_LENGTH_M, CAR_WIDTH_M, STRIP_OUT_M
+from pipeline.candidates.s1_base.crop import Point
+from pipeline.candidates.s1_base.roi import CAR_LENGTH_M, CAR_WIDTH_M, STRIP_OUT_M
 
 # 06장 "물체 종류별 구역과 기준 거리" (시작값, D-244, D-324, D-330)
 PERSON_OUT_M = STRIP_OUT_M  # 사람 띠: 파손 변 바깥쪽 깊이. ROI 바닥 띠 폭과 같은 값이다

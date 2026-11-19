@@ -2,7 +2,9 @@ import numpy as np
 import pytest
 import supervision as sv
 
-from pipeline.candidates.blob_tracks import (
+from pipeline.candidates.s1_base.crop import Crop
+from pipeline.candidates.s2_motion.channel_b import find_blobs
+from pipeline.candidates.s3_tracks.blob_tracks import (
     BLOB_ATTACH_RATIO,
     BLOB_TRACK_ID_OFFSET,
     STOPPED_MOVE_RATIO,
@@ -12,9 +14,7 @@ from pipeline.candidates.blob_tracks import (
     is_stopped_vehicle,
     remember_positions,
 )
-from pipeline.candidates.channel_a import TrackBox
-from pipeline.candidates.channel_b import find_blobs
-from pipeline.candidates.crop import Crop
+from pipeline.candidates.s3_tracks.channel_a import TrackBox
 
 SHAPE = (360, 640)
 BLOB_SIZE = 20

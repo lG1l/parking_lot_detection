@@ -13,8 +13,8 @@ import torch
 from trackers import ByteTrackTracker
 from ultralytics import YOLO
 
-from pipeline.candidates.crop import Crop, to_original
-from pipeline.candidates.video import SAMPLING_FPS
+from pipeline.candidates.s1_base.crop import Crop, to_original
+from pipeline.candidates.s1_base.video import SAMPLING_FPS
 
 # 01장 1.6 "채널 A YOLO 신뢰도 하한" (시작값, D-311). 추적기가 낮은 신뢰도 탐지로도
 # 이미 있는 트랙을 이을 수 있게 새 트랙 시작 기준보다 낮게 둔다

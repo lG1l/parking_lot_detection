@@ -6,7 +6,7 @@ YOLO를 켜는 순간에는 링 버퍼에 들고 있던 지난 프레임부터 �
 그리기는 탐지가 끝난 뒤 영상을 한 번 더 읽어 한다. MOG2와 YOLO는 다시 돌리지 않는다.
 
 실행 (pipeline/ 폴더에서):
-    uv run python -m pipeline.candidates.track_preview \
+    uv run python -m pipeline.candidates.s3_tracks.track_preview \
         <영상> <입력 JSON> <모델 가중치> <출력 폴더> [장면 파일]
 """
 
@@ -22,36 +22,21 @@ import cv2
 import numpy as np
 from trackers import ByteTrackTracker
 
-from pipeline.candidates.blob_tracks import (
-    History,
-    attach_target,
-    blob_track_boxes,
-    blob_track_lines,
-    is_stopped_vehicle,
-    open_blob_tracker,
-    remember_positions,
-    track_boxes,
+from pipeline.candidates.s1_base.crop import Crop, CropError, crop_frame, to_original
+from pipeline.candidates.s1_base.inputs import InputError, load_input
+from pipeline.candidates.s1_base.preview import (
+    GREEN,
+    RED,
+    WHITE,
+    _draw_time,
+    _format_time,
+    draw_labels,
+    roi_contours,
+    video_size,
 )
-from pipeline.candidates.car_region import (
-    BaseRegion,
-    CarSpot,
-    FramePixels,
-    Polygon,
-    base_region,
-    build_car_spot,
-    car_keys,
-    pick_my_car,
-    redraw,
-    region_polygons,
-)
-from pipeline.candidates.channel_a import (
-    ChannelA,
-    ModelError,
-    TrackBox,
-    open_channel_a,
-    process_frame,
-)
-from pipeline.candidates.channel_b import (
+from pipeline.candidates.s1_base.roi import Roi, RoiError, build_roi
+from pipeline.candidates.s1_base.video import SAMPLING_FPS, iter_analysis_frames
+from pipeline.candidates.s2_motion.channel_b import (
     MOG2_STABLE_SEC,
     SHADOW,
     Blob,
@@ -66,9 +51,7 @@ from pipeline.candidates.channel_b import (
     has_roi_motion,
     merge_motion_ranges,
 )
-from pipeline.candidates.crop import Crop, CropError, crop_frame, to_original
-from pipeline.candidates.inputs import InputError, load_input
-from pipeline.candidates.motion_preview import (
+from pipeline.candidates.s2_motion.motion_preview import (
     _BLOB_ALPHA,
     _LABEL_GAP,
     DARK,
@@ -85,7 +68,36 @@ from pipeline.candidates.motion_preview import (
     load_scenes,
     make_timeline,
 )
-from pipeline.candidates.motion_px import (
+from pipeline.candidates.s3_tracks.blob_tracks import (
+    History,
+    attach_target,
+    blob_track_boxes,
+    blob_track_lines,
+    is_stopped_vehicle,
+    open_blob_tracker,
+    remember_positions,
+    track_boxes,
+)
+from pipeline.candidates.s3_tracks.car_region import (
+    BaseRegion,
+    CarSpot,
+    FramePixels,
+    Polygon,
+    base_region,
+    build_car_spot,
+    car_keys,
+    pick_my_car,
+    redraw,
+    region_polygons,
+)
+from pipeline.candidates.s3_tracks.channel_a import (
+    ChannelA,
+    ModelError,
+    TrackBox,
+    open_channel_a,
+    process_frame,
+)
+from pipeline.candidates.s3_tracks.motion_px import (
     blobs_moved_mask,
     changed_pixels,
     grow_bbox,
@@ -93,19 +105,12 @@ from pipeline.candidates.motion_px import (
     moved_in_blob,
     to_gray,
 )
-from pipeline.candidates.preview import (
-    GREEN,
-    RED,
-    WHITE,
-    _draw_time,
-    _format_time,
-    draw_labels,
-    roi_contours,
-    video_size,
+from pipeline.candidates.s3_tracks.yolo_switch import (
+    YOLO_BEFORE_SEC,
+    Decision,
+    YoloRange,
+    YoloSwitch,
 )
-from pipeline.candidates.roi import Roi, RoiError, build_roi
-from pipeline.candidates.video import SAMPLING_FPS, iter_analysis_frames
-from pipeline.candidates.yolo_switch import YOLO_BEFORE_SEC, Decision, YoloRange, YoloSwitch
 
 # 링 버퍼에 담는 줄인 프레임 수. 지금 프레임을 빼고 "거슬러 올라가는 시간"만큼이다 (D-247)
 RING_FRAMES = YOLO_BEFORE_SEC * SAMPLING_FPS
@@ -751,7 +756,7 @@ def make_track_preview(
 if __name__ == "__main__":
     if len(sys.argv) not in (5, 6):
         print(
-            "사용법: python -m pipeline.candidates.track_preview "
+            "사용법: python -m pipeline.candidates.s3_tracks.track_preview "
             "<영상> <입력 JSON> <모델 가중치> <출력 폴더> [장면 파일]"
         )
         sys.exit(2)
