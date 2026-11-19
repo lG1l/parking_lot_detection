@@ -22,6 +22,7 @@ from pipeline.candidates.s1_base.inputs import AnalysisInput, Bbox, InputError, 
 from pipeline.candidates.s1_base.preview import video_size
 from pipeline.candidates.s1_base.roi import RoiError, build_roi
 from pipeline.candidates.s1_base.video import iter_analysis_frames
+from pipeline.vlm.frame_sheet import make_sheet
 
 # 프레임 간격 (초). 클립 처음부터 끝까지 통일한다. 임시이고 13-가에서 다시 정한다 (D-342 가-1)
 FRAME_INTERVAL_SEC = 1.0
@@ -175,6 +176,20 @@ def save_candidate(out_dir: str, candidate: CandidateFrames) -> str:
     return folder
 
 
+def save_sheet(out_dir: str, candidate: CandidateFrames) -> str:
+    """후보 하나의 묶음 이미지를 저장하고 파일 경로를 돌려준다. 첫 칸은 안내 프레임이다."""
+    title = (
+        f"후보 {candidate.number} · {candidate.start_sec:g}~{candidate.end_sec:g}초"
+        f" · {len(candidate.frames)}장"
+    )
+    cells = [("안내", candidate.guide)]
+    for frame in candidate.frames:
+        cells.append((f"[프레임 {frame.number} / t={frame.time_sec:.1f}s]", frame.image))
+    path = os.path.join(out_dir, f"c{candidate.number:02d}_sheet.jpg")
+    cv2.imwrite(path, make_sheet(title, cells))
+    return path
+
+
 def run_frames(video_path: str, input_path: str, candidates_path: str, out_dir: str) -> None:
     count = total = 0
     for candidate in iter_candidate_frames(video_path, input_path, candidates_path):
@@ -184,6 +199,7 @@ def run_frames(video_path: str, input_path: str, candidates_path: str, out_dir: 
             print(f"{label} · 프레임 없음 (영상이 클립 시작보다 먼저 끝났다)")
             continue
         folder = save_candidate(out_dir, candidate)
+        save_sheet(out_dir, candidate)
         total += len(candidate.frames)
         print(f"{label} · {len(candidate.frames)}장 → {folder}")
     print(f"후보 {count}개, 판정 프레임 합계 {total}장")
