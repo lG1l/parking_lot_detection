@@ -23,6 +23,7 @@ class AnalysisInput:
     floor_corners: list[Point]  # 찍은 순서. 변 i = [i] → [(i+1) % 4]
     front_edge: int
     damage_edges: list[int]
+    description: str | None = None  # 사용자의 파손 설명 (선택). VLM에 참고 자료로만 넣는다
 
 
 def load_input(path: str, width: int, height: int) -> AnalysisInput:
@@ -44,7 +45,12 @@ def load_input(path: str, width: int, height: int) -> AnalysisInput:
     corners = _corners(_need(damage, "floor_corners", list), width, height)
     front_edge = _edge(_need(damage, "front_edge", int), "damage.front_edge")
     edges = _damage_edges(_need(damage, "damage_edges", list))
-    return AnalysisInput(vehicle_bbox, visible, damage_bbox, corners, front_edge, edges)
+    description = damage.get("description")
+    if description is not None and not isinstance(description, str):
+        raise InputError("'description'의 형식이 틀렸습니다. 글이어야 합니다.")
+    return AnalysisInput(
+        vehicle_bbox, visible, damage_bbox, corners, front_edge, edges, description
+    )
 
 
 def _need(obj: dict, key: str, kind: type):
