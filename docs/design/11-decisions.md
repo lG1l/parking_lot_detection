@@ -346,6 +346,7 @@
 | [D-338](#d-338-메뉴-채팅-배지는-본-알림을-빼고-센다-d-233d-243d-303-일부-변경) | 메뉴 [채팅] 배지는 본 알림을 빼고 센다 (D-233·D-243·D-303 일부 변경) | 2026-11-18 | 팀원 1 승인 전 (팀원 2 제안·구현) |
 | [D-339](#d-339-cloudfront-원본-주소는-백엔드-ec2를-켠-뒤-cloudshell에서-스크립트로-갱신한다) | CloudFront 원본 주소는 백엔드 EC2를 켠 뒤 CloudShell에서 스크립트로 갱신한다 | 2026-11-18 | 확정 (팀원 2 승인) |
 | [D-340](#d-340-사용자-접속을-cloudfront-기본-도메인cloudfrontnet으로-받아-https를-적용한다) | 사용자 접속을 CloudFront 기본 도메인(`*.cloudfront.net`)으로 받아 HTTPS를 적용한다 | 2026-11-18 | 확정 (팀장 결정). 🔐 CloudFront 멘토 승인 필요. D-146의 HTTP 유지를 변경 |
+| [D-341](#d-341-pipelinesrcpipelinecandidates를-단계-폴더-다섯-개로-나누고-명령-경로를-바꾼다) | `pipeline/src/pipeline/candidates/`를 단계 폴더 다섯 개로 나누고 명령 경로를 바꾼다 | 2026-11-19 | 확정 (팀장 결정). 폴더 이름 앞의 `s`는 팀장 확인 전 |
 
 
 ---
@@ -10806,7 +10807,7 @@ Claude Code의 동일 프로젝트 세션 `9cbe17d0-a7d4-420e-88d8-de4870913c2b`
   - **키를 한 층으로 풀기**: 버린 이유: 04장과 달라져 바꾸는 코드가 생긴다.
   - **명령줄 인자로 받기**: 버린 이유: 좌표가 많아 틀리기 쉽다.
 - **백엔드 영향**: 없다.
-- **적용 위치**: `pipeline/src/pipeline/candidates/inputs.py`
+- **적용 위치**: `pipeline/src/pipeline/candidates/s1_base/inputs.py`
 
 ## D-300. 분석 프레임은 프레임 시각으로 고른다
 
@@ -10818,7 +10819,7 @@ Claude Code의 동일 프로젝트 세션 `9cbe17d0-a7d4-420e-88d8-de4870913c2b`
   - **프레임 번호로 고르기**: 버린 이유: 시각이 밀린다.
   - **목표 시각에 가장 가까운 프레임 고르기**: 버린 이유: 다음 프레임까지 읽어 비교해야 해서 한 줄로 읽는 구조가 복잡해진다. 차이는 프레임 반 장 이내다.
 - **백엔드 영향**: 없다.
-- **적용 위치**: 09장 9.9 가변 프레임 속도 설명(이미 같은 내용), `pipeline/src/pipeline/candidates/video.py`
+- **적용 위치**: 09장 9.9 가변 프레임 속도 설명(이미 같은 내용), `pipeline/src/pipeline/candidates/s1_base/video.py`
 
 ## D-301. "그 밖의 경우" ROI는 네 부분의 합집합을 시작값으로 한다
 
@@ -10876,7 +10877,7 @@ Claude Code의 동일 프로젝트 세션 `9cbe17d0-a7d4-420e-88d8-de4870913c2b`
   - **보여줄 크롭을 차량 bbox 기준으로**: 버린 이유: ROI가 차 밖으로 나가면 잘리거나 여백이 들쭉날쭉했다.
 - **한계**: 찍은 변의 길이를 일반 승용차 크기(1.8×4.7m)로 가정한다. 높이를 먼 쪽 차체 기준으로 재므로 가까운 변 옆에 선 사람은 머리 쪽이 ROI 밖으로 나갈 수 있다. 차 높이 1.5m 가정이라 SUV는 여유가 줄어든다. 건너편 변이 파손이면 위 경계가 띠 바깥 선 기준이라 찍은 변과 몇 px 어긋난다. 시연 영상·중간_높 사진의 4개 조합 첫 프레임만 눈으로 확인했다. 바닥 지도를 믿을 수 없을 때의 대체 ROI는 여전히 🚧 (U-30).
 - **백엔드 영향**: 없다.
-- **적용 위치**: 06장 6.5 ROI 방향, 01장 1.6, `pipeline/src/pipeline/candidates/roi.py`·`crop.py`.
+- **적용 위치**: 06장 6.5 ROI 방향, 01장 1.6, `pipeline/src/pipeline/candidates/s1_base/roi.py`·`crop.py`.
 
 ---
 
@@ -11102,7 +11103,7 @@ Claude Code의 동일 프로젝트 세션 `9cbe17d0-a7d4-420e-88d8-de4870913c2b`
   - 오탐이 11.7% / 5.6% 남는다. `안보임_1변`은 대부분 ROI 뒤쪽 안내판 자리다.
   - 30초보다 오래 멈춘 물체는 배경이 되어 채널 B에서 사라진다(D-195 한계의 1분이 30초가 됐다). 사람·차량은 채널 A가 맡는다.
 - **백엔드 영향**: 없다. 채널 B 상수는 파이프라인 안에서만 쓴다. 저장 형식·SQS·API는 그대로다.
-- **적용 위치**: 01장 1.6 주요 상수, 06장 6.5(채널 B 시작값·채널 A 켜고 끄기 규칙 8·이어서 하기·안정 전 프레임)·U-09, D-195·D-199·D-248·D-254·D-265·D-268의 상태 줄, `pipeline/src/pipeline/candidates/channel_b.py`
+- **적용 위치**: 01장 1.6 주요 상수, 06장 6.5(채널 B 시작값·채널 A 켜고 끄기 규칙 8·이어서 하기·안정 전 프레임)·U-09, D-195·D-199·D-248·D-254·D-265·D-268의 상태 줄, `pipeline/src/pipeline/candidates/s2_motion/channel_b.py`
 
 ---
 
@@ -11138,7 +11139,7 @@ Claude Code의 동일 프로젝트 세션 `9cbe17d0-a7d4-420e-88d8-de4870913c2b`
   - **"ByteTrack 새 트랙 시작 기준"과 같은 값**: 버린 이유: 낮은 신뢰도 탐지가 하나도 안 들어가 ByteTrack을 쓰는 뜻이 없다 (D-200 구현 주의).
 - **한계**: 시연 영상 하나로 볼 시작값이다. 헛 트랙이 많으면 올린다.
 - **백엔드 영향**: 없다.
-- **적용 위치**: 01장 1.6 주요 상수, 06장 6.5 탐지 채널(채널 A), `pipeline/src/pipeline/candidates/channel_a.py`.
+- **적용 위치**: 01장 1.6 주요 상수, 06장 6.5 탐지 채널(채널 A), `pipeline/src/pipeline/candidates/s3_tracks/channel_a.py`.
 
 ---
 
@@ -11156,7 +11157,7 @@ Claude Code의 동일 프로젝트 세션 `9cbe17d0-a7d4-420e-88d8-de4870913c2b`
   - **1번부터를 지키고 쓸 때 1을 더한다 (D-257 그대로)**: 버린 이유: 코드 한 줄이지만 추적기 안의 번호와 파일의 번호가 늘 1씩 어긋난다. 추적기 상태 저장·복원(D-248)에서 두 번호를 섞어 볼 일이 생긴다.
 - **한계**: 0을 "없음"으로 다루는 코드(`if track_id:` 같은 검사)는 0번 트랙을 빠뜨린다. 백엔드·프론트가 `track_ids`를 읽을 때 조심한다.
 - **백엔드 영향**: DDL·타입은 그대로다. `candidates.track_ids`에 0이 들어올 수 있고, 채널 B 번호의 경계가 1,000,001에서 1,000,000으로 바뀐다. **공통 계약(트랙 파일, `track_ids`)의 값 범위가 바뀌므로 팀원에게 알린다** (D-137). 아직 이 값을 읽는 백엔드·프론트 코드는 없다.
-- **적용 위치**: 04장 상단 공지·`candidates.track_ids`·4.8 `track_id`·4.8 채널 B 줄, 06장 상단 공지·6.5 규칙 5, D-257 상태 줄, `pipeline/src/pipeline/candidates/channel_a.py`.
+- **적용 위치**: 04장 상단 공지·`candidates.track_ids`·4.8 `track_id`·4.8 채널 B 줄, 06장 상단 공지·6.5 규칙 5, D-257 상태 줄, `pipeline/src/pipeline/candidates/s3_tracks/channel_a.py`.
 
 ---
 
@@ -11195,7 +11196,7 @@ Claude Code의 동일 프로젝트 세션 `9cbe17d0-a7d4-420e-88d8-de4870913c2b`
   - 앞선 시각의 프레임을 넣으면 추적기가 그 프레임을 건너뛰고 번호를 붙이지 않는다 (경고가 난다). 결정 2를 지켜야 한다.
   - 이어서 하기(D-248)로 추적기 상태를 복원할 때 추적기가 기억하는 마지막 시각도 함께 복원돼야 한다 ⚠️. 추적기 상태 파일을 만들 때 확인한다.
 - **채널 B**: 채널 B는 매 프레임 돌아 공백이 없다. 이 결정의 대상이 아니다.
-- **적용 위치**: 06장 상단 공지·6.5 규칙 5, `pipeline/src/pipeline/candidates/channel_a.py`의 `process_frame`.
+- **적용 위치**: 06장 상단 공지·6.5 규칙 5, `pipeline/src/pipeline/candidates/s3_tracks/channel_a.py`의 `process_frame`.
 
 ---
 
@@ -11241,7 +11242,7 @@ Claude Code의 동일 프로젝트 세션 `9cbe17d0-a7d4-420e-88d8-de4870913c2b`
   - 번호가 사람에서 주차된 차로 옮겨 가는 순간 중심이 크게 움직여 1초쯤 움직이는 차로 보인다.
   - D-197의 한계(막 멈춘 차에 1초쯤 붙는다)는 그대로다.
 - **백엔드 영향**: 없다.
-- **적용 위치**: 06장 상단 공지·6.5 채널 B (a), 01장 1.6 "덩어리 붙이기·확장 시작값"(멈춘 차의 기준, 끊어진 덩어리 잇기. 값은 D-197 그대로이며 옮겨 적은 것), `pipeline/src/pipeline/candidates/blob_tracks.py`.
+- **적용 위치**: 06장 상단 공지·6.5 채널 B (a), 01장 1.6 "덩어리 붙이기·확장 시작값"(멈춘 차의 기준, 끊어진 덩어리 잇기. 값은 D-197 그대로이며 옮겨 적은 것), `pipeline/src/pipeline/candidates/s3_tracks/blob_tracks.py`.
 
 ---
 
@@ -11286,7 +11287,7 @@ Claude Code의 동일 프로젝트 세션 `9cbe17d0-a7d4-420e-88d8-de4870913c2b`
   - 처음 두 프레임은 번호가 없어 파일에 없다 (D-255).
   - 방금 주차한 차는 배경으로 배워질 때까지 전경으로 남는다. 멈춘 차라서 그 덩어리가 (b)로 넘어가 주차한 차 위에 클래스 없는 트랙이 한동안 생길 수 있다 (시연 8·11번). 5단계 필터가 볼 일이다.
 - **백엔드 영향**: 없다. 트랙 파일 줄 형식은 04장 4.8 그대로다.
-- **적용 위치**: 06장 상단 공지·6.5 채널 B (b)·규칙 5, 01장 1.6 "덩어리 붙이기·확장 시작값", `pipeline/src/pipeline/candidates/channel_b.py`, `pipeline/src/pipeline/candidates/blob_tracks.py`.
+- **적용 위치**: 06장 상단 공지·6.5 채널 B (b)·규칙 5, 01장 1.6 "덩어리 붙이기·확장 시작값", `pipeline/src/pipeline/candidates/s2_motion/channel_b.py`, `pipeline/src/pipeline/candidates/s3_tracks/blob_tracks.py`.
 
 ---
 
@@ -11307,7 +11308,7 @@ Claude Code의 동일 프로젝트 세션 `9cbe17d0-a7d4-420e-88d8-de4870913c2b`
   | 붙이기 결과를 `blobs.jsonl`로 쓴다 | 읽는 쪽이 아직 없다. 형식을 지금 정하면 6단계에서 다시 바꾼다 |
 
 - **백엔드 영향**: 없다.
-- **적용 위치**: 06장 상단 공지·6.5 "YOLO 구간 기록", D-310 상태 줄, `pipeline/src/pipeline/candidates/track_preview.py`.
+- **적용 위치**: 06장 상단 공지·6.5 "YOLO 구간 기록", D-310 상태 줄, `pipeline/src/pipeline/candidates/s3_tracks/track_preview.py`.
 
 ---
 
@@ -11361,7 +11362,7 @@ Claude Code의 동일 프로젝트 세션 `9cbe17d0-a7d4-420e-88d8-de4870913c2b`
   - 줄인 프레임에서 내 차가 보이는 크기는 더 이상 일정하지 않다(D-201 이유 2). ROI가 차 크기에서 나오므로 대체로 비례하지만, 파손 변·카메라 높이에 따라 달라진다.
   - 분석 크롭이 원본보다 큰 경우(보여줄 크롭이 원본 폭의 약 71%를 넘는 경우)는 정하지 않았다.
 - **백엔드 영향**: 없다. 분석 크롭은 저장하지 않고 사용자 입력으로 다시 계산한다(D-95).
-- **적용 위치**: 01장 용어집·1.6 주요 상수, 06장 분석 크롭·보여줄 크롭·U-30, D-201, D-244, `pipeline/src/pipeline/candidates/crop.py`·`roi.py`
+- **적용 위치**: 01장 용어집·1.6 주요 상수, 06장 분석 크롭·보여줄 크롭·U-30, D-201, D-244, `pipeline/src/pipeline/candidates/s1_base/crop.py`·`roi.py`
 
 ---
 
@@ -11395,7 +11396,7 @@ Claude Code의 동일 프로젝트 세션 `9cbe17d0-a7d4-420e-88d8-de4870913c2b`
 
 - **한계**: `yolo_ranges.json`은 개발 확인용 파일이고 모듈 사이 계약이 아니다 (D-310). 서버 워커의 추적기 상태 파일에 옮길 때 키 이름을 다시 본다. seg 마스크를 쓰는 시간은 재지 않았다 (D-260).
 - **백엔드 영향**: 없다. DB·SQS·API는 바뀌지 않는다. 트랙 결과 파일(04장 4.8)에는 이미 있는 키를 처음 채우고, 새 키는 만들지 않는다.
-- **적용 위치**: 04장 상단 공지·4.8 규칙, 06장 상단 공지·6.5 "YOLO 구간 기록", `pipeline/src/pipeline/candidates/car_region.py`·`track_preview.py`.
+- **적용 위치**: 04장 상단 공지·4.8 규칙, 06장 상단 공지·6.5 "YOLO 구간 기록", `pipeline/src/pipeline/candidates/s3_tracks/car_region.py`·`track_preview.py`.
 
 ---
 
@@ -11446,7 +11447,7 @@ Claude Code의 동일 프로젝트 세션 `9cbe17d0-a7d4-420e-88d8-de4870913c2b`
   - 사용자가 네 모서리를 차 밖으로 넓게 찍으면 옆 칸 차나 먼 차가 사각형에 닿을 수 있다 (D-264 한계 "네 모서리를 잘못 찍으면 틀린다"와 같다).
   - 시연 영상 1개, 입력 1개로 잰 값이다. 참 윤곽은 0초 프레임 기준이라, 차나 카메라가 몇 픽셀 밀리면 번짐이 실제보다 크게 재진다 (8:00 이후의 60~130픽셀은 이 때문일 수 있다, 확인하지 않음 ⚠️).
 - **백엔드 영향**: 없다. DB·SQS·API·트랙 결과 파일의 키는 바뀌지 않는다. `car_region`에 적히는 모양만 달라진다.
-- **적용 위치**: 01장 1.6 주요 상수, 06장 상단 공지·6.5 "내 차 찾기"·"내 차 찾기의 한계"·"0단계 필터의 시작값" 표·관련 결정, D-264, `pipeline/src/pipeline/candidates/car_region.py`·`tests/test_car_region.py`.
+- **적용 위치**: 01장 1.6 주요 상수, 06장 상단 공지·6.5 "내 차 찾기"·"내 차 찾기의 한계"·"0단계 필터의 시작값" 표·관련 결정, D-264, `pipeline/src/pipeline/candidates/s3_tracks/car_region.py`·`tests/test_car_region.py`.
 
 ---
 
@@ -12002,7 +12003,7 @@ Claude Code의 동일 프로젝트 세션 `9cbe17d0-a7d4-420e-88d8-de4870913c2b`
 
   | # | 결정 | 이유 | 비교한 대안과 버린 이유 |
   |---|---|---|---|
-  | 가-1 | 새 명령 `pipeline.candidates.track_filter`로 5-나만 따로 돌린다. 인자는 영상, 입력 JSON, 5-가 결과 폴더, 출력 폴더, 선택 `--no-video`(영상을 만들지 않고 계산만). YOLO 모델과 장면 파일은 받지 않는다 | 판정은 트랙 파일만으로 한다 (06장 "판단 시점과 자료"). YOLO를 다시 돌리지 않아 금방 끝난다 | `track_preview`에 판정을 넣기: 값을 고칠 때마다 YOLO를 다시 돌려야 한다 |
+  | 가-1 | 새 명령 `pipeline.candidates.s4_filter.track_filter`로 5-나만 따로 돌린다. 인자는 영상, 입력 JSON, 5-가 결과 폴더, 출력 폴더, 선택 `--no-video`(영상을 만들지 않고 계산만). YOLO 모델과 장면 파일은 받지 않는다 | 판정은 트랙 파일만으로 한다 (06장 "판단 시점과 자료"). YOLO를 다시 돌리지 않아 금방 끝난다 | `track_preview`에 판정을 넣기: 값을 고칠 때마다 YOLO를 다시 돌려야 한다 |
   | 가-2 | 결과 폴더는 `out/5-나_트랙빼기/<영상>_<입력>/`. 안에 `tracks.jsonl`·`yolo_ranges.json`(5-가 것을 그대로 복사), `excluded.jsonl`, `filter_report.jsonl`, `tracks.mp4` | D-331은 `excluded.jsonl`을 `tracks.jsonl` 옆에 쓰라고 한다. 복사해 두면 6단계가 이 폴더 하나만 읽는다 | 5-가 폴더에 `excluded.jsonl` 쓰기: 앞 단계 결과 폴더를 뒤 단계가 고치게 된다 |
   | 가-3 | `filter_report.jsonl`은 트랙마다 한 줄인 개발 확인용 파일이다 (형식은 아래 표). 모듈끼리 주고받는 파일이 아니다 | 트랙이 500개가 넘어 터미널 출력만으로는 "왜 남았는지"를 찾기 어렵다. 값을 조정할 때 근거가 된다 | 터미널 출력만: 검증 때 트랙 하나의 이유를 찾기 어렵다 |
   | 가-4 | 확인용 영상은 **5-가 `tracks.mp4`를 한 프레임씩 읽어 그 위에 5-나 표시를 덧그려** 만든다. 프레임 수가 원본 영상의 분석 프레임 수와 다르면 오류로 멈춘다 | 앞 단계 표시가 하나도 빠지지 않는다 (확인용 영상 규칙). YOLO·MOG2를 다시 돌리지 않는다 | 원본 영상에 트랙 파일만으로 다시 그리기: MOG2 칠·덩어리 색·내 차 영역 칠이 빠진다. `track_preview`를 넓혀 다시 돌리기: 느리고 5-가 코드를 고쳐야 한다. **단점**: 영상을 두 번 압축해 화질이 조금 떨어진다 |
@@ -12069,7 +12070,7 @@ Claude Code의 동일 프로젝트 세션 `9cbe17d0-a7d4-420e-88d8-de4870913c2b`
 
   | # | 결정 | 이유 | 비교한 대안과 버린 이유 |
   |---|---|---|---|
-  | 가-1 | 명령 셋을 차례로 따로 친다: `track_preview`(넓힘) → `track_filter` → 새 명령 `pipeline.candidates.candidate_list`. `candidate_list`의 인자는 영상, 입력 JSON, 빼기 결과 폴더, 출력 폴더, 선택 장면 파일, 선택 `--no-video` | 단계마다 따로 실행하고 확인할 수 있다 | 한 명령으로 묶기: 중간 결과를 따로 볼 수 없다 |
+  | 가-1 | 명령 셋을 차례로 따로 친다: `track_preview`(넓힘) → `track_filter` → 새 명령 `pipeline.candidates.s5_clips.candidate_list`. `candidate_list`의 인자는 영상, 입력 JSON, 빼기 결과 폴더, 출력 폴더, 선택 장면 파일, 선택 `--no-video` | 단계마다 따로 실행하고 확인할 수 있다 | 한 명령으로 묶기: 중간 결과를 따로 볼 수 없다 |
   | 가-2 | 결과는 새 폴더 `out/6단계_후보/` 아래 `1_트랙/`, `2_빼기/`, `3_후보/`에 쓴다. 5-가·5-나 폴더는 그대로 둔다 | 5단계를 다시 볼 때 견줄 원래 결과가 남는다 | 5-가·5-나 폴더에 덮어쓰기: 원래 결과가 사라진다 |
   | 가-3 | 후보 목록 파일은 `candidates.jsonl`이다. 한 줄이 후보(클립) 1개이고 시작 시각 순이다. 키는 04장 `candidates` 칸 이름 그대로 다섯 개다 (`start_sec`, `end_sec`, `track_ids`, `motion_ranges`, `likely_moments`). 후보 번호는 줄 순서(1부터)이고 키로 두지 않는다. 형식은 04장 4.8에 더한다. S3 키와 DB에 넣는 방법은 정하지 않는다 (워커 통합 때) | DB 칸과 같은 이름이면 워커가 그대로 옮길 수 있다. 제외 기록 파일(D-331)과 같은 방식이다 | `candidate_no` 키 두기: DB 칸에 없는 키다. JSON 파일 하나: 다른 결과 파일이 모두 jsonl이다 |
   | 가-4 | `candidate_list`는 `tracks.jsonl`·`excluded.jsonl`·`yolo_ranges.json`·입력 JSON만 읽어 계산한다. 영상은 크기(머리 정보)만 읽고, 프레임은 확인용 영상을 그릴 때만 읽는다 | 06장: "트랙 파일만 읽어 한 번에 계산한다. 영상을 다시 디코딩하지 않는다" | 없음 |
@@ -12257,3 +12258,38 @@ Claude Code의 동일 프로젝트 세션 `9cbe17d0-a7d4-420e-88d8-de4870913c2b`
   - 원본 주소를 갱신하지 않거나 갱신이 반영되는 동안(수 분)에는 접속할 수 없다 (D-339).
   - SSH(22)는 지금처럼 전체에 열려 있다 (D-133).
 - **적용 위치**: D-31·D-60·D-146(변경 표시) / 02장 2.7·2.9·2.10·2.11 / 08장 8.5·8.10 / PRD Non-Scope / `infra/main.tf`, `backend/app/auth.py`·`access_log.py`·미들웨어 (구현 때)
+
+---
+
+## D-341. `pipeline/src/pipeline/candidates/`를 단계 폴더 다섯 개로 나누고 명령 경로를 바꾼다
+
+- **날짜**: 2026-11-19
+- **상태**: 확정 (팀장 결정, D-135). 묶는 방법(단계별 폴더 다섯 개, 명령 파일도 그 단계 폴더로 옮김)과 폴더 이름 앞에 순서 번호를 붙이는 것은 팀장이 정했다. 폴더 이름 앞의 글자 `s`는 구현하면서 붙였고 팀장 확인 전이다 (아래 "폴더 이름").
+- **배경**: 6단계까지 만들면서 `candidates/` 한 폴더에 파일이 20개 쌓였다. 어느 파일이 어느 단계의 것인지, 어떤 순서로 실행되는지 폴더만 봐서는 알 수 없었다.
+- **결정**: 파일을 단계 순서대로 폴더 다섯 개에 나눈다. 파일 이름과 내용은 그대로 두고 위치와 import 경로만 바꾼다. 폴더 번호는 폴더 순서이고 진행 단계 번호와 다르다.
+
+  | 폴더 | 진행 단계 | 파일 | 명령 |
+  |---|---|---|---|
+  | `s1_base/` | 1단계 | `inputs.py`, `video.py`, `crop.py`, `roi.py`, `preview.py` | `pipeline.candidates.s1_base.preview` |
+  | `s2_motion/` | 2단계 | `channel_b.py`, `motion_preview.py` | `pipeline.candidates.s2_motion.motion_preview` |
+  | `s3_tracks/` | 3·4·5-가 | `channel_a.py`, `yolo_switch.py`, `blob_tracks.py`, `car_region.py`, `motion_px.py`, `track_preview.py` | `pipeline.candidates.s3_tracks.track_preview` |
+  | `s4_filter/` | 5-나 | `floor_map.py`, `track_filter.py`, `filter_preview.py` | `pipeline.candidates.s4_filter.track_filter` |
+  | `s5_clips/` | 6단계 | `candidate_clips.py`, `likely_moment.py`, `candidate_list.py`, `candidate_preview.py` | `pipeline.candidates.s5_clips.candidate_list` |
+
+  - 실행은 `uv run python -m <명령> …` 꼴 그대로이고 인자는 바뀌지 않는다. 옛 경로(`pipeline.candidates.track_preview` 등)는 더 이상 없다.
+  - D-333 이전 결정과 옛 계획서(`pipeline/my_docs/Task_*.md`), 재검토 문서에 적힌 경로도 새 경로로 고쳤다 (2026-11-20, 팀장 요청). 그 결정을 쓸 때의 경로는 위 표에서 폴더 이름을 뺀 것이다. 경로만 바꿨고 결정 내용은 건드리지 않았다.
+  - `tests/`는 나누지 않는다. 테스트 파일 이름이 모듈 이름과 같아 찾기 쉽고, 13개뿐이다.
+- **폴더 이름**: 팀장 요청은 `1_` 꼴이었지만 Python 패키지 이름은 숫자로 시작할 수 없다 (`from pipeline.candidates.1_base.crop import …`는 문법 오류다). 그래서 단계(step)의 `s`를 앞에 붙였다. 글자는 바꿀 수 있고, 바꾸면 import와 명령 경로를 한 번 더 고친다.
+- **비교한 대안과 버린 이유**
+
+  | 대안 | 버린 이유 |
+  |---|---|
+  | 명령 파일 다섯 개는 `candidates/` 바로 아래에 두고 계산 파일만 폴더로 옮긴다 | 명령 경로가 안 바뀌는 장점이 있지만, 단계의 파일이 두 곳에 흩어져 "이 단계의 파일이 무엇인지"가 다시 안 보인다 (팀장이 고르지 않음) |
+  | 폴더 이름을 `1_base`처럼 숫자로 시작한다 | Python이 import하지 못한다 |
+  | 번호 없이 `base`, `motion`, `tracks`, `filter`, `clips`로 한다 | 폴더가 글자순으로 늘어서 실행 순서가 보이지 않는다 (팀장 요청과 다름) |
+  | 폴더를 진행 단계마다 하나씩(1·2·3·4·5-가·5-나·6) 만든다 | 3·4·5-가는 명령 하나(`track_preview`)가 함께 돌리므로 나누면 폴더 셋 중 둘에 명령이 없다 |
+
+- **한계**: 폴더끼리 서로 부르는 곳이 있다 (`s4_filter/track_filter.py`가 `s5_clips/candidate_clips.py`를 읽고, `s5_clips`가 `s4_filter`를 읽는다). 파일 단위로는 돌고 도는 import가 없어 동작에는 문제가 없지만, "뒤 폴더는 앞 폴더만 읽는다"는 아직 아니다. 파일 내용은 이번에 건드리지 않았다.
+- **확인**: `uv run pytest` 89개 통과, `uv run ruff check`·`uv run ruff format --check` 통과, 명령 다섯 개를 새 경로에서 인자 없이 실행해 사용법이 나오는 것을 봤다. 영상을 넣어 끝까지 돌려 보지는 않았다 (계산 코드는 바뀌지 않았다).
+- **백엔드 영향**: 없다. 출력 파일의 이름·형식·위치가 바뀌지 않는다. DB·API·SQS·S3 키와 무관하다.
+- **적용 위치**: 06장 상단 공지(D-332·D-333 공지의 명령 이름 포함)·관련 결정, 11장 결정 목록과 D-333 이전 결정의 경로, `pipeline/my_docs/진행상황.md`·`Task_*.md`·`재검토/`.
