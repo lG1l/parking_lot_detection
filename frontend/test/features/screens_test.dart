@@ -9,6 +9,7 @@ import 'package:parking_lot_frontend/core/constants.dart';
 import 'package:parking_lot_frontend/core/widgets/common.dart';
 import 'package:parking_lot_frontend/core/models/message.dart';
 import 'package:parking_lot_frontend/core/settings.dart';
+import 'package:parking_lot_frontend/features/candidates/batch_rules.dart';
 import 'package:parking_lot_frontend/features/damage_input/still_canvas.dart';
 import 'package:parking_lot_frontend/features/video_status/supervision_dialog.dart';
 
@@ -1312,12 +1313,13 @@ void main() {
     });
     await pumpApp(tester, backend, '/videos/7/candidates');
     expect(find.text('점수: 87'), findsOneWidget);
-    expect(find.text('후보 10'), findsOneWidget);
-    expect(find.text('점수 미산출 (0)'), findsOneWidget);
+    expect(find.text('후보 12'), findsOneWidget); // 전체 후보 수: 이 묶음 카드 1 + 열람 불가 1 + 남은 10 (C-20)
+    expect(find.text('점수 미산출 0'), findsOneWidget);
     expect(find.text('2026-11-19 10:00까지 열람 가능'), findsOneWidget); // 제목 위 작은 글자 (캔버스 2.7)
     // 점수 미산출 옆 연한 글자. 누를 수 없다
     expect(find.text('볼 수 없는 후보 1'), findsOneWidget);
     expect(find.ancestor(of: find.text('볼 수 없는 후보 1'), matching: find.byType(InkWell)), findsNothing);
+    expect(find.byTooltip(unavailableTooltip), findsOneWidget); // 마우스를 올리면 안내
     expect(find.text('다음'), findsOneWidget); // 새 묶음을 받는 버튼도 이름은 [다음 ▶] (D-190)
     expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '확인 끝내기')).onPressed, isNull); // 늘 보이지만 막힘
 
@@ -1325,7 +1327,13 @@ void main() {
     await settle(tester);
     expect(find.byType(AlertDialog), findsNothing); // 확인창 없이 바로 고정 (D-190)
     expect(find.text('확정됨'), findsOneWidget);
-    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '확인 끝내기')).onPressed, isNotNull);
+    // 고정 뒤에는 확인창이 뜨고 맨 위에 고정한 장면 수를 보인다
+    await tester.tap(find.widgetWithText(FilledButton, '확인 끝내기'));
+    await settle(tester);
+    expect(find.text('확인을 종료할까요?'), findsOneWidget);
+    expect(find.textContaining('고정한 장면 1개', findRichText: true), findsOneWidget);
+    await tester.tap(find.widgetWithText(OutlinedButton, '취소'));
+    await settle(tester);
     expect(backend.calls, contains('POST /api/videos/7/pin'));
   });
 
@@ -1424,7 +1432,7 @@ void main() {
       'POST /api/videos/7/batch/next': (_) => json({'status': 'exhausted', 'lists': done}),
     });
     await pumpApp(tester, backend, '/videos/7/candidates');
-    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '확인 끝내기')).onPressed, isNull);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '확인 끝내기')).onPressed, isNull); // 늘 보이지만 막힘
 
     await tester.tap(find.widgetWithText(OutlinedButton, '다음'));
     await settle(tester);

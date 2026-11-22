@@ -100,6 +100,31 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
     });
   }
 
+  /// 탭별 마지막 묶음 크기(카드 + 열람 불가). 탭의 전체 후보 수를 셀 때 쓴다 (C-20).
+  final _latestSizes = <String, int>{};
+  final _sizing = <String>{}; // 크기를 알려고 12번을 부르는 중인 탭
+
+  void _rememberSize(Batch b) {
+    if (b.batchNo == b.lists[b.list]?.latestBatchNo) _latestSizes[b.list] = b.candidates.length + b.unavailable;
+  }
+
+  /// 보지 않는 탭의 마지막 묶음 크기를 모르면 12번으로 한 번 받아 둔다. 화면은 바꾸지 않는다.
+  void _sizeOtherTabs(Map<String, ListSummary> lists) {
+    for (final t in [CandidateList.main, CandidateList.parseFailed]) {
+      final l = lists[t];
+      if (l == null || l.total != null || l.latestBatchNo == null || _latestSizes.containsKey(t) || !_sizing.add(t)) {
+        continue;
+      }
+      _api
+          .batch(_id, list: t) // 12. 마지막 묶음 조회는 서버 상태를 바꾸지 않는다 (D-79)
+          .then((b) {
+            if (mounted) setState(() => _rememberSize(b));
+          })
+          .catchError((_) {})
+          .whenComplete(() => _sizing.remove(t));
+    }
+  }
+
   void _showBatch(Batch b) {
     final prev = _batch;
     final moved = prev != null && (prev.batchNo != b.batchNo || prev.list != b.list);
@@ -107,7 +132,9 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
       _batch = b;
       _tab = b.list;
       _lists = b.lists;
+      _rememberSize(b);
     });
+    _sizeOtherTabs(b.lists);
     // 다른 묶음·탭으로 넘어가면 맨 위(첫 영상)부터 보이게 화면을 올린다. 같은 묶음을 다시 그릴 때는 그대로 둔다.
     if (moved) WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToTop());
   }
@@ -201,19 +228,24 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
 
   /// [확인 끝내기]의 확인창. 어느 탭에서 누르든, 이 탭만 끝나든 영상 전체가 끝나든 같다.
   /// 되돌릴 수 없다는 첫 줄만 빨간 글씨다.
+  /// 맨 위에 지금 고정한 장면 수를 보인다.
   Future<bool> _confirmEnd() => confirm(
     context,
-    '종료 시 다시 선택할 수 없습니다.\n후보, 점수 미산출 모두 확인해 보시는 것을 권장드립니다.',
+    '고정한 장면 ${_pinned.length}개\n종료 시 다시 선택할 수 없습니다.\n후보, 점수 미산출 모두 확인해 보시는 것을 권장드립니다.',
     title: '확인을 종료할까요?',
     okLabel: '끝내기',
-    content: const Text.rich(
+    content: Text.rich(
       TextSpan(
         children: [
           TextSpan(
+            text: '고정한 장면 ${_pinned.length}개\n',
+            style: const TextStyle(fontWeight: FontWeight.w600, color: inkColor),
+          ),
+          const TextSpan(
             text: '종료 시 다시 선택할 수 없습니다.',
             style: TextStyle(color: dangerColor, fontWeight: FontWeight.w600),
           ),
-          TextSpan(text: '\n후보, 점수 미산출 모두 확인해 보시는 것을 권장드립니다.'),
+          const TextSpan(text: '\n후보, 점수 미산출 모두 확인해 보시는 것을 권장드립니다.'),
         ],
       ),
     ),
@@ -373,7 +405,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
               border: Border(bottom: BorderSide(color: selected ? focusLineColor : Colors.transparent, width: 2)),
             ),
             child: Text(
-              tabLabel(lists, t),
+              tabLabel(lists, t, latestSizes: _latestSizes),
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
@@ -393,13 +425,17 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
         children: [
           for (final t in [CandidateList.main, CandidateList.parseFailed]) tabButton(t),
           if (unavailable != null)
-            Container(
-              constraints: const BoxConstraints(minHeight: 44),
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              alignment: Alignment.center,
-              child: Text(
-                unavailable,
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: progressColor),
+            // 누를 수 없다. 마우스를 올리면 왜 볼 수 없는지 알려 준다
+            Tooltip(
+              message: unavailableTooltip,
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 44),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                alignment: Alignment.center,
+                child: Text(
+                  unavailable,
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: progressColor),
+                ),
               ),
             ),
         ],

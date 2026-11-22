@@ -44,11 +44,21 @@ void main() {
     expect(needsLastBatchConfirm({'main': s(3, 5, false), 'parse_failed': s(null, 0, true)}, 'main'), isFalse);
   });
 
-  test('비어 있는 점수 미산출 탭은 (0)으로 막는다', () {
+  test('비어 있는 점수 미산출 탭은 0으로 보이고 막는다', () {
     final lists = {'main': s(1, 20, false), 'parse_failed': s(null, 0, true)};
     expect(tabEnabled(lists, 'parse_failed'), isFalse);
-    expect(tabLabel(lists, 'parse_failed'), '점수 미산출 (0)');
-    expect(tabLabel(lists, 'main'), '후보 20');
+    expect(tabLabel(lists, 'parse_failed'), '점수 미산출 0');
+    expect(tabLabel(lists, 'main'), '후보'); // 마지막 묶음 크기를 모르면 이름만
+    expect(tabLabel(lists, 'main', latestSizes: {'main': 10}), '후보 30');
+  });
+
+  test('탭 수는 전체 후보 수: 서버 total이 있으면 그 값, 없으면 묶음으로 센다 (C-20)', () {
+    expect(tabTotal(s(1, 4, false), 10), 14); // 처음 묶음 10 + 남은 4
+    expect(tabTotal(s(2, 0, false), 4), 14); // [다음] 뒤에도 같다
+    expect(tabTotal(s(2, 0, false), 3), 13); // 마지막 묶음 3개(열람 불가 포함)
+    expect(tabTotal(s(2, 0, false), null), isNull);
+    final withTotal = ListSummary(latestBatchNo: 1, remaining: 4, done: false, unavailable: 0, total: 15);
+    expect(tabTotal(withTotal, null), 15);
   });
 
   test('한 탭을 다 넘기고 다른 탭이 남았을 때 안내', () {

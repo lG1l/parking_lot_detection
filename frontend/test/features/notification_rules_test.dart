@@ -78,11 +78,26 @@ void main() {
 
     expect(action(VideoStatus.stage1Done, admin: false), '차량 입력');
     expect(action(VideoStatus.ready, admin: false), '결과 확인');
-    expect(action(VideoStatus.finished, admin: false), isNull); // 최종 완료는 버튼이 없다
+    expect(action(VideoStatus.finished, admin: false), '사건 시각 확인'); // 끝나면 피해자는 사건 시각을 본다 (D-344)
+    expect(action(VideoStatus.finished, admin: true), isNull); // 관리자는 끝났다는 알림만
     expect(action(VideoStatus.failed, admin: false), isNull);
     expect(action(VideoStatus.stage2Running, admin: true), isNull); // 분석 시작은 버튼이 없다
     expect(action(VideoStatus.ready, admin: true), '후보 선택');
     expect(action(VideoStatus.uploadFailed, admin: true), '상태 확인');
+  });
+
+  test('후보 확인이 끝나면 관리자는 끝났다는 알림, 피해자는 사건 시각을 확인하라는 알림 (D-344)', () {
+    String? title(String status, {required bool admin}) => statusNoticeOf(_video(status), admin: admin)?.title;
+    expect(title(VideoStatus.finished, admin: true), '후보 확인이 끝났어요!');
+    expect(title(VideoStatus.exhausted, admin: true), '후보 확인이 끝났어요!');
+    expect(title(VideoStatus.finished, admin: false), '사건 시각을 확인해 주세요!');
+    expect(title(VideoStatus.exhausted, admin: false), '사건 시각을 확인해 주세요!');
+    // 관리자의 끝 알림은 내가 한 일이라 오른쪽, 피해자 쪽과 다른 상태 알림은 왼쪽
+    bool mine(String status, {required bool admin}) => noticeIsMine(statusNoticeOf(_video(status), admin: admin)!, admin: admin);
+    expect(mine(VideoStatus.finished, admin: true), isTrue);
+    expect(mine(VideoStatus.exhausted, admin: true), isTrue);
+    expect(mine(VideoStatus.finished, admin: false), isFalse);
+    expect(mine(VideoStatus.ready, admin: true), isFalse);
   });
 
   test('메뉴 배지는 그 상대의 알림을 본 시각 뒤에 생긴 것만 센다 (D-338)', () {

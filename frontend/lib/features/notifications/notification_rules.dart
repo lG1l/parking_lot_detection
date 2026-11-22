@@ -50,10 +50,11 @@ String noticeLabel(NoticeMessage m) => switch (m) {
 
 /// 내 쪽(오른쪽)에 둘 알림인지. 연결 요청은 관리자가, 연결 수락은 피해자가 한 일이다.
 /// 영상 상태 알림은 내게 오는 소식이라 상대 쪽(왼쪽)이다 (D-297).
+/// 단, 관리자의 "후보 확인이 끝났어요!"는 관리자가 [확인 끝내기]로 한 일이라 오른쪽이다 (D-344).
 bool noticeIsMine(NoticeMessage m, {required bool admin}) => switch (m) {
   NoticeInvite() => admin,
   NoticeAccepted() => !admin,
-  NoticeStatus() => false,
+  NoticeStatus(:final video) => admin && (video.status == VideoStatus.finished || video.status == VideoStatus.exhausted),
 };
 
 /// 영상 상태 중 계정이 알아야 하는 것만 알림으로 만든다. 나머지는 null.
@@ -66,14 +67,16 @@ NoticeStatus? statusNoticeOf(VideoSummary v, {required bool admin}) {
       VideoStatus.ready || VideoStatus.batchRunning => NoticeStatus(v, '후보 선정', '후보를 고를 수 있어요!', '🎯', action: '후보 선택'),
       VideoStatus.failed => NoticeStatus(v, '분석 실패', '영상 분석에 실패했어요', '⚠️', problem: true, action: '상태 확인'),
       VideoStatus.uploadFailed => NoticeStatus(v, '업로드 실패', '업로드를 확인하지 못했어요', '📤', problem: true, action: '상태 확인'),
+      // 후보 확인을 다 끝냈다. 이어서 할 일이 없어 버튼이 없다 (D-344)
+      VideoStatus.finished || VideoStatus.exhausted => NoticeStatus(v, '최종 완료', '후보 확인이 끝났어요!', '🏁'),
       _ => null,
     };
   }
   return switch (v.status) {
     VideoStatus.stage1Done => NoticeStatus(v, '입력 필요', '내 차량을 입력해 주세요!', '✏️', action: '차량 입력'),
     VideoStatus.ready || VideoStatus.batchRunning => NoticeStatus(v, '분석 완료', '영상 분석이 끝났어요!', '📊', action: '결과 확인'),
-    // 최종 완료·분석 실패는 피해자가 이어서 할 일이 없어 버튼이 없다 (D-304)
-    VideoStatus.finished || VideoStatus.exhausted => NoticeStatus(v, '최종 완료', '사건 시각을 확인했어요!', '🕒'),
+    // 관리자가 후보 확인을 끝냈다. 피해자는 결과 화면에서 사건 시각을 본다 (D-344). 분석 실패는 할 일이 없어 버튼이 없다 (D-304)
+    VideoStatus.finished || VideoStatus.exhausted => NoticeStatus(v, '최종 완료', '사건 시각을 확인해 주세요!', '🕒', action: '사건 시각 확인'),
     VideoStatus.failed => NoticeStatus(v, '분석 실패', '영상 분석에 실패했어요', '⚠️', problem: true),
     _ => null,
   };
