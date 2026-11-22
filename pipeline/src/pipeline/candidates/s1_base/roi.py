@@ -13,8 +13,8 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from pipeline.candidates.crop import Crop, display_crop, expand_to_contain
-from pipeline.candidates.inputs import AnalysisInput, Point
+from pipeline.candidates.s1_base.crop import Crop, analysis_crop, display_crop
+from pipeline.candidates.s1_base.inputs import AnalysisInput, Point
 
 # 찍은 변의 실제 길이로 가정하는 일반 승용차 크기 (m). D-194, D-244 한계
 CAR_WIDTH_M = 1.8
@@ -39,7 +39,7 @@ class RoiError(Exception):
 
 @dataclass(frozen=True)
 class Roi:
-    crop: Crop  # 분석 크롭 (보여줄 크롭을 못 담으면 넓힌 것)
+    crop: Crop  # 분석 크롭 (보여줄 크롭 기준, D-318)
     mask: np.ndarray  # 분석 크롭을 줄인 프레임 크기로 만든 ROI (안쪽 255)
     strip: np.ndarray  # 파손 변 바깥 바닥 띠. 위로 옮기기 전의 다각형, 원본 픽셀 (N, 2) int32
     display: Crop  # 보여줄 크롭 (ROI 기준)
@@ -177,11 +177,11 @@ def _roi_mask_original(
     return mask, polygon
 
 
-def build_roi(data: AnalysisInput, frame: tuple[int, int], crop: Crop) -> Roi:
-    """ROI, 바닥 띠, 보여줄 크롭을 만든다.
+def build_roi(data: AnalysisInput, frame: tuple[int, int]) -> Roi:
+    """ROI, 바닥 띠, 보여줄 크롭, 분석 크롭을 이 순서로 만든다.
 
-    보여줄 크롭은 ROI 기준이고, 분석 크롭이 보여줄 크롭을 못 담으면 분석 크롭을 넓힌다
-    (D-95 ROI ⊂ 보여줄 ⊂ 분석). 마스크는 (넓힌) 분석 크롭을 줄인 프레임 크기다 (안쪽 255, D-201).
+    보여줄 크롭은 ROI 기준(D-302), 분석 크롭은 보여줄 크롭 기준이다(D-318).
+    그래서 ROI ⊂ 보여줄 ⊂ 분석(D-95)이 늘 지켜진다. 마스크는 분석 크롭을 줄인 프레임 크기다 (안쪽 255, D-201).
     """
     full, strip = _roi_mask_original(data, frame)
     ys, xs = np.nonzero(full)
@@ -189,7 +189,7 @@ def build_roi(data: AnalysisInput, frame: tuple[int, int], crop: Crop) -> Roi:
         raise RoiError("ROI가 화면 밖에 있어 비어 있습니다. 바닥 네 모서리를 확인해 주세요.")
     roi_rect = (int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1)
     display = display_crop(roi_rect, frame, DISPLAY_MARGIN_RATIO)
-    crop = expand_to_contain(crop, display.rect, frame)
+    crop = analysis_crop(display, frame)
 
     x1, y1, x2, y2 = crop.rect
     small = cv2.resize(full[y1:y2, x1:x2], crop.reduced_size, interpolation=cv2.INTER_AREA)

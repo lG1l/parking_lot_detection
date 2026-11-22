@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 
-/// 관리자가 직접 입력해야 하는 서약 문장 (D-309).
+/// 관리자가 직접 입력해야 하는 서약 문장 (D-326).
 const supervisionPledge = '본인은 비식별화 누락 부분을 가려 노출을 막고 피해자의 촬영과 유포를 통제할 것을 서약합니다';
 
-/// 관리·감독 안내창 (07장 2.7, D-204, D-216, D-309). 후보 확인·완료·결과 화면에 들어갈 때마다 띄운다.
+/// 관리·감독 안내창 (07장 2.7, D-204, D-216, D-326). 후보 확인·완료·결과 화면에 들어갈 때마다 띄운다.
 /// 서약 문장을 그대로 입력해야 [동의하고 열람]이 켜진다. 동의하면 true, [취소]면 false.
 Future<bool> askSupervision(BuildContext context) async {
   final ok = await showDialog<bool>(
@@ -90,13 +90,13 @@ class _SupervisionDialogState extends State<_SupervisionDialog> {
               TextField(
                 key: const Key('supervision-pledge'),
                 autofocus: true,
-                // 엔터는 줄바꿈이 아니라 [동의하고 열람]. 문장이 다르면 아무 일도 없이 입력칸에 남는다.
+                // 엔터는 줄바꿈이 아니라 [동의하고 열람]. 문장이 다르면 아무 일도 없이 입력칸에 남는다 (D-342).
                 maxLines: 1,
                 textInputAction: TextInputAction.done,
                 onEditingComplete: () {
                   if (_matched) Navigator.pop(context, true);
                 },
-                // 붙여넣기로 넘기지 않게 선택·붙여넣기 메뉴를 끈다 (D-309)
+                // 붙여넣기로 넘기지 않게 선택·붙여넣기 메뉴를 끈다 (D-326)
                 enableInteractiveSelection: false,
                 onChanged: (v) => setState(() => _typed = v),
                 decoration: InputDecoration(

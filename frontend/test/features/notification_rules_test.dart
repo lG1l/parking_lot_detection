@@ -84,4 +84,33 @@ void main() {
     expect(action(VideoStatus.ready, admin: true), '후보 선택');
     expect(action(VideoStatus.uploadFailed, admin: true), '상태 확인');
   });
+
+  test('메뉴 배지는 그 상대의 알림을 본 시각 뒤에 생긴 것만 센다 (D-338)', () {
+    VideoCase seenCase({bool pending = false, String? seen}) => VideoCase(
+      id: 1,
+      victimName: 'victim02',
+      createdAt: '2026-11-10T01:00:00Z',
+      acceptedAt: pending ? null : '2026-11-10T02:00:00Z',
+      pending: pending,
+      noticesSeenAt: seen,
+    );
+    VideoSummary todo(String changedAt) => VideoSummary(
+      videoId: 10,
+      caseId: 1,
+      originalFilename: 'a.mp4',
+      status: VideoStatus.ready,
+      viewExpiresAt: null,
+      maskedDeleted: false,
+      statusChangedAt: changedAt,
+    );
+
+    // 관리자: 할 일이 남아도 본 뒤면 빠지고, 본 뒤에 바뀐 것만 센다
+    final videos = [todo('2026-11-11T00:00:00Z'), todo('2026-11-12T00:00:00Z')];
+    expect(unseenNoticeCount([seenCase()], videos, admin: true), 2);
+    expect(unseenNoticeCount([seenCase(seen: '2026-11-11T00:00:00Z')], videos, admin: true), 1);
+    expect(unseenNoticeCount([seenCase(seen: '2026-11-12T00:00:00Z')], videos, admin: true), 0);
+    // 피해자: 본 초대는 수락하지 않아도 빠진다
+    expect(unseenNoticeCount([seenCase(pending: true)], const [], admin: false), 1);
+    expect(unseenNoticeCount([seenCase(pending: true, seen: '2026-11-10T01:00:00Z')], const [], admin: false), 0);
+  });
 }

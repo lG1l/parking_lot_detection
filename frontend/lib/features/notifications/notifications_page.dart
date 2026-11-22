@@ -19,7 +19,7 @@ import 'chat_rules.dart';
 import 'notification_rules.dart';
 
 /// 2.11 채팅 (두 계정). 왼쪽은 상대 계정(관리자 화면은 피해자, 피해자 화면은 관리자),
-/// 오른쪽은 고른 사람과의 대화로, 사건마다 구분선 아래에 그 사건의 알림을 잇는다.
+/// 오른쪽은 고른 사람과의 대화로, 사건 알림과 메시지를 시각순으로 섞는다 (D-335).
 /// 대기 중인 사건 초대는 피해자가 [수락]하면 그 사건이 묶인다 (D-233). 관리자는 [수락]이 없고 할 일을 본다 (D-243).
 /// 거절은 없다. 대화 아래에 메시지 흐름과 입력칸이 있고, 수락한 사건이 있는 상대에게만 보낸다 (D-297).
 /// 22번·8번·메시지는 열 때와 [수락]·보내기 뒤에만 읽고, 새 메시지는 33번 WebSocket으로 받는다.
@@ -207,6 +207,27 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   void _select(_Person p) {
     setState(() => _selected = p.id);
     _openChat(p.id);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _markNoticesSeen(p));
+  }
+
+  /// 그린 대화의 알림 카드 중 가장 늦은 카드 시각까지 봤다고 알린다(34번). 수락 전 초대도 포함한다.
+  /// 실패하면 조용히 넘어간다(다음에 열 때 다시 처리) (D-338).
+  Future<void> _markNoticesSeen(_Person p) async {
+    if (p.id <= 0) return; // 상대 번호가 없는 옛 서버 응답
+    final times = [
+      for (final c in p.cases)
+        for (final m in _messagesOf(c)) DateTime.parse(noticeAt(m, c)),
+    ];
+    if (times.isEmpty) return;
+    final latest = times.reduce((a, b) => a.isAfter(b) ? a : b);
+    final seen = p.cases.map((c) => c.noticesSeenAt).nonNulls.map(DateTime.parse);
+    if (seen.isNotEmpty && !latest.isAfter(seen.reduce((a, b) => a.isAfter(b) ? a : b))) return; // 이미 봤다
+    try {
+      await ref.read(apiProvider).markNoticesSeen(p.id, latest.toUtc().toIso8601String()); // 34
+    } catch (_) {
+      return;
+    }
+    if (mounted) ref.invalidate(notificationBadgeProvider);
   }
 
   /// 메시지 보내기 (31번). 응답 메시지를 대화에 합치고, 목록 요약을 위해 29번을 다시 읽는다.
@@ -261,6 +282,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         }
       });
       await _openChat(_selected);
+      final shown = _grouped().where((p) => p.id == _selected).firstOrNull;
+      if (shown != null) WidgetsBinding.instance.addPostFrameCallback((_) => _markNoticesSeen(shown));
     } catch (e) {
       if (mounted) handleCommonError(context, e);
     }
@@ -517,12 +540,15 @@ class _UnreadDot extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6),
       alignment: Alignment.center,
       decoration: const BoxDecoration(color: failChipColor, borderRadius: BorderRadius.all(Radius.circular(10))),
-      child: Text('$count', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: offWhiteColor)),
+      child: Text(
+        '$count',
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: offWhiteColor),
+      ),
     ),
   );
 }
 
-/// 고른 사람과의 대화. 사건마다 날짜 구분선 아래에 그 사건의 알림을 잇는다.
+/// 고른 사람과의 대화. 사건 알림 카드와 메시지를 시각순으로 섞고, 날짜가 바뀌면 구분선을 긋는다 (D-335).
 class _Conversation extends StatelessWidget {
   const _Conversation({
     required this.person,
@@ -551,124 +577,106 @@ class _Conversation extends StatelessWidget {
   final ValueChanged<ChatPeer> onSend;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    spacing: 12,
-    children: [
-      // 큰 제목 + 검은 아래선 (캔버스 새 컨셉, D-305)
-      Container(
-        padding: const EdgeInsets.only(bottom: 14),
-        decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: inkColor))),
-        child: Text(
-          person.name,
-          style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w600, height: 1.2, color: inkColor),
-        ),
-      ),
-      // 대화만 스크롤하고 입력칸은 아래에 고정한다. reverse라 처음부터 맨 아래(최근 메시지)가 보인다 (D-297)
-      Expanded(
-        child: SingleChildScrollView(
-          reverse: true,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: 12,
-            // 구분선은 날짜가 바뀔 때만 긋는다. 알림과 채팅 사이에도 날짜가 같으면 선이 없다
-            children: [
-              for (final (i, c) in person.cases.indexed)
-                ..._caseMessages(
-                  context,
-                  c,
-                  withDate: i == 0 || formatKstDate(person.cases[i - 1].createdAt) != formatKstDate(c.createdAt),
-                ),
-              for (final (i, m) in chat.indexed) ...[
-                if (_dateChanged(i, m)) _DateDivider(m.createdAt),
-                _Bubble(
-                  message: m,
-                  mine: m.mine,
-                  showTime: showTimeStamp(
-                    m.createdAt,
-                    m.mine,
-                    nextAt: i + 1 < chat.length ? chat[i + 1].createdAt : null,
-                    nextMine: i + 1 < chat.length ? chat[i + 1].mine : null,
-                  ),
-                ),
-              ],
-            ],
+  Widget build(BuildContext context) {
+    final items = talkTimeline([for (final c in person.cases) (c, messagesOf(c))], chat);
+    bool mine(TalkItem t) => switch (t) {
+      TalkNotice(:final notice) => noticeIsMine(notice, admin: admin),
+      TalkChat(:final message) => message.mine,
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 12,
+      children: [
+        // 큰 제목 + 검은 아래선 (캔버스 새 컨셉, D-305)
+        Container(
+          padding: const EdgeInsets.only(bottom: 14),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: inkColor)),
+          ),
+          child: Text(
+            person.name,
+            style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w600, height: 1.2, color: inkColor),
           ),
         ),
-      ),
-      Container(
-        padding: const EdgeInsets.only(top: 12),
-        decoration: const BoxDecoration(border: Border(top: BorderSide(color: inkColor))),
-        child: _Composer(peer: peer, input: input, sending: sending, onSend: onSend),
-      ),
-    ],
-  );
-
-  /// 이 메시지 앞에서 날짜가 바뀌었는지. 앞 메시지(없으면 마지막 사건, 사건도 없으면 첫 칸)와 날짜가 다르면 선을 긋는다.
-  bool _dateChanged(int i, ChatMessage m) {
-    final before = i > 0 ? chat[i - 1].createdAt : person.cases.lastOrNull?.createdAt;
-    return before == null || formatKstDate(before) != formatKstDate(m.createdAt);
+        // 대화만 스크롤하고 입력칸은 아래에 고정한다. reverse라 처음부터 맨 아래(최근 메시지)가 보인다 (D-297)
+        Expanded(
+          child: SingleChildScrollView(
+            reverse: true,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 12,
+              // 구분선은 앞 칸과 날짜가 다를 때만 긋는다. 알림과 채팅 사이에도 날짜가 같으면 선이 없다
+              children: [
+                for (final (i, item) in items.indexed) ...[
+                  if (i == 0 || formatKstDate(items[i - 1].at) != formatKstDate(item.at)) _DateDivider(item.at),
+                  // 같은 쪽에서 같은 분에 연달아 온 칸은 카드·말풍선 구분 없이 맨 아래 것에만 시각을 붙인다
+                  _item(
+                    context,
+                    item,
+                    showTime: showTimeStamp(
+                      item.at,
+                      mine(item),
+                      nextAt: i + 1 < items.length ? items[i + 1].at : null,
+                      nextMine: i + 1 < items.length ? mine(items[i + 1]) : null,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.only(top: 12),
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: inkColor)),
+          ),
+          child: _Composer(peer: peer, input: input, sending: sending, onSend: onSend),
+        ),
+      ],
+    );
   }
 
-  /// 알림 카드의 시각. 영상 상태 알림은 8번에 상태가 바뀐 시각이 없어 null이다.
-  String? _noticeAt(NoticeMessage m, VideoCase c) => switch (m) {
-    NoticeInvite() => c.createdAt,
-    NoticeAccepted() => c.acceptedAt ?? c.createdAt,
-    NoticeStatus() => null,
-  };
-
-  List<Widget> _caseMessages(BuildContext context, VideoCase c, {required bool withDate}) {
-    final title = _caseTitle(c, admin: admin);
-    final notices = messagesOf(c);
-    // 같은 쪽에서 같은 분에 연달아 온 카드는 맨 아래 것에만 시각을 붙인다
-    String? atOf(int i) {
-      final m = notices[i];
-      final next = i + 1 < notices.length ? notices[i + 1] : null;
-      final at = _noticeAt(m, c);
-      final shown = showTimeStamp(
-        at,
-        noticeIsMine(m, admin: admin),
-        nextAt: next == null ? null : _noticeAt(next, c),
-        nextMine: next == null ? null : noticeIsMine(next, admin: admin),
-      );
-      return shown ? at : null;
-    }
-
-    return [
-      if (withDate) _DateDivider(c.createdAt),
-      for (final (i, m) in notices.indexed)
-        switch (m) {
+  Widget _item(BuildContext context, TalkItem item, {required bool showTime}) {
+    final at = showTime ? item.at : null;
+    switch (item) {
+      case TalkChat(:final message):
+        return _Bubble(message: message, mine: message.mine, showTime: showTime);
+      case TalkNotice(notice: final m, videoCase: final c):
+        final title = _caseTitle(c, admin: admin);
+        return switch (m) {
           NoticeAccepted() => _NoticeCard(
             title: acceptedTitle(admin: admin),
             emoji: acceptedEmoji,
             caseLine: title,
             mine: noticeIsMine(m, admin: admin),
-            at: atOf(i),
+            at: at,
           ),
           NoticeInvite() => _NoticeCard(
             title: inviteTitle(admin: admin),
             emoji: inviteEmoji,
             caseLine: title,
             mine: noticeIsMine(m, admin: admin),
-            at: atOf(i),
+            at: at,
             // 수락하면 오른쪽에 수락 카드가 따로 붙으므로, 요청 카드에는 수락 전 [수락]만 둔다
             footer: !admin && c.pending
                 ? _NoticeButton(label: '수락', onPressed: accepting.contains(c.id) ? null : () => onAccept(c))
                 : null,
           ),
-          NoticeStatus(:final video, title: final noticeTitle, :final emoji, :final problem, :final action) => _NoticeCard(
-            title: noticeTitle,
-            emoji: emoji,
-            problem: problem,
-            caseLine: title, // 작은 글씨는 사건 이름만 (D-297)
-            mine: noticeIsMine(m, admin: admin),
-            // 카드는 누를 수 없고, 할 일이 남은 알림만 [수락]처럼 버튼으로 그 영상의 상태 화면에 간다 (D-304)
-            footer: action == null
-                ? null
-                : _NoticeButton(label: action, onPressed: () => context.go('/videos/${video.videoId}')),
-          ),
-        },
-    ];
+          NoticeStatus(:final video, title: final noticeTitle, :final emoji, :final problem, :final action) =>
+            _NoticeCard(
+              title: noticeTitle,
+              emoji: emoji,
+              problem: problem,
+              caseLine: title, // 작은 글씨는 사건 이름만 (D-297)
+              mine: noticeIsMine(m, admin: admin),
+              at: at,
+              // 카드는 누를 수 없고, 할 일이 남은 알림만 [수락]처럼 버튼으로 그 영상의 상태 화면에 간다 (D-304)
+              footer: action == null
+                  ? null
+                  : _NoticeButton(label: action, onPressed: () => context.go('/videos/${video.videoId}')),
+            ),
+        };
+    }
   }
 }
 

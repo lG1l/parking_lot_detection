@@ -112,7 +112,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
     if (moved) WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToTop());
   }
 
-  /// 화면 전체 스크롤(D-310)을 맨 위로. 스크롤은 PageFrame 안에 있어 본문 안쪽 context로 찾는다.
+  /// 화면 전체 스크롤(D-327)을 맨 위로. 스크롤은 PageFrame 안에 있어 본문 안쪽 context로 찾는다.
   final _bodyKey = GlobalKey();
   void _scrollToTop() {
     final ctx = _bodyKey.currentContext;
@@ -276,7 +276,7 @@ class _CandidatesPageState extends ConsumerState<CandidatesPage> {
       eyebrowNotes: _filename == null ? const [] : [...counterpartNote(ref, _id), viewExpiresText(_viewExpiresAt)],
       title: _filename ?? '후보 확인',
       titleStrong: withoutExtension(_filename),
-      // 창 크기와 상관없이 화면 전체를 함께 스크롤한다(scrollBody 기본값). 영상 목록만 따로 스크롤하지 않는다 (D-310)
+      // 창 크기와 상관없이 화면 전체를 함께 스크롤한다(scrollBody 기본값). 영상 목록만 따로 스크롤하지 않는다 (D-327)
       child: batch == null ? const Center(child: CircularProgressIndicator()) : _body(context, batch),
     );
   }

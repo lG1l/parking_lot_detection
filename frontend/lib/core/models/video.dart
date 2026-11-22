@@ -52,6 +52,7 @@ class VideoSummary {
     required this.viewExpiresAt,
     required this.maskedDeleted,
     this.createdAt,
+    this.statusChangedAt,
   });
 
   factory VideoSummary.fromJson(Map<String, dynamic> j) => VideoSummary(
@@ -62,6 +63,7 @@ class VideoSummary {
     viewExpiresAt: j['view_expires_at'] as String?,
     maskedDeleted: j['masked_deleted'] as bool,
     createdAt: j['created_at'] as String?,
+    statusChangedAt: j['status_changed_at'] as String?,
   );
 
   final int videoId;
@@ -74,6 +76,9 @@ class VideoSummary {
 
   /// 영상 행을 만든 시각 = 관리자가 업로드를 시작한 시각(6번 URL 발급, 04장). 목록의 업로드 날짜 (D-190).
   final String? createdAt;
+
+  /// [status]가 지금 값으로 바뀐 시각. 채팅에서 영상 상태 알림을 시각순으로 섞는 데 쓴다. 이전 서버는 null (D-335).
+  final String? statusChangedAt;
 
   /// 마스킹본을 더 볼 수 없는지. 파기됐거나 열람기한이 지났으면 서버가 true로 준다 (D-187).
   final bool maskedDeleted;

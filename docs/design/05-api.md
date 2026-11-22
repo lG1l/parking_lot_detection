@@ -216,6 +216,7 @@ GPU EC2 켜기 요청
 | 30 | `GET /api/chats/{peer_user_id}/messages` | 메시지 조회. 최근 50개, `before_id`·`after_id`로 앞뒤 | D-288 |
 | 31 | `POST /api/chats/{peer_user_id}/messages` | 메시지 보내기. 저장한 뒤 WebSocket으로 전달한다 | D-286 |
 | 32 | `PUT /api/chats/{peer_user_id}/read` | 읽음 처리 | D-289 |
+| 34 | `PUT /api/chats/{peer_user_id}/notices-seen` | 알림 본 시각 저장 | D-338 |
 | 33 | `GET /api/chats/ws` (WebSocket) | 새 메시지 받기. 서버에서 화면으로만 보낸다 | D-286 |
 
 ## 5.3 계정 API
@@ -360,12 +361,13 @@ PUT upload_url (파일 본문) ────────────────�
 성공: `200`
 
 ```json
-{"items": [{"id": 3, "admin_name": "주차장 관리자", "victim_name": "홍길동", "case_name": "홍길동 11/5", "created_at": "2026-11-01T14:03:00+09:00", "accepted_at": null, "peer_user_id": 5}]}
+{"items": [{"id": 3, "admin_name": "주차장 관리자", "victim_name": "홍길동", "case_name": "홍길동 11/5", "created_at": "2026-11-01T14:03:00+09:00", "accepted_at": null, "peer_user_id": 5, "notices_seen_at": null}]}
 ```
 
 - `accepted_at`은 수락 시각이고, 수락 전에는 `null`이다.
 - `peer_user_id`는 상대 계정 번호다. 관리자에게는 피해자 계정, 피해자에게는 관리자 계정이다. 29번의 `peer_user_id`와 같은 값이라, 채팅 화면이 이름이 같은 계정을 구분해 사건을 상대별로 묶는 데 쓴다 (C-19).
 - `case_name`은 부른 계정이 붙인 이름이다. 상대 계정의 이름은 주지 않는다. 이름이 없는 옛 사건은 `null`이다 (D-240).
+- `notices_seen_at`은 이 사건 상대의 알림을 내가 어디까지 봤는지다(34번, `chat_reads`). 본 적이 없으면 `null`이다. 메뉴 배지가 본 알림을 빼고 세는 데 쓴다 (D-338).
 
 ### 26. `POST /api/cases/{case_id}/accept` 사건 초대 수락
 
@@ -599,16 +601,20 @@ END
 ```json
 [
   {"video_id": 18, "original_filename": "CH03_0919.mp4", "status": "uploading",
-   "masked_deleted": false, "created_at": "2026-09-20T14:05:00+09:00", "view_expires_at": null},
+   "masked_deleted": false, "created_at": "2026-09-20T14:05:00+09:00", "view_expires_at": null,
+   "status_changed_at": null},
   {"video_id": 17, "original_filename": "CH01_0918.mp4", "status": "queued",
-   "masked_deleted": false, "created_at": "2026-09-19T09:12:00+09:00", "view_expires_at": "2026-10-19T10:00:00+09:00"},
+   "masked_deleted": false, "created_at": "2026-09-19T09:12:00+09:00", "view_expires_at": "2026-10-19T10:00:00+09:00",
+   "status_changed_at": "2026-09-19T10:00:05+09:00"},
   {"video_id": 12, "original_filename": "CH01_0915.mp4", "status": "finished",
-   "masked_deleted": true, "created_at": "2026-09-15T20:41:00+09:00", "view_expires_at": "2026-10-15T21:00:00+09:00"}
+   "masked_deleted": true, "created_at": "2026-09-15T20:41:00+09:00", "view_expires_at": "2026-10-15T21:00:00+09:00",
+   "status_changed_at": "2026-09-16T11:30:00+09:00"}
 ]
 ```
 
 - 내가 묶인 사건의 영상만 나온다(`videos.case_id` → `cases`). 피해자에게는 수락한 사건의 영상만 나온다 (D-238). 내가 삭제한 사건의 영상은 나오지 않는다 (D-239). 최신순(`created_at` 내림차순)이다. 항목에 `case_id`를 함께 준다 (D-204).
 - `view_expires_at`은 열람기한이다. 업로드 완료 시각(`upload_completed_at`) + 30일을 시간대가 붙은 ISO 8601로 주고, 완료 전에는 `null`이다. `created_at`은 URL 발급 시각이라 계산에 쓰지 않는다. 예시의 완료 시각은 각각 9월 19일 10:00, 9월 15일 21:00이다 (D-92).
+- `status_changed_at`은 `status`가 지금 값으로 바뀐 시각이다. 채팅 화면이 영상 상태 알림을 채팅과 시각순으로 섞는 데 쓴다. 작업 행이 없으면 `upload_failed`는 `created_at` + 30분, `uploading`은 `null`이다 (D-334)
 - `masked_deleted`는 마스킹본을 더 볼 수 없는지다. `masked_deleted_at`이 차 있거나 `view_expires_at`이 지났으면 `true`다. 목록이 "종료됨" 칩을 고르는 데 쓴다 (D-187).
 - **"앞에 N건"(`queue_ahead`)은 목록에 넣지 않는다.** 영상마다 세는 조회라 목록에서 한꺼번에 하면 무거워진다 (D-19). 대기 순서는 영상을 연 뒤 9번에서 본다.
 - 페이지 나누기는 두지 않는다. 한 사람의 영상이 몇 건뿐인 데모 규모다. 실제 운영에서 늘어나면 `limit`·`cursor`를 더한다.
@@ -1606,6 +1612,30 @@ flowchart TD
 |---|---|---|
 | 404 | `CHAT_NOT_FOUND` | 상대 계정이 없거나 수락한 사건이 없음 |
 | 422 | `VALIDATION_FAILED` | `last_read_message_id`가 없거나 정수가 아님 |
+
+### 34. `PUT /api/chats/{peer_user_id}/notices-seen` 알림 본 시각 저장
+
+프론트가 상대와의 대화를 화면에 그린 뒤, 그 상대 사건의 알림 카드 중 가장 늦은 카드 시각으로 부른다 (D-338).
+
+요청
+
+```json
+{"seen_at": "2026-11-18T14:03:00+09:00"}
+```
+
+성공: `204`
+
+- `chat_reads` 내 행의 `notices_seen_at`을 넣거나 바꾼다. 지금 값보다 이르거나 같으면 바꾸지 않는다.
+- 지금보다 늦은 시각이 오면 지금 시각으로 낮춰 저장한다.
+- 서버 시각이 아니라 받은 시각을 쓴다. 화면을 그린 뒤 생긴 알림을 본 것으로 치지 않기 위해서다.
+- 32번과 달리 수락 전 사건의 상대도 된다(피해자가 초대 알림을 본다).
+
+실패
+
+| HTTP | `code` | 언제 |
+|---|---|---|
+| 404 | `CHAT_NOT_FOUND` | 상대 계정이 없거나 나와 묶인 사건이 없음 |
+| 422 | `VALIDATION_FAILED` | `seen_at`이 없거나 시간대가 있는 시각이 아님 |
 
 ### 33. `GET /api/chats/ws` 새 메시지 받기 (WebSocket)
 

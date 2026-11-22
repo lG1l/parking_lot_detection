@@ -160,6 +160,55 @@ def test_other_pair_cannot_read(pair):
     assert other.get("/api/chats").json()["items"][0]["last_message"] is None
 
 
+def test_notices_seen_moves_forward_and_shows_in_cases(pair):
+    admin, victim, a, v = pair
+
+    def seen(c, peer, at):
+        r = c.put(f"/api/chats/{peer}/notices-seen", json={"seen_at": at})
+        assert r.status_code == 204
+
+    def seen_at(c):
+        return c.get("/api/cases").json()["items"][0]["notices_seen_at"]
+
+    assert seen_at(victim) is None
+    seen(victim, a, "2026-11-18T10:00:00+09:00")
+    assert seen_at(victim) == "2026-11-18T10:00:00+09:00"
+    seen(victim, a, "2026-11-18T09:00:00+09:00")  # 뒤로 가지 않는다
+    assert seen_at(victim) == "2026-11-18T10:00:00+09:00"
+    seen(victim, a, "2999-01-01T00:00:00+09:00")  # 미래는 지금으로 낮춘다
+    assert seen_at(victim) < "2999"
+    assert seen_at(admin) is None  # 상대 쪽은 그대로
+    # 알림만 본 행도 안 읽은 메시지 수는 그대로 센다
+    admin.post(f"/api/chats/{v}/messages", json={"body": "하나"})
+    assert victim.get("/api/chats").json()["unread_total"] == 1
+    victim.put(f"/api/chats/{a}/read", json={"last_read_message_id": 999})
+    assert victim.get("/api/chats").json()["unread_total"] == 0
+
+
+def test_notices_seen_allows_pending_case_only_for_linked_peer(pair):
+    _, _, a, _ = pair
+    v2 = make_user(login_id="victim2", name="박피해", role="victim")
+    link(a, v2, accepted=False)
+    pending = client_of("victim2")
+    r = pending.put(f"/api/chats/{a}/notices-seen", json={"seen_at": "2026-11-18T10:00:00+09:00"})
+    assert r.status_code == 204  # 수락 전 초대도 본 것으로 남긴다
+    other_a = make_user(login_id="admin2", name="다른관리자", role="admin")
+    for peer in [other_a, v2, 9999]:  # 사건 없음, 나 자신, 없는 계정
+        r = pending.put(
+            f"/api/chats/{peer}/notices-seen", json={"seen_at": "2026-11-18T10:00:00+09:00"}
+        )
+        assert code(r) == (404, "CHAT_NOT_FOUND")
+    for bad in [
+        {},
+        {"seen_at": "x"},
+        {"seen_at": "2026-11-18T10:00:00"},
+    ]:  # 없음, 시각 아님, 시간대 없음
+        assert code(pending.put(f"/api/chats/{a}/notices-seen", json=bad)) == (
+            422,
+            "VALIDATION_FAILED",
+        )
+
+
 def test_hidden_case_still_chats(pair):
     admin, _, _, v = pair
     sql("UPDATE cases SET admin_deleted_at = now(), victim_deleted_at = now()")

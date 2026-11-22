@@ -71,7 +71,7 @@ Future<void> agreeUpload(WidgetTester tester) async {
   await settle(tester);
 }
 
-/// 관리·감독 안내창에서 서약 문장을 입력하고 [동의하고 열람]을 누른다 (2.7, D-309).
+/// 관리·감독 안내창에서 서약 문장을 입력하고 [동의하고 열람]을 누른다 (2.7, D-326).
 Future<void> agreeSupervision(WidgetTester tester) async {
   await tester.enterText(find.byKey(const Key('supervision-pledge')), supervisionPledge);
   await tester.pump();
@@ -1061,7 +1061,7 @@ void main() {
     await unmount(tester);
   });
 
-  testWidgets('관리자가 후보 화면에 들어가면 안내창에 서약 문장을 입력해야 23번을 부르고 연다 (2.7, D-204, D-309)', (tester) async {
+  testWidgets('관리자가 후보 화면에 들어가면 안내창에 서약 문장을 입력해야 23번을 부르고 연다 (2.7, D-204, D-326)', (tester) async {
     final backend = FakeBackend({
       'GET /api/videos/7': (_) => json(video('ready')),
       'POST /api/videos/7/viewing-agreement': (req) {

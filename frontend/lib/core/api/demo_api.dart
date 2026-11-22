@@ -123,6 +123,7 @@ class DemoApi extends Api {
   final _pins = <int, List<Map<String, Object?>>>{};
   final _messages = <Map<String, Object?>>[]; // 채팅 메시지. 관리자와 피해자(`victim` 이름) 쌍에 붙는다 (D-285)
   final _reads = <String, int>{}; // 읽은 위치: '역할|피해자 이름' → 메시지 id (D-289)
+  final _noticesSeen = <String, String>{}; // 알림 본 시각: '역할|피해자 이름' → 시각 (D-338)
   final _mainBatch = <int, int>{}; // 영상별 지금 묶음 번호
   final _failedSeen = <int>{}; // 점수 미산출 탭을 넘긴 영상
   Me? _me;
@@ -157,6 +158,7 @@ class DemoApi extends Api {
     ...c,
     'case_name': c[_nameKey],
     'peer_user_id': _admin ? _victimUserId(c['victim_name'] as String) : _adminUserId, // 22번처럼 상대 계정 번호 (C-19 ⑧)
+    'notices_seen_at': _noticesSeen['$_role|${c['victim_name']}'],
   });
 
   /// 지금 계정에서 감출 영상인지. 수락 전 사건(피해자)과 이 계정이 지운 사건의 영상이다 (D-233, D-239)
@@ -175,7 +177,7 @@ class DemoApi extends Api {
     'vlm_score': failed ? null : 95 - rank * 5,
     'start_sec': 3600.0 * rank + 125,
     'end_sec': 3600.0 * rank + 155,
-    'clip_url': '',
+    'clip_url': failed ? '' : 'demo/clips/${(rank - 1) % 20 + 1}.mp4#t=0.5', // TEMP-SCREENSHOT
   };
 
   Map<String, Object?> _pinOf(Map<String, Object?> clip) => {
@@ -400,6 +402,19 @@ class DemoApi extends Api {
     final victim = _chatVictim(peerUserId);
     final key = '$_role|$victim';
     if (lastReadMessageId > (_reads[key] ?? 0)) _reads[key] = lastReadMessageId;
+  }
+
+  /// 본 시각은 앞으로만 간다. 수락 전 사건의 상대도 된다 (D-338)
+  @override
+  Future<void> markNoticesSeen(int peerUserId, String seenAt) async {
+    await _wait();
+    final victim = _admin
+        ? _cases.values.map((c) => c['victim_name'] as String).where((v) => _victimUserId(v) == peerUserId).firstOrNull
+        : (peerUserId == _adminUserId ? _me?.name : null);
+    if (victim == null) throw ApiException(404, 'CHAT_NOT_FOUND');
+    final key = '$_role|$victim';
+    final old = _noticesSeen[key];
+    if (old == null || DateTime.parse(seenAt).isAfter(DateTime.parse(old))) _noticesSeen[key] = seenAt;
   }
 
   @override

@@ -1,4 +1,4 @@
-from pipeline.candidates.video import select_by_time
+from pipeline.candidates.s1_base.video import select_by_time
 
 
 def test_고르지_않은_간격에서_목표_시각_이상인_첫_프레임을_고른다():

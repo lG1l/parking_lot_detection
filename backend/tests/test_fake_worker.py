@@ -37,7 +37,7 @@ def test_stage1_normal_writes_still_and_detections(me):
         "SELECT masked_s3_key, detections FROM still_frames WHERE analysis_job_id = :j", j=job
     ).one()
     assert (STORAGE / "masked" / still.masked_s3_key).is_file()
-    assert len(still.detections) == 2
+    assert still.detections == fake_worker.DETECTIONS
     assert sql("SELECT width FROM videos WHERE id = :v", v=vid).scalar_one() == 1920
 
 
