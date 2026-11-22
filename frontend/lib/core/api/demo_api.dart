@@ -46,6 +46,8 @@ class DemoApi extends Api {
         'raw_deleted': false,
         'masked_deleted': false,
         'created_at': _iso(DateTime.now().subtract(Duration(hours: id))),
+        // 상태가 바뀐 시각 (8번, D-334). 채팅의 알림 카드를 이 시각 자리에 둔다 (D-335). 올린 뒤 10분으로 둔다
+        'status_changed_at': _iso(DateTime.now().subtract(Duration(hours: id)).add(const Duration(minutes: 10))),
         'duration_sec': 86400.0,
         'view_expires_at': expires,
         ...extra,
@@ -72,7 +74,10 @@ class DemoApi extends Api {
     // 피해자가 아직 수락하지 않은 사건. 피해자 [채팅]에 뜨고, 수락하면 영상 12가 목록에 보인다 (D-233)
     addCase(4, '출구 앞 사이드미러', 'victim01', accepted: false);
 
-    add(1, 1, '01_입력필요.mp4', VideoStatus.stage1Done);
+    // 두 메시지 사이(25분 전)에 "입력 필요" 알림이 끼도록 둔다 (D-335 데모)
+    add(1, 1, '01_입력필요.mp4', VideoStatus.stage1Done, {
+      'status_changed_at': _iso(DateTime.now().subtract(const Duration(minutes: 25))),
+    });
     add(2, 1, '02_확인가능.mp4', VideoStatus.ready);
     add(3, 1, '03_결과.mp4', VideoStatus.finished);
     add(4, 1, '04_대기중.mp4', VideoStatus.queued, {'queue_ahead': 2});
@@ -443,6 +448,7 @@ class DemoApi extends Api {
       'raw_deleted': false,
       'masked_deleted': false,
       'created_at': _iso(DateTime.now()),
+      'status_changed_at': _iso(DateTime.now()),
       'duration_sec': null,
       'view_expires_at': null,
     };
@@ -454,6 +460,7 @@ class DemoApi extends Api {
     // 1단계(정지 장면)까지 끝난 것으로 둔다. 피해자 계정으로 입력 화면을 볼 수 있다
     _video(videoId)
       ..['status'] = VideoStatus.stage1Done
+      ..['status_changed_at'] = _iso(DateTime.now())
       ..['duration_sec'] = 86400.0
       ..['view_expires_at'] = _iso(DateTime.now().add(const Duration(days: 30)));
   }
@@ -482,6 +489,7 @@ class DemoApi extends Api {
   Future<void> retry(int id) async {
     _video(id)
       ..['status'] = VideoStatus.stage2Running
+      ..['status_changed_at'] = _iso(DateTime.now())
       ..remove('error_kind')
       ..remove('can_retry')
       ..remove('retry_left');
@@ -562,6 +570,7 @@ class DemoApi extends Api {
     if (allDone) {
       _video(id)
         ..['status'] = VideoStatus.exhausted
+        ..['status_changed_at'] = _iso(DateTime.now())
         ..['candidate_total'] = _mainBatches * _perBatch + 3
         ..['candidate_unavailable'] = 1;
     }
@@ -619,6 +628,8 @@ class DemoApi extends Api {
   @override
   Future<void> finish(int id) async {
     _checkViewing(id);
-    _video(id)['status'] = VideoStatus.finished;
+    _video(id)
+      ..['status'] = VideoStatus.finished
+      ..['status_changed_at'] = _iso(DateTime.now());
   }
 }
