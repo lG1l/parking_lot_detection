@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import 'package:parking_lot_frontend/core/api/chat_socket.dart';
 import 'package:parking_lot_frontend/core/constants.dart';
+import 'package:parking_lot_frontend/core/widgets/common.dart';
 import 'package:parking_lot_frontend/core/models/message.dart';
 import 'package:parking_lot_frontend/core/settings.dart';
 import 'package:parking_lot_frontend/features/damage_input/still_canvas.dart';
@@ -211,9 +212,11 @@ void main() {
     expect(find.text('동의하고 영상 선택하기'), findsOneWidget);
   });
 
-  testWidgets('피해자 계정은 영상 없는 사건을 [업로드 중] 줄로 보고 누를 수 없다 (2.2, D-226)', (tester) async {
+  testWidgets('피해자 계정은 영상 없는 사건을 [업로드 대기] 줄로 보고, 누르면 진행 표시 없는 대기 화면이다. 영상이 생기면 상태 화면으로 간다 (2.2, D-312)', (tester) async {
+    var uploaded = false;
     final backend = FakeBackend({
-      'GET /api/videos': (_) => json([]),
+      'GET /api/videos': (_) => json(uploaded ? [video('uploading')] : []),
+      'GET /api/videos/7': (_) => json(video('uploading')),
       'GET /api/cases': (_) => json({
         'items': [case3()],
       }),
@@ -221,13 +224,22 @@ void main() {
     await pumpApp(tester, backend, '/videos');
     expect(find.text('아직 올라온 영상이 없습니다'), findsNothing);
     expect(find.text('사건 1건'), findsOneWidget); // 제목은 줄 수다
-    expect(find.text('업로드 중'), findsOneWidget);
+    expect(find.text('업로드 대기'), findsOneWidget);
     expect(find.text('parking_admin'), findsOneWidget);
 
-    await tester.tap(find.text('업로드 중'));
+    await tester.tap(find.text('업로드 대기'));
     await settle(tester);
     expect(find.text('CCTV 영상 올리기'), findsNothing);
-    expect(find.text('업로드 중'), findsOneWidget);
+    expect(find.text('관리자가 영상을 올리기를 기다리고 있습니다.'), findsOneWidget);
+    expect(find.byType(BigSpinner), findsNothing);
+    expect(find.text('01 업로드 중'), findsOneWidget);
+
+    // 관리자가 업로드를 시작하면 다음 조회에서 그 영상의 상태 화면으로 간다
+    uploaded = true;
+    await tester.pump(pollInterval);
+    await settle(tester);
+    expect(find.text('관리자가 영상을 올리고 있습니다.'), findsOneWidget);
+    await unmount(tester);
   });
 
   testWidgets('피해자는 알림에서 초대를 수락하면 그 사건 영상이 목록에 보인다 (2.11, D-233)', (tester) async {

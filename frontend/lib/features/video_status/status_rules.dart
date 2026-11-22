@@ -50,6 +50,12 @@ bool shouldPoll(VideoDetail d) {
   }.contains(d.status);
 }
 
+/// 피해자: 연결만 되고 관리자가 아직 영상을 올리기 전 (D-312). 진행 표시 없이 문구만 보인다.
+const beforeUploadMessages = [
+  '관리자가 영상을 올리기를 기다리고 있습니다.',
+  '업로드가 끝나면 차량과 파손 부위를 입력할 수 있습니다.\n이 창을 닫고 나중에 다시 접속해도 됩니다.',
+];
+
 const laterNotice = '이 창을 닫고 나중에 다시 접속해도 됩니다. 분석은 계속 진행됩니다.';
 
 /// 대기 화면 문구 (07장 2.5 상태별 안내 문구). 첫 줄을 크게 보인다.
@@ -83,7 +89,7 @@ List<String> waitingMessages(VideoDetail d, {required bool admin}) {
 }
 
 /// 피해자 계정의 분석 완료 안내 (07장 2.5, D-204).
-const analysisDoneMessages = ['분석이 끝났습니다.', '결과는 주차장 관리자 화면에서 관리자와 함께 확인합니다.'];
+const analysisDoneMessages = ['분석이 끝났습니다.', '결과는 관리자 화면에서 관리자와 함께 확인합니다.'];
 
 /// [upload]는 관리자의 [영상 올리기](같은 사건에 다시 올리기)다.
 enum FailureAction { retry, upload, none }

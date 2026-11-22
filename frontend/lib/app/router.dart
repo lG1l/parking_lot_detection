@@ -10,6 +10,7 @@ import '../features/info/info_page.dart';
 import '../features/notifications/notifications_page.dart';
 import '../features/results/results_page.dart';
 import '../features/settings/settings_page.dart';
+import '../features/video_status/case_waiting_page.dart';
 import '../features/video_status/video_status_page.dart';
 import '../features/videos/video_list_page.dart';
 
@@ -35,6 +36,11 @@ GoRouter createRouter({String initialLocation = '/'}) => GoRouter(
     GoRoute(
       path: '/cases/:caseId/upload',
       builder: (_, state) => AdminUploadPage(caseId: int.parse(state.pathParameters['caseId']!)),
+    ),
+    // 피해자 계정: 영상이 아직 없는 사건의 업로드 대기 (D-312)
+    GoRoute(
+      path: '/cases/:caseId/waiting',
+      builder: (_, state) => CaseWaitingPage(caseId: int.parse(state.pathParameters['caseId']!)),
     ),
     GoRoute(
       path: '/videos/:videoId',

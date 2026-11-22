@@ -93,11 +93,10 @@ class _VideoListPageState extends ConsumerState<VideoListPage> {
   Future<void> _load() async {
     final api = ref.read(apiProvider);
     try {
+      // 8번과 22번을 함께 불러 첫 화면이 뜨는 시간을 줄인다. 22번은 못 읽으면 상대 이름 칸만 비운다
+      final casesFuture = api.cases().catchError((_) => <VideoCase>[]);
       final videos = await api.videos(); // 8
-      var cases = <VideoCase>[];
-      try {
-        cases = await api.cases(); // 22. 못 읽으면 상대 이름 칸만 비운다
-      } catch (_) {}
+      final cases = await casesFuture; // 22
       refreshSession(ref);
       if (mounted) {
         setState(() {
@@ -199,7 +198,8 @@ class _VideoListPageState extends ConsumerState<VideoListPage> {
           );
     return PageFrame(
       current: NavItem.videos,
-      title: rows == null ? '사건 목록' : (query.isEmpty ? '사건 ${rows.length}건' : '검색 결과 ${rows.length}건'),
+      // 불러오는 동안 "사건 목록"을 잠깐 보였다가 "사건 N건"으로 바뀌지 않게, 제목 자리만 비워 둔다
+      title: rows == null ? ' ' : (query.isEmpty ? '사건 ${rows.length}건' : '검색 결과 ${rows.length}건'),
       actions: [?searchBox],
       child: rows == null
           ? const Padding(
@@ -247,7 +247,11 @@ class _VideoListPageState extends ConsumerState<VideoListPage> {
   /// 누르면 갈 곳. 관리자가 올리는 중인 영상은 열 것이 없어 누를 수 없다 (캔버스).
   VoidCallback? _onTap(ListRow r, bool admin) {
     final v = r.video;
-    if (v == null) return admin ? () => context.go('/cases/${r.videoCase!.id}/upload') : null;
+    // 영상이 없는 사건: 관리자는 업로드 화면, 피해자는 업로드 대기 화면 (D-312)
+    if (v == null) {
+      final caseId = r.videoCase!.id;
+      return admin ? () => context.go('/cases/$caseId/upload') : () => context.go('/cases/$caseId/waiting');
+    }
     if (admin && v.status == VideoStatus.uploading && !v.maskedDeleted) return null;
     // 피해자의 "확인 완료"는 상태 화면을 거치지 않고 결과 화면을 바로 연다. 사건 지점 시간이 없으면
     // 결과 화면이 상태 화면(분석 완료 안내)으로 보낸다. 관리자는 관리·감독 안내창 때문에 상태 화면부터 연다 (D-204)
@@ -449,7 +453,7 @@ class _StatusText extends StatelessWidget {
             .pending // 수락 대기 중은 상태와 관계없이 기다림이다 (D-233)
         ? '수락 대기 중'
         : video == null
-        ? (admin ? '업로드 필요' : '업로드 중')
+        ? (admin ? '업로드 필요' : '업로드 대기') // 피해자: 관리자가 아직 올리기 전 (D-312)
         : video.listLabel(admin: admin);
     final ended = !row.pending && video?.listGroup(admin: admin) == StatusGroup.ended;
     return StatusDot(label, strike: ended);

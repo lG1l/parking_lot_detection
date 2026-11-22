@@ -348,6 +348,7 @@
 | [D-340](#d-340-사용자-접속을-cloudfront-기본-도메인cloudfrontnet으로-받아-https를-적용한다) | 사용자 접속을 CloudFront 기본 도메인(`*.cloudfront.net`)으로 받아 HTTPS를 적용한다 | 2026-11-18 | 확정 (팀장 결정). 🔐 CloudFront 멘토 승인 필요. D-146의 HTTP 유지를 변경 |
 | [D-341](#d-341-pipelinesrcpipelinecandidates를-단계-폴더-다섯-개로-나누고-명령-경로를-바꾼다) | `pipeline/src/pipeline/candidates/`를 단계 폴더 다섯 개로 나누고 명령 경로를 바꾼다 | 2026-11-19 | 확정 (팀장 결정). 폴더 이름 앞의 `s`는 팀장 확인 전 |
 | [D-342](#d-342-후보-확인-화면의-묶음-표시스크롤과-서약-입력칸-엔터를-다듬는다-d-307-일부-변경) | 후보 확인 화면의 묶음 표시·스크롤과 서약 입력칸 엔터를 다듬는다 (D-307 일부 변경) | 2026-11-18 | 확정 (팀원 1: 화면 세부) |
+| [D-343](#d-343-피해자-목록의-영상-없는-사건은-업로드-대기로-보이고-누르면-업로드-대기-화면을-연다-d-226-일부-변경) | 피해자 목록의 영상 없는 사건은 "업로드 대기"로 보이고, 누르면 업로드 대기 화면을 연다 (D-226 일부 변경) | 2026-11-22 | 확정 (팀원 1: 화면 세부) |
 
 
 ---
@@ -12314,3 +12315,21 @@ Claude Code의 동일 프로젝트 세션 `9cbe17d0-a7d4-420e-88d8-de4870913c2b`
   | 서약 입력칸을 여러 줄로 두고 Ctrl+엔터로 열기 | 일반적인 동작이 아니라 알아채기 어렵다. 안내창이 넓어 한 줄로 충분하다 |
 - **남는 점**: m은 마지막 묶음 말고는 10개씩 꽉 찬다고 보고 센다. 백엔드가 다르게 묶으면 1 정도 틀릴 수 있어 연결 뒤 확인한다.
 - **적용 위치**: 07장 머리 공지·2.7 / `frontend/lib/features/candidates/batch_rules.dart`, `frontend/lib/features/candidates/candidates_page.dart`, `frontend/lib/features/video_status/supervision_dialog.dart`, `frontend/lib/core/constants.dart`, `frontend/test/features/batch_rules_test.dart`, `frontend/test/features/screens_test.dart`
+
+## D-343. 피해자 목록의 영상 없는 사건은 "업로드 대기"로 보이고, 누르면 업로드 대기 화면을 연다 (D-226 일부 변경)
+- **상태**: 확정 (팀원 1: 화면 세부, D-135). 서버 계약은 바뀌지 않는다(8·22번만 쓴다).
+- **문제**: 피해자 목록에서 관리자가 아직 영상을 올리기 **전**인 사건도 "업로드 중"으로 보였다. 영상 상태 화면의 `uploading`("관리자가 영상을 올리고 있습니다.")과 같은 말이라, 아직 시작하지 않았는데 올리는 중처럼 읽혔다. 줄을 누를 수도 없어 무엇을 기다리는지 볼 곳이 없었다.
+- **결정**
+  1. 피해자 목록의 영상 없는 사건 칩은 "업로드 대기"(기다림 색)다. 관리자 쪽 "업로드 필요"는 그대로다.
+  2. 그 줄을 누르면 업로드 대기 화면 `/cases/{case_id}/waiting`을 연다. 영상 상태 화면(2.5)과 같은 모양(머리 "영상 상태 | 관리자 ○○", 단계 막대 01)이고, 진행 표시 없이 "관리자가 영상을 올리기를 기다리고 있습니다." + 2.5 `uploading`의 아래 두 줄을 보인다. 제목은 파일 이름이 없어 내 쪽 사건 이름(22번 `case_name`)이다.
+  3. 이 화면은 8번을 5초마다(D-138) 불러, 이 사건에 영상이 생기면 그 영상의 상태 화면으로 넘어간다.
+- **이유**: 업로드 전과 업로드 중을 다른 말로 나눠야 피해자가 지금 단계를 안다. 진행 표시는 무언가 처리 중이라는 뜻이라, 아무것도 진행되지 않는 업로드 전에는 두지 않는다.
+- **비교한 대안**
+
+  | 안 | 버린 이유 |
+  |---|---|
+  | 칩만 "업로드 대기"로 바꾸고 계속 누를 수 없게 | 사용자가 상태 화면과 같은 안내를 보길 원했다 |
+  | 영상 상태 화면(`/videos/{id}`)을 그대로 쓰기 | 영상이 없어 9번을 부를 수 없다 |
+  | 문구를 `uploading`과 같게("관리자가 영상을 올리고 있습니다.") | 업로드 전과 업로드 중이 다시 구분되지 않는다 |
+- **남는 점**: 단계 막대 01의 이름은 "업로드 중" 그대로다. 업로드 전에도 01이 강조된다.
+- **적용 위치**: 07장 머리 공지·2.2 / `frontend/lib/features/video_status/case_waiting_page.dart`, `frontend/lib/features/video_status/video_status_page.dart`(`WaitingCard`), `frontend/lib/features/video_status/status_rules.dart`, `frontend/lib/features/videos/video_list_page.dart`, `frontend/lib/app/router.dart`, `frontend/test/features/screens_test.dart`

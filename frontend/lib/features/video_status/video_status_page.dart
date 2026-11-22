@@ -225,32 +225,8 @@ class _VideoStatusPageState extends ConsumerState<VideoStatusPage> {
     );
   }
 
-  /// 대기·분석 중: 윗선 아래에 진행 표시(또는 아이콘) + 첫 문구를 크게, 나머지를 작게 (D-190, D-305).
-  Widget _waiting(List<String> messages, {IconData? icon, Widget? action}) {
-    return PageCard(
-      padding: const EdgeInsets.symmetric(vertical: 48),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 320),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (icon == null) const BigSpinner() else Icon(icon, size: 64, color: progressColor),
-            const SizedBox(height: 24),
-            Text(
-              messages.first,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w300, height: 1.4),
-            ),
-            for (final m in messages.skip(1)) ...[
-              const SizedBox(height: 12),
-              Text(m, textAlign: TextAlign.center, style: const TextStyle(fontSize: 15, height: 1.6, color: subColor)),
-            ],
-            if (action != null) ...[const SizedBox(height: 24), action],
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _waiting(List<String> messages, {IconData? icon, Widget? action}) =>
+      WaitingCard(messages: messages, icon: icon, action: action);
 
   /// 2.8 완료 (관리자). 고정한 것이 없을 때만 여기서 그린다 (있으면 결과 화면).
   Widget _completion(BuildContext context, VideoDetail d) {
@@ -298,4 +274,45 @@ String? withoutExtension(String? name) {
   if (name == null) return null;
   final dot = name.lastIndexOf('.');
   return dot > 0 ? name.substring(0, dot) : name;
+}
+
+/// 대기·분석 중: 윗선 아래에 진행 표시(또는 아이콘) + 첫 문구를 크게, 나머지를 작게 (D-190, D-305).
+/// [spinner]가 false이고 [icon]도 없으면 그림 없이 문구만 보인다(업로드 전 대기, D-312).
+class WaitingCard extends StatelessWidget {
+  const WaitingCard({super.key, required this.messages, this.icon, this.action, this.spinner = true});
+
+  final List<String> messages;
+  final IconData? icon;
+  final Widget? action;
+  final bool spinner;
+
+  @override
+  Widget build(BuildContext context) {
+    return PageCard(
+      padding: const EdgeInsets.symmetric(vertical: 48),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 320),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (icon != null)
+              Icon(icon, size: 64, color: progressColor)
+            else if (spinner)
+              const BigSpinner(),
+            if (icon != null || spinner) const SizedBox(height: 24),
+            Text(
+              messages.first,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w300, height: 1.4),
+            ),
+            for (final m in messages.skip(1)) ...[
+              const SizedBox(height: 12),
+              Text(m, textAlign: TextAlign.center, style: const TextStyle(fontSize: 15, height: 1.6, color: subColor)),
+            ],
+            if (action != null) ...[const SizedBox(height: 24), action!],
+          ],
+        ),
+      ),
+    );
+  }
 }
