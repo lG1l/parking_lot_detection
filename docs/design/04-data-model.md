@@ -1,5 +1,7 @@
 # 04. 데이터 모델
 
+> **D-344(2026-11-23, 팀장): 점수 파일 `scores.jsonl`의 형식을 4.8에 더한다. 한 줄이 후보 1개이고 줄 순서는 `candidates.jsonl`과 같다. 키는 `start_sec`·`end_sec`·`vlm_score`·`list_kind`·`rank`·`reason` 여섯 개다. pipeline 안 모듈끼리 주고받는 파일이며 DDL·API·SQS·S3 키는 바뀌지 않는다. `reason`은 DB에 넣지 않는다 (4.8).**
+>
 > **D-333(2026-11-18, 팀장): 후보 목록 파일 `candidates.jsonl`의 형식을 4.8에 더한다. 한 줄이 후보(클립) 1개이고 키는 `candidates` 칸 이름 그대로 다섯 개다. pipeline 안 모듈끼리 주고받는 파일이며 DDL·API·SQS·S3 키는 바뀌지 않는다 (4.8).**
 >
 > **D-331(2026-11-18, 팀장): 후보에서 뺀 트랙의 제외 기록을 분석 결과 버킷의 파일 하나(`videos/{video_id}/tracks/excluded.jsonl`)에 남긴다. 한 줄에 `track_id`와 걸린 규칙 이름 목록을 쓴다. DDL·API·트랙 파일 형식은 바뀌지 않는다 (4.8, 4.9).**
@@ -782,6 +784,27 @@ SELECT count(*) FROM q
 - 클립의 시작·끝은 0.1초 단위로 반올림한 값이라 실제 분석 프레임 시각과 0.05초쯤 어긋날 수 있다.
 - 개발 확인용 명령은 결과 폴더에 `candidates.jsonl`을 쓴다. S3 키와 `candidates` 테이블에 넣는 방법은 워커 통합 때 정한다 🚧. 그때까지 4.9의 분석 결과 버킷 목록은 그대로다.
 
+**점수 파일** (D-344)
+
+VLM 모듈이 후보마다 받은 점수·근거와 순위를 영상마다 JSONL 파일 하나(`scores.jsonl`)에 적는다. 한 줄이 후보 하나이고 **줄 순서는 `candidates.jsonl`과 같다.** pipeline 안 모듈끼리 주고받는 파일이고, `reason`을 뺀 키 이름은 `candidates` 테이블 칸(4.2)과 같다.
+
+```
+{"start_sec":38.7,"end_sec":50.5,"vlm_score":12,"list_kind":"main","rank":1,"reason":"…"}
+{"start_sec":73.0,"end_sec":83.8,"vlm_score":null,"list_kind":"parse_failed","rank":1,"reason":null}
+```
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `start_sec`, `end_sec` | 실수 | 후보 목록 파일의 값 그대로. 줄이 어긋났는지 보는 용도다 |
+| `vlm_score` | 정수 또는 `null` | "VLM 점수 척도" 범위의 점수. 파싱에 끝내 실패하면 `null`이다 (0점을 주지 않는다, D-93) |
+| `list_kind` | 글 | `main`(후보군 목록) 또는 `parse_failed`(파싱 실패 목록) |
+| `rank` | 정수 | 그 목록 안 순위 (1부터). 후보군 목록은 점수 내림차순이고 동점은 **임시로** `start_sec` 오름차순이다 (U-27 미정). 파싱 실패 목록은 `start_sec` 오름차순이다 (D-177) |
+| `reason` | 글 또는 `null` | 모델이 쓴 근거 그대로. 파싱에 끝내 실패하면 `null`이다. **DB에 넣지 않는다** |
+
+- 후보가 없으면 빈 파일을 쓴다.
+- API 오류로 명령이 멈추면 파일을 쓰지 않는다 (D-344 다-4).
+- 개발 확인용 명령은 결과 폴더에 `scores.jsonl`을 쓴다. `candidates` 테이블에 넣는 방법은 워커 통합 때 정한다 🚧.
+
 ## 4.9 S3 키 구조
 
 버킷은 비공개 3개다. 버킷 이름은 Terraform 변수 `bucket_prefix`로 받는다. (D-23)
@@ -1100,6 +1123,7 @@ CREATE INDEX idx_chat_pair           ON chat_messages (admin_user_id, victim_use
 - 트랙 파일은 JSONL: D-26. 중간 저장 구간당 1개, `track_id`는 영상 안에서 유일: D-76
 - 제외 기록은 분석 결과 버킷의 파일 하나(`tracks/excluded.jsonl`), `track_id`와 규칙 이름 목록: D-331 (U-13의 제외 기록 저장 위치 해결)
 - 후보 목록 파일은 `candidates.jsonl`, 한 줄에 후보 하나, 키는 `candidates` 칸 이름 다섯 개: D-333
+- 점수 파일은 `scores.jsonl`, 줄 순서는 `candidates.jsonl`과 같고 키는 여섯 개(`reason`은 DB에 넣지 않음), 동점은 임시로 `start_sec` 오름차순: D-344
 - DDL 규칙(status에 CHECK를 걸지 않음, FK CASCADE 범위): D-27
 - 관리자는 계정 없이 업로드 전용 일회용 링크로 올린다: D-28 (U-14 해결) → **관리자·피해자 계정과 사건 초대로 대체: D-204**
 - 차량·파손 부위 입력, 본인 차량은 추적하지 않는다: D-29 (U-13 일부 해결) → **탐지된 차량을 고른다: D-65**
