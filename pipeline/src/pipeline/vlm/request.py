@@ -156,3 +156,16 @@ def build_request(
         # 이 도구를 반드시 부르게 한다. 자유 문장 응답을 파싱하지 않는다 (D-93)
         "tool_choice": {"type": "function", "function": {"name": TOOL_NAME}},
     }
+
+
+def with_format_error(request: dict, error: str) -> dict:
+    """요청의 사용자 내용 끝에 "앞 응답이 형식에 맞지 않았다"는 글을 붙인 새 요청을 돌려준다 (D-344 다-6).
+
+    받은 요청은 고치지 않는다. 다시 부를 때마다 원래 요청에 가장 최근 오류 하나만 붙이기 위해서다.
+    """
+    system, user = request["messages"]
+    retry_text = _text(
+        f"앞 응답이 형식에 맞지 않았다: {error}. {TOOL_NAME} 도구로 근거와 점수를 다시 제출하라."
+    )
+    retry_user = {**user, "content": [*user["content"], retry_text]}
+    return {**request, "messages": [system, retry_user]}
