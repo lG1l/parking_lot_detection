@@ -17,9 +17,10 @@ def test_box_becomes_original_pixels_rounded_outward():
 
 def test_threshold_differs_by_class():
     box = [10, 10, 30, 30]
-    raw = [_raw(0, 0.09, box), _raw(0, 0.10, box), _raw(1, 0.15, box), _raw(1, 0.20, box)]
+    raw = [_raw(0, 0.19, box), _raw(0, 0.20, box), _raw(1, 0.19, box), _raw(1, 0.20, box)]
     dets = to_dets(raw, CROP)
-    assert [(det["cls"], det["conf"]) for det in dets] == [("face", 0.1), ("plate", 0.2)]
+    # 같은 자리여도 클래스가 다르면 합치지 않는다
+    assert [(det["cls"], det["conf"]) for det in dets] == [("face", 0.2), ("plate", 0.2)]
 
 
 def test_box_is_cut_at_crop_edge_and_dropped_when_outside():
@@ -30,3 +31,18 @@ def test_box_is_cut_at_crop_edge_and_dropped_when_outside():
 
 def test_line_without_boxes_has_empty_list():
     assert make_line(104.40834, []) == '{"t": 104.4083, "dets": []}'
+
+
+def test_overlapping_boxes_of_same_class_become_one():
+    # 첫째·둘째가 겹치고, 셋째는 둘째와만 겹친다 (이어서 하나가 된다). 넷째는 떨어져 있다
+    raw = [
+        _raw(0, 0.3, [10, 10, 30, 30]),
+        _raw(0, 0.5, [25, 20, 45, 40]),
+        _raw(0, 0.2, [40, 35, 60, 50]),
+        _raw(0, 0.4, [200, 200, 220, 220]),
+    ]
+    dets = to_dets(raw, CROP)
+    assert sorted((det["bbox"], det["conf"]) for det in dets) == [
+        ([480, 242, 530, 282], 0.5),
+        ([670, 432, 690, 452], 0.4),
+    ]

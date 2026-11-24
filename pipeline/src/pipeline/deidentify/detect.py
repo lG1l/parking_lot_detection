@@ -43,8 +43,10 @@ _MODEL_WEIGHTS = "dfine_x_1408/model.pth"
 
 # 모델이 주는 클래스 번호 → 탐지 파일에 쓰는 이름
 CLASS_NAMES = {0: "face", 1: "plate"}
-# 클래스별 임계값. 저자 기본값 그대로다 (나-6). 이 점수보다 낮은 박스는 버린다
-THRESHOLDS = {"face": 0.1, "plate": 0.2}
+# 클래스별 임계값. 이 점수보다 낮은 박스는 버린다.
+# 얼굴은 저자 기본값 0.1에서 0.2로 올렸다. 0.1~0.2의 박스는 거의 유리창·차 지붕 같은 오탐이었다.
+# 시작값이고, 값은 측정(19번) 뒤 재검토에서 다시 정한다 (D-346 나-6)
+THRESHOLDS = {"face": 0.2, "plate": 0.2}
 
 # 확인용 영상에 그리는 색 (BGR)
 _COLORS = {"face": (0, 0, 255), "plate": (0, 255, 255)}  # 얼굴 빨강, 번호판 노랑
@@ -84,7 +86,41 @@ def to_dets(raw: list[dict], crop: Rect) -> list[Det]:
                 "conf": round(float(item["score"]), 3),
             }
         )
-    return dets
+    return merge_overlapping(dets)
+
+
+def _overlaps(a: list[int], b: list[int]) -> bool:
+    """두 박스가 넓이가 있게 겹치는가 (변만 맞닿은 것은 겹친 것이 아니다)."""
+    return min(a[2], b[2]) > max(a[0], b[0]) and min(a[3], b[3]) > max(a[1], b[1])
+
+
+def merge_overlapping(dets: list[Det]) -> list[Det]:
+    """같은 클래스에서 겹치는 박스들을 모두 감싸는 박스 하나로 합친다 (D-346 나-9).
+
+    모델이 얼굴 하나에 박스를 둘셋 내는 일이 있다. 감싸는 박스로 합치므로 가리는 범위는
+    줄지 않는다. 점수는 그중 가장 높은 것을 쓴다.
+    """
+    merged: list[Det] = []
+    for det in dets:
+        box, conf = list(det["bbox"]), det["conf"]
+        # 합쳐서 커진 박스가 다른 박스와 새로 겹칠 수 있다. 겹치는 것이 없을 때까지 되풀이한다
+        while True:
+            hit = next(
+                (m for m in merged if m["cls"] == det["cls"] and _overlaps(m["bbox"], box)), None
+            )
+            if hit is None:
+                break
+            merged.remove(hit)
+            other = hit["bbox"]
+            box = [
+                min(box[0], other[0]),
+                min(box[1], other[1]),
+                max(box[2], other[2]),
+                max(box[3], other[3]),
+            ]
+            conf = max(conf, hit["conf"])
+        merged.append({"cls": det["cls"], "bbox": box, "conf": conf})
+    return merged
 
 
 def make_line(time_sec: float, dets: list[Det]) -> str:
@@ -139,7 +175,7 @@ def detect_frame(detector, image: np.ndarray, crop: Rect) -> list[Det]:
     x1, y1, x2, y2 = crop
     # OpenCV 프레임은 색 순서가 BGR이다. 저자 코드는 RGB 사진(PIL)을 받는다
     rgb = cv2.cvtColor(image[y1:y2, x1:x2], cv2.COLOR_BGR2RGB)
-    # 모델에게는 가장 낮은 임계값으로 받고, 클래스별로 거르는 것은 to_dets가 한다
+    # 모델에게는 가장 낮은 임계값으로 받고, 클래스별로 거르고 겹친 것을 합치는 것은 to_dets가 한다
     raw = detector.predict(Image.fromarray(rgb), score_threshold=min(THRESHOLDS.values()))
     return to_dets(raw, crop)
 
