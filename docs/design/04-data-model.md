@@ -58,6 +58,8 @@ users ──┬──< sessions        (로그인 세션)
         │
         ├──< chat_reads      (채팅 읽은 위치, D-289)
         │
+kakao_pending                 (카카오 인증 대기: 가입·비밀번호 바꾸기, 10분, D-346·D-347)
+
 videos ──┬── upload_agreements  (위탁계약 동의 D-147)
         ├──< viewing_agreements  (관리·감독 안내 동의, D-204)
         └──1:1── analysis_jobs
@@ -91,7 +93,7 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 
 ### users
 
-계정은 **관리자와 피해자 두 종류**다. 역할 칼럼으로 나누고, 계정을 만들 때 정한다. (D-204, D-28 대체) 비밀번호 해시 방식(bcrypt, D-58)과 쿠키 속성(`SameSite=Lax`, D-60)은 [08장](08-auth.md)에서 정했다.
+계정은 **관리자와 피해자 두 종류**다. 역할 칼럼으로 나누고, 계정을 만들 때 정한다. (D-204, D-28 대체) 계정은 가입 화면(카카오 인증 후, 가입자가 역할을 고른다)이나 스크립트로 만든다 (D-346). 비밀번호 해시 방식(bcrypt, D-58)과 쿠키 속성(`SameSite=Lax`, D-60)은 [08장](08-auth.md)에서 정했다.
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
@@ -100,6 +102,7 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 | `password_hash` | text | bcrypt 해시 문자열 60자. 평문 비밀번호를 저장하지 않는다 (D-58, [08장 8.3](08-auth.md#83-비밀번호-저장-d-58)) |
 | `role` | text | `admin` 또는 `victim`. 바뀌지 않는다 (D-204) |
 | `name` | text | 화면 표시용 이름 |
+| `kakao_id` | bigint UNIQUE, NULL 허용 | 카카오 회원번호. 가입 화면으로 만든 계정만 있다. 카카오 계정 하나에 계정 하나 (D-346). 스크립트 계정은 비어 있다 |
 | `created_at` | timestamptz | |
 
 ### sessions
@@ -112,11 +115,32 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 | `token_hash` | text UNIQUE | 쿠키에 담기는 랜덤 문자열(43자)의 SHA-256 해시 64자. 평문은 저장하지 않는다 (D-59, [08장 8.4](08-auth.md#84-랜덤-토큰-만들기-d-59)) |
 | `user_id` | bigint FK → users | 누구의 세션인가 |
 | `expires_at` | timestamptz | 이 시각이 지나면 만료. 연장하지 않는다 |
+| `password_reset_until` | timestamptz, NULL 허용 | 카카오 재인증(비밀번호 바꾸기·재설정)으로 만든 세션만 있다. 이 시각 전에만 37번으로 새 비밀번호를 넣을 수 있다. 만든 뒤 10분, 바꾸면 비운다 (D-347) |
 | `created_at` | timestamptz | 로그인한 시각 |
 
 - 로그인에 성공하면 행을 만들고 평문 토큰을 **HttpOnly 쿠키**로 내려준다. 표에는 해시만 남는다. 요청마다 쿠키 값을 해시해 이 표를 찾고, `expires_at > now()`이면 통과시킨다.
-- **로그아웃은 행을 지우는 것**이다. 유출된 세션도 같은 방법으로 즉시 끊을 수 있다. HTTPS가 없는 상태(02장 2.11)에서 이것이 JWT 대신 DB 세션을 고른 이유다. (D-30)
+- **로그아웃은 행을 지우는 것**이다. 유출된 세션도 같은 방법으로 즉시 끊을 수 있다. 이것이 JWT 대신 DB 세션을 고른 이유다. CloudFront↔EC2 구간은 아직 평문이다 (02장 2.11). (D-30)
 - 만료된 행을 지우는 정리 작업은 두지 않는다. 데모 규모에서는 쌓여도 문제가 없다.
+
+### kakao_pending
+
+카카오 인증이 끝날 때까지 잠시 둔다. 가입(`signup`)이면 입력한 값을 두고, 비밀번호 바꾸기·재설정(`reset`)이면 `state`와 로그인 중이던 계정만 둔다. 콜백(36번)이 끝나면 지운다. (D-346, D-347)
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `id` | bigserial PK | |
+| `state_hash` | text UNIQUE | 카카오로 보낸 `state`(무작위 43자)의 SHA-256 해시. 평문은 `oauth_state` 쿠키에만 있다 (D-59와 같은 방식) |
+| `purpose` | text | `signup` 또는 `reset`. 콜백이 이 값으로 나눈다 (D-347) |
+| `user_id` | bigint FK → users, NULL 허용 | `reset`을 로그인 중에 시작했으면 그 계정. 콜백에서 카카오로 찾은 계정과 다르면 거부한다 (D-347) |
+| `login_id` | text, NULL 허용 | 입력한 아이디. 계정을 만들 때 다시 중복을 검사한다. `reset`이면 비어 있다 |
+| `password_hash` | text, NULL 허용 | 입력한 비밀번호의 bcrypt 해시. 평문은 저장하지 않는다 (D-58). `reset`이면 비어 있다 |
+| `name` | text, NULL 허용 | 입력한 이름. `reset`이면 비어 있다 |
+| `role` | text, NULL 허용 | `admin` 또는 `victim`. 가입자가 고른 값. `reset`이면 비어 있다 |
+| `expires_at` | timestamptz | 만든 뒤 10분. 지나면 콜백이 거부한다 |
+| `created_at` | timestamptz | |
+
+- 콜백(36번)은 `state`가 맞으면 행을 **먼저 지우고** 진행한다. 같은 `state`로 두 번 쓸 수 없다.
+- 만료된 행을 지우는 정리 작업은 두지 않는다 (`sessions`와 같다).
 
 ### cases
 
@@ -847,6 +871,7 @@ CREATE TABLE users (
   password_hash text        NOT NULL,
   role          text        NOT NULL,          -- admin | victim (D-204)
   name          text        NOT NULL,
+  kakao_id      bigint      UNIQUE,            -- 카카오 회원번호. 스크립트 계정은 NULL (D-346)
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 
@@ -855,7 +880,21 @@ CREATE TABLE sessions (
   token_hash text        NOT NULL UNIQUE,   -- HttpOnly 쿠키에 담기는 랜덤 문자열의 SHA-256 (64자)
   user_id    bigint      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   expires_at timestamptz NOT NULL,
+  password_reset_until timestamptz,          -- 카카오 재인증 세션만, 10분 (D-347)
   created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE kakao_pending (                 -- D-346, D-347
+  id            bigserial PRIMARY KEY,
+  state_hash    text        NOT NULL UNIQUE,
+  purpose       text        NOT NULL,        -- signup | reset
+  user_id       bigint      REFERENCES users(id) ON DELETE CASCADE,
+  login_id      text,
+  password_hash text,
+  name          text,
+  role          text,
+  expires_at    timestamptz NOT NULL,
+  created_at    timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE TABLE cases (                         -- D-204

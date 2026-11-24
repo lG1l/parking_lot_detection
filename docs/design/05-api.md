@@ -32,7 +32,7 @@
 
 | 대상 | 방법 | 실패 |
 |---|---|---|
-| 로그인을 뺀 모든 API | 세션 쿠키 (D-30) | 401 `UNAUTHENTICATED` |
+| 로그인(1번)·가입(35·36번)·비밀번호 재설정 시작(38번)을 뺀 모든 API | 세션 쿠키 (D-30) | 401 `UNAUTHENTICATED` |
 
 - **역할**: 계정은 관리자·피해자 두 종류이고, API마다 부를 수 있는 역할이 정해져 있다 (5.2, [08장 8.7](08-auth.md#87-다른-사건-접근과-역할-차단)). 맞지 않으면 403 `ROLE_NOT_ALLOWED`다 (D-204).
 - `/api/videos/{video_id}/...`는 요청마다 영상의 사건(`videos.case_id` → `cases`)에 로그인한 계정이 묶여 있는지 확인한다. 아니면 없는 영상과 똑같이 404 `VIDEO_NOT_FOUND`를 돌려준다. `video_id`는 순서대로 매기는 번호라 추측할 수 있기 때문이다 (D-39, D-204).
@@ -148,13 +148,17 @@ GPU EC2 켜기 요청
 
 인증 방법은 5.1의 표를 따른다. "전이"는 04장 4.3 전이 표의 번호다.
 
-**계정** (세션 쿠키. 1은 로그인 전에 부른다. 회원가입은 없고 계정은 스크립트로 만든다, D-44)
+**계정** (세션 쿠키. 1·35·36·38은 로그인 전에 부른다. 계정은 가입 화면이나 스크립트로 만든다, D-346)
 
 | # | 메서드·주소 | 하는 일 | 관련 |
 |---|---|---|---|
 | 1 | `POST /api/auth/login` | 로그인. 세션 쿠키를 내려준다 | D-30 |
 | 2 | `POST /api/auth/logout` | 로그아웃. `sessions` 행을 지운다 | D-30 |
 | 3 | `GET /api/auth/me` | 지금 로그인한 사용자. 프론트가 처음 열릴 때 로그인 여부를 확인한다 | |
+| 35 | `POST /api/auth/signup/start` | 가입 시작. 입력을 검사·보관하고 카카오 인증 주소를 돌려준다 | D-346 |
+| 36 | `GET /api/auth/kakao/callback` | 카카오가 돌려보내는 주소. 가입이면 계정을 만들고, 비밀번호 바꾸기면 그 계정으로 다시 로그인시킨다 | D-346, D-347 |
+| 37 | `PUT /api/auth/password` | 새 비밀번호 저장. 카카오 재인증 뒤 10분 안에만 받는다 | D-347 |
+| 38 | `POST /api/auth/password-reset/start` | 비밀번호 바꾸기·재설정 시작. 카카오 인증 주소를 돌려준다 | D-347 |
 
 **사건** (세션 쿠키)
 
@@ -221,7 +225,7 @@ GPU EC2 켜기 요청
 
 ## 5.3 계정 API
 
-회원가입은 없다. 데모는 스크립트로 만든 **관리자 계정과 피해자 계정**으로 로그인한다 (D-44, D-204).
+계정은 가입 화면(35·36번, 카카오 인증)이나 스크립트로 만든다. 로그인은 어느 쪽이든 아이디·비밀번호로 한다 (D-346, D-204).
 
 ### 1. `POST /api/auth/login` 로그인
 
@@ -242,7 +246,7 @@ Set-Cookie: sid=Jx3k...(랜덤 문자열); HttpOnly; Path=/; Max-Age=604800
 ```
 
 - `sessions` 행을 새로 만든다. 행에는 토큰의 SHA-256 해시를 넣고(D-59), 평문 토큰을 쿠키 `sid`로 내려준다. 유효 시간은 01장 1.6(7일, 연장 없음)이고 `Max-Age`도 같은 값이다.
-- 쿠키 속성: `HttpOnly`는 켜고 `Secure`는 켜지 않는다(HTTPS 없음, D-31). `SameSite`는 `Lax`다 (D-60, [08장 8.5](08-auth.md#85-로그인-세션과-쿠키)).
+- 쿠키 속성: `HttpOnly`는 켜고, `Secure`는 배포(`APP_MODE=aws`)에서만 켠다 (D-340). `SameSite`는 `Lax`다 (D-60, [08장 8.5](08-auth.md#85-로그인-세션과-쿠키)).
 - 비밀번호는 bcrypt 해시로 확인한다 (D-58, [08장 8.3](08-auth.md#83-비밀번호-저장-d-58)).
 - 이미 로그인한 상태에서 다시 불러도 에러가 아니다. 새 세션을 만든다.
 - 같은 계정으로 여러 브라우저에서 동시에 로그인할 수 있다. 세션은 브라우저마다 한 행이다.
@@ -254,6 +258,7 @@ Set-Cookie: sid=Jx3k...(랜덤 문자열); HttpOnly; Path=/; Max-Age=604800
 |---|---|---|
 | 401 | `LOGIN_FAILED` | 아이디가 없거나 비밀번호가 틀림. **둘을 구분하지 않는다.** 어느 쪽이 틀렸는지 알려주면 아이디가 있는지 확인하는 데 쓰일 수 있다 |
 | 422 | `VALIDATION_FAILED` | `login_id`나 `password`가 없거나 빈 문자열 |
+| 429 | `TOO_MANY_ATTEMPTS` | 같은 IP·같은 아이디로 15분에 실패 5회, 또는 같은 IP로 15분에 실패 30회. 15분 동안 막고 `Retry-After`(초)를 준다. 성공하면 그 IP·아이디의 실패 수를 지운다 (D-346) |
 
 - `LOGIN_FAILED`는 공통 코드 `UNAUTHENTICATED`와 다르다. `UNAUTHENTICATED`를 받으면 프론트는 로그인 화면으로 보내지만, 로그인 화면에서 받은 `LOGIN_FAILED`는 "아이디 또는 비밀번호가 틀렸다"는 안내를 보여준다.
 
@@ -290,6 +295,98 @@ Set-Cookie: sid=; HttpOnly; Path=/; Max-Age=0
 - 프론트는 처음 열릴 때 이 API를 불러 로그인 여부를 확인한다. `200`이면 영상 목록으로, `401`이면 로그인 화면으로 간다.
 - `role`은 `admin` 또는 `victim`이다. 프론트는 이 값으로 첫 화면을 나눈다 (D-204).
 - `password_hash`는 어떤 응답에도 넣지 않는다.
+
+### 35. `POST /api/auth/signup/start` 가입 시작
+
+요청
+
+```json
+{"login_id": "parkadmin1", "password": "Parking2026!", "name": "김관리", "role": "admin"}
+```
+
+성공: `200`
+
+```http
+Set-Cookie: oauth_state=<43자>; HttpOnly; Path=/api/auth/kakao; Max-Age=600; SameSite=Lax
+```
+
+```json
+{"authorize_url": "https://kauth.kakao.com/oauth/authorize?client_id=...&redirect_uri=...&response_type=code&state=<43자>"}
+```
+
+- 입력 규칙은 D-346 5번이다. 비밀번호를 bcrypt로 해시해 `kakao_pending`에 `purpose=signup`으로 넣는다(10분). 평문 `state`는 쿠키와 `authorize_url`에만 있다.
+- 프론트는 `authorize_url`로 페이지를 옮긴다(새 창이 아니다).
+- `oauth_state`의 `Secure`는 `sid`와 같은 규칙이다 (배포에서만).
+- `oauth_state`의 `Path`는 콜백(36번)에만 붙도록 `/api/auth/kakao`로 좁힌다.
+
+실패
+
+| HTTP | `code` | 언제 |
+|---|---|---|
+| 409 | `LOGIN_ID_TAKEN` | 이미 있는 아이디 |
+| 422 | `VALIDATION_FAILED` | 입력 규칙에 어긋남 |
+| 429 | `TOO_MANY_ATTEMPTS` | 같은 IP로 35·38번을 합쳐 1시간에 20회 초과. `Retry-After`(초) |
+
+### 36. `GET /api/auth/kakao/callback?code=&state=` 카카오 콜백
+
+카카오가 브라우저를 이 주소로 돌려보낸다. JSON이 아니라 **페이지 이동(302)**으로 답한다. 대기 행(`kakao_pending`)의 `purpose`로 나눈다.
+
+- 가입(`signup`) 성공: `users` 행을 만들고 `sid` 쿠키(1번과 같음)를 내린 뒤 `/`로 보낸다.
+- 비밀번호 바꾸기(`reset`) 성공: 회원번호로 찾은 계정의 세션을 모두 지운다(채팅 WebSocket도 닫는다, D-290과 같다). 그다음 `password_reset_until = now + 10분`인 새 `sid`를 내리고 새 비밀번호 화면으로 보낸다.
+- 두 경우 모두 `oauth_state` 쿠키를 지우고 `access_logs`에 `login`을 남긴다.
+- 실패: 주소에 `error=<code>`를 붙여 보낸다. 보내는 곳은 다음과 같다.
+  - 가입이면 가입 화면
+  - 재설정이면, 로그인 중에 시작했을 때(대기 행에 `user_id` 있음) [설정] 화면, 아니면 로그인 화면
+  - 대기 행을 찾지 못했으면 로그인 화면
+
+| `code` | 언제 |
+|---|---|
+| `KAKAO_EXPIRED` | `state`가 쿠키와 다르거나, `kakao_pending`에 없거나, 10분이 지남. 처음부터 다시 |
+| `KAKAO_CANCELLED` | 카카오 동의 화면에서 취소함(카카오가 `error`를 붙여 돌려보냄) |
+| `KAKAO_FAILED` | code 교환이나 회원번호 조회가 실패함 |
+| `KAKAO_ALREADY_USED` | (가입) 그 카카오 계정으로 이미 만든 계정이 있음 |
+| `LOGIN_ID_TAKEN` | (가입) 35번 뒤에 다른 사람이 같은 아이디로 먼저 가입함 |
+| `KAKAO_NOT_LINKED` | (재설정) 그 카카오 계정으로 가입한 계정이 없거나, 로그인 중인 계정의 카카오 계정이 아님 |
+
+- `state`가 맞으면 `kakao_pending` 행을 **먼저 지운다**. 뒤에서 실패해도 같은 `state`로 다시 시도할 수 없다.
+- code 교환은 백엔드가 카카오와 직접 한다. client secret을 쓴다 (D-346 7번).
+
+### 37. `PUT /api/auth/password` 새 비밀번호 저장
+
+요청
+
+```json
+{"new_password": "NewPass2026!"}
+```
+
+성공: `204` (본문 없음)
+
+- 새 비밀번호 규칙은 D-346 5번이다. 해시는 bcrypt (D-58).
+- 이 세션의 `password_reset_until`이 지금보다 뒤일 때만 받는다. 바꾸면 그 값을 비운다.
+- 다른 세션은 36번이 이미 모두 지웠다.
+- 새 비밀번호 화면은 3번으로 아이디를 보인다.
+
+실패
+
+| HTTP | `code` | 언제 |
+|---|---|---|
+| 401 | `UNAUTHENTICATED` | 로그인하지 않음 |
+| 403 | `PASSWORD_RESET_REQUIRED` | 카카오 재인증 세션이 아니거나 10분이 지남. 38번부터 다시 |
+| 422 | `VALIDATION_FAILED` | 새 비밀번호가 규칙에 어긋남 |
+
+### 38. `POST /api/auth/password-reset/start` 비밀번호 바꾸기·재설정 시작
+
+요청 본문 없음. 로그인 전(로그인 화면 [비밀번호 재설정])과 로그인 상태([설정] 화면 [비밀번호 변경]) 모두 부른다.
+
+성공: `200`. 응답과 `oauth_state` 쿠키는 35번과 같다.
+
+- `kakao_pending`에 `purpose=reset` 행을 넣는다. 세션 쿠키가 유효하면 그 계정 id를 `user_id`에 적는다.
+
+실패
+
+| HTTP | `code` | 언제 |
+|---|---|---|
+| 429 | `TOO_MANY_ATTEMPTS` | 같은 IP로 35·38번을 합쳐 1시간에 20회 초과. `Retry-After`(초) |
 
 ## 5.4 사건·업로드 API
 
@@ -1455,6 +1552,10 @@ flowchart TD
 |---|---|---|---|
 | `UNAUTHENTICATED` | 401 | 로그인을 뺀 모든 API | 로그인 화면으로 |
 | `LOGIN_FAILED` | 401 | 1 | "아이디 또는 비밀번호가 틀렸다" 안내. 로그인 화면에 머문다 |
+| `TOO_MANY_ATTEMPTS` | 429 | 1·35·38 | `Retry-After`만큼 기다리라고 안내. 입력값은 그대로 둔다 |
+| `LOGIN_ID_TAKEN` | 409 | 35 | "이미 쓰는 아이디" 안내. 아이디 칸으로 |
+| `PASSWORD_RESET_REQUIRED` | 403 | 37 | "다시 카카오 인증을 해 달라" 안내. 38번부터 다시 |
+| (36번 `error=`) | 302 | 36 | 보내진 화면(가입·로그인·설정)에서 코드별 안내 (36번 표) |
 | `ROLE_NOT_ALLOWED` | 403 | 역할이 정해진 API (5.2) | 역할에 맞는 첫 화면으로 (5.1) |
 | `SUPERVISION_AGREEMENT_REQUIRED` | 403 | 12·13·14·15·17 | 관리·감독 안내창을 다시 띄운다 (5.1, D-205) |
 | `CASE_NOT_FOUND` | 404 | 6 | 사건·영상 목록으로 |
