@@ -10,6 +10,8 @@ dependencies = [
     "trackers==2.6.1",
     "supervision==0.31.7",
     "openai>=3.55.1",
+    "tensorboard>=2.21.0",
+    "faster-coco-eval>=1.8.1",
 ]
 
 [dependency-groups]
