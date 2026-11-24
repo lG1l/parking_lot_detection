@@ -979,8 +979,8 @@ DB는 `payload`의 내용을 검사하지 않는다. 아래를 백엔드(Pydanti
      "clip_url": "https://<prefix>-masked.s3.ap-northeast-2.amazonaws.com/videos/17/clips/1188.mp4?X-Amz-Algorithm=..."}
   ],
   "lists": {
-    "main":         {"latest_batch_no": 1, "remaining": 20, "done": false, "unavailable": 0},
-    "parse_failed": {"latest_batch_no": 1, "remaining": 0,  "done": false, "unavailable": 0}
+    "main":         {"latest_batch_no": 1, "remaining": 20, "done": false, "unavailable": 0, "total": 30},
+    "parse_failed": {"latest_batch_no": 1, "remaining": 0,  "done": false, "unavailable": 0, "total": 3}
   }
 }
 ```
@@ -1000,6 +1000,7 @@ DB는 `payload`의 내용을 검사하지 않는다. 아래를 백엔드(Pydanti
 | `lists.*.remaining` | 그 목록에서 [다음 묶음 받기]를 누르면 더 볼 수 있는 후보 수. 어느 묶음을 보든 같은 값이다. `0`이면 마지막 묶음까지 왔다 |
 | `lists.*.done` | 그 목록의 후보를 끝까지 다 넘겼는지(`unseen` 후보가 0개). 다 넘겨도 묶음 번호는 그대로라(D-99) `remaining`이 `0`인 것만으로는 "마지막 묶음을 아직 안 넘김"과 구분되지 않는다. 비어 있는 목록도 `true`다 |
 | `lists.*.unavailable` | 그 목록 전체에서 열람 불가인 후보 수 (D-109) |
+| `lists.*.total` | 그 목록의 전체 후보 수(열람 불가 포함). 후보는 2단계 끝에 모두 만들어지므로 [다음]을 눌러도 바뀌지 않는다. 목록이 비어 있으면 `0`. 화면은 탭 숫자로 쓴다 (C-20, 07장) |
 
 - **[다음 묶음 받기]는 `status`가 `ready`이고, 보고 있는 묶음이 그 목록의 `latest_batch_no`이고, 그 목록의 `done`이 `false`일 때 보인다.** 13번에는 그 목록과 묶음 번호를 보낸다 (D-82, D-99).
 - **종료를 위한 예외(D-203)**: `status = ready`인데 두 목록의 `done`이 모두 `true`인 경우에도, 현재 보고 있는 목록의 최신 묶음에는 [다음 묶음 받기]를 표시한다. 전부 열람 불가이면 `unseen`이 없어 `done`이 먼저 `true`가 되기 때문이다. 동일한 13번에 `list`·`batch_no`를 보내 기존 처리로 `exhausted`까지 진행한다. 응답이 아직 `ready`이면 갱신된 최신 묶음에서 같은 규칙을 적용한다. 새 종료 API나 자동 종료 전이는 추가하지 않는다.
@@ -1020,7 +1021,7 @@ SELECT DISTINCT ON (d.id)
 ```
 
 - **열람 불가 후보(`unavailable`)는 `candidates` 배열에 넣지 않고 `unavailable`로 수만 알린다 (D-109).** 묶음이 10건이 아니라 9건으로 보일 수 있고, 화면은 "이 묶음에 열람 불가 N건"을 보인다. 묶음 전체가 열람 불가이면 배열이 비어 있을 수 있다.
-- `remaining`은 그 목록에서 지금 보여주는 묶음 뒤에 남은 후보 수다. 미리 준비해 둔 묶음과 아직 묶음에 들어가지 않은 후보를 함께 센다. 이번 묶음의 후보는 세지 않는다 (D-82). `done`은 그 목록에 `unseen` 후보가 하나도 없는지다. 두 목록을 한 번에 센다.
+- `remaining`은 그 목록에서 지금 보여주는 묶음 뒤에 남은 후보 수다. 미리 준비해 둔 묶음과 아직 묶음에 들어가지 않은 후보를 함께 센다. 이번 묶음의 후보는 세지 않는다 (D-82). `done`은 그 목록에 `unseen` 후보가 하나도 없는지다. `total`은 판단과 상관없이 그 목록의 후보를 모두 센다. 두 목록을 한 번에 센다.
 
 ```sql
 SELECT list_kind,
@@ -1029,10 +1030,11 @@ SELECT list_kind,
                           WHEN 'main' THEN :current_batch_no
                           ELSE :current_failed_batch_no END)) AS remaining,
        count(*) FILTER (WHERE verdict = 'unseen') AS unseen,           -- 0이면 done
-       count(*) FILTER (WHERE verdict = 'unavailable') AS unavailable  -- D-109
+       count(*) FILTER (WHERE verdict = 'unavailable') AS unavailable, -- D-109
+       count(*) AS total                                               -- C-20
   FROM candidates
- WHERE analysis_job_id = :job_id AND verdict IN ('unseen', 'unavailable')
- GROUP BY list_kind;               -- 행이 없는 목록은 remaining 0, done true
+ WHERE analysis_job_id = :job_id
+ GROUP BY list_kind;               -- 행이 없는 목록은 remaining 0, done true, total 0
 ```
 
 - **후보가 0건인 작업에는 이 API를 부를 수 없다.** 후보가 0건이면 워커가 `ready`를 거치지 않고 바로 `exhausted`로 보내므로(04장 전이 14), 이 API는 409를 돌려준다. 화면은 9번의 `status`와 `candidate_total`을 보고 "후보 구간이 탐지되지 않았다"를 띄운다. 사건이 없다는 뜻이 아니다 (PRD 3.5, D-50).
@@ -1072,8 +1074,8 @@ SELECT list_kind,
 ```json
 {"status": "ready",
  "lists": {
-   "main":         {"latest_batch_no": 2, "remaining": 10, "done": false, "unavailable": 0},
-   "parse_failed": {"latest_batch_no": 1, "remaining": 0,  "done": false, "unavailable": 0}}}
+   "main":         {"latest_batch_no": 2, "remaining": 10, "done": false, "unavailable": 0, "total": 30},
+   "parse_failed": {"latest_batch_no": 1, "remaining": 0,  "done": false, "unavailable": 0, "total": 3}}}
 ```
 
 - **보통 `ready`가 온다.** 워커가 다음 묶음을 미리 만들어 두므로 곧바로 12번으로 다음 묶음을 연다 (D-68). 준비가 끝나기 전에 누르면 `batch_running`이 오고, 화면은 9번으로 `ready`가 될 때까지 기다린다.

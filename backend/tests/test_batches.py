@@ -103,8 +103,14 @@ def test_get_batch_normal(client, me):
     assert [c["rank"] for c in body["candidates"]] == [1, 2, 3]
     assert [c["vlm_score"] for c in body["candidates"]] == [95, 94, 93]
     assert body["lists"] == {
-        "main": {"latest_batch_no": 1, "remaining": 0, "done": False, "unavailable": 0},
-        "parse_failed": {"latest_batch_no": None, "remaining": 0, "done": True, "unavailable": 0},
+        "main": {"latest_batch_no": 1, "remaining": 0, "done": False, "unavailable": 0, "total": 3},
+        "parse_failed": {
+            "latest_batch_no": None,
+            "remaining": 0,
+            "done": True,
+            "unavailable": 0,
+            "total": 0,
+        },
     }
     clip = body["candidates"][0]
     assert clip["start_sec"] == 585.0 and clip["end_sec"] == 615.0
@@ -128,6 +134,7 @@ def test_get_batch_many_summary(client, me):
         "remaining": 15,
         "done": False,
         "unavailable": 0,
+        "total": 25,
     }
     assert body["lists"]["parse_failed"]["latest_batch_no"] == 1
     failed = batch(client, vid, list="parse_failed").json()
@@ -176,6 +183,7 @@ def test_next_to_prepared_batch_stays_ready(client, me):
     assert r.status_code == 200 and r.json()["status"] == "ready"
     assert r.json()["lists"]["main"]["latest_batch_no"] == 2
     assert r.json()["lists"]["main"]["remaining"] == 5
+    assert r.json()["lists"]["main"]["total"] == 25  # not_found로 넘긴 후보도 센다 (C-20)
     assert (
         sql(
             "SELECT count(*) FROM candidates WHERE batch_no = 1 AND list_kind = 'main' "
