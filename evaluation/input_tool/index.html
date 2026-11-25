@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>KPI 입력 도구 (Kaggle RC카 클립)</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; background: #16181c; color: #e6e8eb; height: 100vh; display: flex; flex-direction: column; }
+  header { display: flex; gap: 8px; align-items: center; padding: 8px 12px; background: #1f2228; border-bottom: 1px solid #333842; flex-wrap: wrap; }
+  header .path { color: #9aa3b0; margin-right: 12px; }
+  header .progress { margin-left: auto; font-weight: 600; }
+  button { font: inherit; color: inherit; background: #2c313a; border: 1px solid #444b57; border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button:hover:not(:disabled) { background: #383e49; }
+  button:disabled { opacity: .4; cursor: default; }
+  button.on { background: #2f5fd0; border-color: #4a7af0; }
+  button.primary { background: #1f8a4c; border-color: #2aa860; font-weight: 600; }
+  main { flex: 1; display: flex; min-height: 0; }
+  #list { width: 230px; overflow-y: auto; border-right: 1px solid #333842; background: #1a1c21; }
+  #list div { padding: 3px 10px; cursor: pointer; white-space: nowrap; font-size: 13px; }
+  #list div:hover { background: #262a32; }
+  #list div.cur { background: #2f5fd0; }
+  #list div.done::before { content: "✓ "; color: #4ade80; }
+  #list div:not(.done)::before { content: "· "; color: #6b7380; }
+  #work { flex: 1; display: flex; flex-direction: column; min-width: 0; padding: 10px; gap: 8px; }
+  #stage { flex: 1; display: flex; align-items: center; justify-content: center; background: #000; }
+  #frame { position: relative; max-width: 100%; }
+  #frame video { display: block; max-width: 100%; max-height: max(240px, calc(100vh - 300px)); }
+  #frame canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #seek { flex: 1; min-width: 200px; }
+  #time { font-variant-numeric: tabular-nums; color: #9aa3b0; min-width: 190px; }
+  #steps button { padding: 3px 8px; font-size: 13px; }
+  #prompt { font-weight: 600; color: #ffd166; }
+  #errors { color: #ff7b7b; min-height: 1.5em; }
+  #desc { flex: 1; min-width: 240px; background: #1f2228; color: inherit; border: 1px solid #444b57; border-radius: 6px; padding: 5px 8px; font: inherit; }
+  #summary { color: #c8cdd5; }
+  #empty { margin: auto; color: #9aa3b0; text-align: center; line-height: 2; }
+  kbd { background: #2c313a; border: 1px solid #444b57; border-radius: 4px; padding: 0 5px; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <button id="pickVideo">① 영상 폴더</button><span class="path" id="videoPath">선택 안 함</span>
+  <button id="pickDet">② 차량 탐지 폴더</button><span class="path" id="detPath">선택 안 함</span>
+  <button id="pickSave">③ 저장 폴더</button><span class="path" id="savePath">선택 안 함</span>
+  <span class="progress" id="progress"></span>
+</header>
+<main>
+  <div id="list"></div>
+  <div id="work">
+    <div id="stage">
+      <div id="empty">
+        Chrome 또는 Edge에서 엽니다.<br>
+        ① Kaggle 영상(.mp4) 폴더, ② 첫 프레임 차량 탐지 결과(<code>클립이름.json</code>) 폴더,<br>
+        ③ 입력을 저장할 폴더(<code>evaluation/kaggle_inputs</code>)를 고르면 아직 입력하지 않은 첫 클립부터 열립니다.<br>
+        저장한 클립은 다음에 열 때 건너뜁니다.
+      </div>
+      <div id="frame" hidden><video id="video" muted playsinline></video><canvas id="canvas"></canvas></div>
+    </div>
+    <div class="row">
+      <button id="play">재생 <kbd>Space</kbd></button>
+      <button id="toStart">첫 프레임으로 <kbd>Home</kbd></button>
+      <button id="back">◀ 1프레임 <kbd>←</kbd></button>
+      <button id="fwd">1프레임 ▶ <kbd>→</kbd></button>
+      <input type="range" id="seek" min="0" max="1" step="0.001" value="0">
+      <span id="time"></span>
+    </div>
+    <div class="row" id="steps"></div>
+    <div class="row">
+      <span id="prompt"></span>
+      <button id="visYes" hidden>보임</button>
+      <button id="visNo" hidden>안 보임</button>
+      <button id="redo" hidden></button>
+      <button id="copyPrev" hidden>앞 클립의 파손 입력 그대로 쓰기</button>
+      <input id="desc" maxlength="500" placeholder="설명 (선택, 최대 500자)" hidden>
+      <span id="summary" hidden></span>
+    </div>
+    <div class="row">
+      <button id="prev">이전 단계</button>
+      <button id="next">다음 <kbd>Enter</kbd></button>
+      <button id="save" class="primary" hidden>저장하고 다음 클립 <kbd>Enter</kbd></button>
+    </div>
+    <div id="errors"></div>
+  </div>
+</main>
+<script>
+"use strict";
+// 서비스의 차량 선택·파손 부위 입력 화면(07장 2.6)과 같은 순서로 입력을 받는다.
+// 저장하는 파일은 로컬에서 파이프라인에 넣는 입력 JSON 그대로다 (pipeline/candidates/s1_base/inputs.py).
+const $ = (id) => document.getElementById(id);
+const video = $("video"), canvas = $("canvas"), ctx = canvas.getContext("2d");
+const FPS = 30; // Kaggle RC카 클립은 30fps다. 프레임 번호 표시는 어림값이다
+const STEPS = ["차량 고르기", "파손이 보이나요?", "파손 부위 드래그", "바닥 네 모서리", "앞쪽 변 고르기", "파손 변 고르기", "설명 (선택)", "확인 후 저장"];
+
+let videoDir = null, detDir = null, saveDir = null;
+let clips = [];       // { name: "220510_LA_0000", handle, done }
+let idx = -1;
+let dets = [];        // 이 클립 첫 프레임의 탐지 목록 (04장 still_frames.detections 형식)
+let lastSaved = null; // 이번에 마지막으로 저장한 입력
+let step = 0;
+let hover = null, dragBox = null, dragStart = null, dragCorner = null, notice = "";
+let input = emptyInput();
+
+function emptyInput() {
+  return { det: null, visible: null, damage: null, corners: [], front: null, edges: [], desc: "" };
+}
+
+// ---------- 폴더 ----------
+async function pick(id, mode) {
+  try { return await window.showDirectoryPicker({ id, mode }); } catch { return null; }
+}
+$("pickVideo").onclick = async () => { const d = await pick("kpi-video", "read"); if (d) { videoDir = d; $("videoPath").textContent = d.name; await reload(); } };
+$("pickDet").onclick = async () => { const d = await pick("kpi-det", "read"); if (d) { detDir = d; $("detPath").textContent = d.name; await reload(); } };
+$("pickSave").onclick = async () => { const d = await pick("kpi-save", "readwrite"); if (d) { saveDir = d; $("savePath").textContent = d.name; await reload(); } };
+
+async function reload() {
+  if (!videoDir || !detDir || !saveDir) return;
+  const saved = new Set();
+  for await (const [name, h] of saveDir.entries()) {
+    if (h.kind === "file" && name.toLowerCase().endsWith(".json")) saved.add(name.slice(0, -5));
+  }
+  clips = [];
+  for await (const [name, h] of videoDir.entries()) {
+    if (h.kind === "file" && name.toLowerCase().endsWith(".mp4")) {
+      const base = name.slice(0, -4);
+      clips.push({ name: base, handle: h, done: saved.has(base) });
+    }
+  }
+  clips.sort((a, b) => a.name.localeCompare(b.name));
+  if (!clips.length) { renderList(); $("errors").textContent = "영상 폴더에 .mp4 파일이 없습니다."; return; }
+  const first = clips.findIndex((c) => !c.done);
+  await openClip(first >= 0 ? first : 0);
+}
+
+function renderList() {
+  const list = $("list");
+  list.innerHTML = "";
+  clips.forEach((c, i) => {
+    const d = document.createElement("div");
+    d.textContent = c.name;
+    d.className = (c.done ? "done " : "") + (i === idx ? "cur" : "");
+    d.onclick = () => openClip(i);
+    list.appendChild(d);
+  });
+  const done = clips.filter((c) => c.done).length;
+  $("progress").textContent = clips.length ? `${clips.length}개 중 ${done}개 완료` : "";
+  const cur = list.querySelector(".cur");
+  if (cur) cur.scrollIntoView({ block: "nearest" });
+}
+
+// ---------- 클립 열기 ----------
+async function readJson(dir, name) {
+  const fh = await dir.getFileHandle(name + ".json");
+  return JSON.parse(await (await fh.getFile()).text());
+}
+
+async function openClip(i) {
+  idx = i;
+  const clip = clips[i];
+  input = emptyInput();
+  notice = "";
+  try { dets = await readJson(detDir, clip.name); }
+  catch { dets = []; notice = `차량 탐지 폴더에 ${clip.name}.json이 없거나 읽지 못했습니다.`; }
+  if (!notice && !dets.length) notice = "이 클립은 탐지된 차량이 0대입니다. 입력할 수 없습니다.";
+  step = 0;
+  if (clip.done) {
+    try { input = fromJson(await readJson(saveDir, clip.name)); step = 7; }
+    catch (e) { notice = `저장된 ${clip.name}.json을 읽지 못했습니다: ${e.message}`; }
+  }
+  if (video.src) URL.revokeObjectURL(video.src);
+  video.src = URL.createObjectURL(await clip.handle.getFile());
+  $("empty").hidden = true;
+  $("frame").hidden = false;
+  renderList();
+  refresh();
+}
+
+video.onloadedmetadata = () => {
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  $("seek").max = video.duration;
+  refresh();
+};
+video.ontimeupdate = video.onseeked = () => { $("seek").value = video.currentTime; draw(); showTime(); };
+video.onplay = video.onpause = () => { $("play").firstChild.textContent = video.paused ? "재생 " : "멈춤 "; };
+
+function showTime() {
+  if (!video.duration) return;
+  const f = Math.round(video.currentTime * FPS), total = Math.round(video.duration * FPS);
+  $("time").textContent = `${video.currentTime.toFixed(2)}초 / ${video.duration.toFixed(2)}초 · 약 ${f}/${total}프레임`;
+}
+function atStart() { return !(video.currentTime > 0.001); }
+function toStart() { video.pause(); video.currentTime = 0; }
+function seekBy(dt) {
+  video.pause();
+  video.currentTime = Math.min(Math.max(0, video.currentTime + dt), video.duration || 0);
+}
+$("play").onclick = () => (video.paused ? video.play() : video.pause());
+$("toStart").onclick = toStart;
+$("back").onclick = () => seekBy(-1 / FPS);
+$("fwd").onclick = () => seekBy(1 / FPS);
+$("seek").oninput = () => { video.currentTime = Number($("seek").value); };
+
+// ---------- JSON ----------
+function toJson(inp) {
+  const damage = {
+    visible: inp.visible,
+    damage_bbox: inp.damage,
+    floor_corners: inp.corners,
+    front_edge: inp.front,
+    damage_edges: inp.edges,
+  };
+  if (inp.desc.trim()) damage.description = inp.desc.trim(); // 값이 없으면 키를 뺀다 (04장)
+  return { vehicle: { bbox: inp.det.bbox }, damage }; // 고른 탐지의 bbox가 본인 차량 영역이다 (D-65)
+}
+function fromJson(data) {
+  const det = dets.find((d) => d.bbox.join() === data.vehicle.bbox.join());
+  if (!det) throw new Error("저장된 차량 bbox와 같은 탐지가 탐지 목록에 없습니다");
+  const d = data.damage;
+  return {
+    det, visible: d.visible, damage: d.damage_bbox, corners: d.floor_corners,
+    front: d.front_edge, edges: d.damage_edges, desc: d.description || "",
+  };
+}
+async function writeJson(name, data) {
+  const fh = await saveDir.getFileHandle(name + ".json", { create: true });
+  const w = await fh.createWritable();
+  await w.write(JSON.stringify(data, null, 2) + "\n");
+  await w.close();
+}
+
+// ---------- 도형 계산 ----------
+function polyOf(det) {
+  if (det.polygon) return det.polygon;
+  const [x1, y1, x2, y2] = det.bbox; // polygon이 없는 탐지는 bbox 사각형으로 고른다
+  return [[x1, y1], [x2, y1], [x2, y2], [x1, y2]];
+}
+function polyArea(p) {
+  let s = 0;
+  for (let i = 0; i < p.length; i++) { const a = p[i], b = p[(i + 1) % p.length]; s += a[0] * b[1] - b[0] * a[1]; }
+  return Math.abs(s) / 2;
+}
+function inPoly(pt, p) {
+  let inside = false;
+  for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
+    const a = p[i], b = p[j];
+    if ((a[1] > pt[1]) !== (b[1] > pt[1]) && pt[0] < ((b[0] - a[0]) * (pt[1] - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside;
+  }
+  return inside;
+}
+// 누른 점을 품은 탐지를 넓이가 작은 것부터 준다 (07장 2.6 "겹친 곳")
+function hitsAt(pt) {
+  return dets.filter((d) => inPoly(pt, polyOf(d))).sort((a, b) => polyArea(polyOf(a)) - polyArea(polyOf(b)));
+}
+function cross(o, a, b) { return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]); }
+function onSeg(a, b, p) {
+  return Math.min(a[0], b[0]) <= p[0] && p[0] <= Math.max(a[0], b[0]) &&
+         Math.min(a[1], b[1]) <= p[1] && p[1] <= Math.max(a[1], b[1]);
+}
+function segmentsMeet(a, b, c, d) {
+  const d1 = cross(a, b, c), d2 = cross(a, b, d), d3 = cross(c, d, a), d4 = cross(c, d, b);
+  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return true;
+  return (d1 === 0 && onSeg(a, b, c)) || (d2 === 0 && onSeg(a, b, d)) ||
+         (d3 === 0 && onSeg(c, d, a)) || (d4 === 0 && onSeg(c, d, b));
+}
+function twisted(c) { return segmentsMeet(c[0], c[1], c[2], c[3]) || segmentsMeet(c[1], c[2], c[3], c[0]); }
+function adjacent(a, b) { const m = (((a - b) % 4) + 4) % 4; return m === 1 || m === 3; }
+function distToSeg(p, a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], len = dx * dx + dy * dy;
+  const t = len ? Math.min(1, Math.max(0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len)) : 0;
+  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+}
+function nearestEdge(p) {
+  let best = 0, bestD = Infinity;
+  for (let i = 0; i < 4; i++) {
+    const d = distToSeg(p, input.corners[i], input.corners[(i + 1) % 4]);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
+}
+
+// ---------- 단계 ----------
+function stepDone(i) {
+  return [
+    input.det !== null,
+    input.visible !== null,
+    input.damage !== null,
+    input.corners.length === 4,
+    input.front !== null,
+    input.edges.length > 0,
+    true,
+    true,
+  ][i];
+}
+function maxStep() { const i = STEPS.findIndex((_, k) => !stepDone(k)); return i < 0 ? 7 : i; }
+function goTo(s) { if (s >= 0 && s <= maxStep()) { step = s; notice = ""; refresh(); } }
+function resetCorners() { input.corners = []; input.front = null; input.edges = []; } // 변 번호가 점 순서에 묶여 있다 (D-212)
+
+function prompt() {
+  const vis = input.visible;
+  return [
+    "본인 차량(피해 차량)을 눌러 선택해주세요",
+    "파손 부위가 이 장면에 보이나요?" + (vis === null ? "" : vis ? " — 보임" : " — 안 보임"),
+    vis === false ? "보이지 않는 파손이 있을 위치를 작은 사각형으로 드래그해주세요" : "파손 부위를 드래그해 주세요 (비충돌 클립은 차가 다가오는 쪽)",
+    `차가 바닥에 닿는 네 모서리를 차례로 눌러주세요. 찍은 점은 끌어서 고칩니다 — 4개 중 ${input.corners.length}개`,
+    "차의 앞쪽 변을 눌러주세요",
+    "파손이 있는 변을 눌러주세요. 모서리 파손이면 이웃한 변 2개를 고릅니다",
+    "설명을 적습니다 (선택)",
+    "입력 내용을 확인하고 저장합니다",
+  ][step];
+}
+
+function refresh() {
+  const active = idx >= 0;
+  const steps = $("steps");
+  steps.innerHTML = "";
+  STEPS.forEach((name, i) => {
+    const b = document.createElement("button");
+    b.textContent = `${i + 1} ${name}`;
+    b.className = i === step ? "on" : "";
+    b.disabled = !active || i > maxStep();
+    b.onclick = () => goTo(i);
+    steps.appendChild(b);
+  });
+  $("prompt").textContent = active ? prompt() : "";
+  $("visYes").hidden = $("visNo").hidden = !(active && step === 1);
+  $("visYes").classList.toggle("on", input.visible === true);
+  $("visNo").classList.toggle("on", input.visible === false);
+  $("redo").hidden = !(active && (step === 2 || step === 3));
+  $("redo").textContent = step === 2 ? "다시 그리기" : "다시 찍기";
+  $("copyPrev").hidden = !(active && step === 0);
+  $("copyPrev").disabled = !input.det || !(lastSaved || (idx > 0 && clips[idx - 1].done));
+  $("desc").hidden = !(active && step === 6);
+  $("desc").value = input.desc;
+  $("summary").hidden = !(active && step === 7);
+  if (active && step === 7) {
+    $("summary").textContent = `차량 선택함 · 파손 ${input.visible ? "보임" : "안 보임"} · 파손 부위 1개 · ` +
+      `바닥 모서리 4개 · 앞쪽 변 ${input.front} · 파손 변 ${input.edges.length}개 · 설명 ${input.desc.trim() ? "있음" : "없음"}`;
+  }
+  $("prev").disabled = !active || step === 0;
+  $("next").hidden = step === 7;
+  $("next").disabled = !active || !stepDone(step);
+  $("save").hidden = step !== 7;
+  $("save").disabled = !active;
+  $("errors").textContent = notice;
+  draw();
+  showTime();
+}
+
+// ---------- 그리기 ----------
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (idx < 0 || !atStart()) return; // 입력은 서비스처럼 첫 프레임 위에서만 한다 (D-48)
+  const k = canvas.width / (canvas.getBoundingClientRect().width || canvas.width); // 화면 1px이 원본 몇 px인지
+  const fillPoly = (p, alpha) => {
+    ctx.fillStyle = `rgba(255, 209, 102, ${alpha})`;
+    ctx.beginPath(); ctx.moveTo(p[0][0], p[0][1]);
+    for (const q of p.slice(1)) ctx.lineTo(q[0], q[1]);
+    ctx.closePath(); ctx.fill();
+  };
+  if (step === 0 && hover && hover !== input.det) fillPoly(polyOf(hover), 0.25);
+  if (input.det) fillPoly(polyOf(input.det), step === 0 ? 0.55 : 0.2);
+
+  const b = dragBox || (step >= 2 ? input.damage : null);
+  if (b) {
+    ctx.fillStyle = "rgba(255, 93, 93, 0.2)"; ctx.fillRect(b[0], b[1], b[2] - b[0], b[3] - b[1]);
+    ctx.strokeStyle = "#ff5d5d"; ctx.lineWidth = 2 * k; ctx.strokeRect(b[0], b[1], b[2] - b[0], b[3] - b[1]);
+  }
+  if (step < 3) return;
+  const c = input.corners;
+  for (let i = 0; i < (c.length === 4 ? 4 : c.length - 1); i++) {
+    const a = c[i], e = c[(i + 1) % 4];
+    const isFront = step >= 4 && input.front === i, isDamage = step >= 5 && input.edges.includes(i);
+    ctx.strokeStyle = isDamage ? "#ff5d5d" : isFront ? "#4ade80" : "#3d8bff";
+    ctx.lineWidth = (isFront || isDamage ? 5 : 2) * k;
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(e[0], e[1]); ctx.stroke();
+  }
+  ctx.fillStyle = "#3d8bff"; ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5 * k;
+  for (const p of c) { ctx.beginPath(); ctx.arc(p[0], p[1], 5 * k, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+}
+
+// ---------- 마우스 ----------
+function pos(e) {
+  const r = canvas.getBoundingClientRect();
+  const x = Math.round(((e.clientX - r.left) / r.width) * canvas.width);
+  const y = Math.round(((e.clientY - r.top) / r.height) * canvas.height);
+  return [Math.min(Math.max(0, x), canvas.width), Math.min(Math.max(0, y), canvas.height)];
+}
+
+canvas.onmousedown = (e) => {
+  if (idx < 0) return;
+  if (!atStart()) { toStart(); notice = "입력은 첫 프레임에서 합니다. 첫 프레임으로 돌아왔습니다."; refresh(); return; }
+  notice = "";
+  const p = pos(e);
+  if (step === 0) {
+    const hits = hitsAt(p);
+    const cur = hits.indexOf(input.det);
+    const picked = hits.length ? hits[(cur + 1) % hits.length] : null; // 같은 자리를 다시 누르면 다음으로 작은 차
+    if (picked !== input.det) { input.det = picked; input.damage = null; } // 차를 바꾸거나 풀면 파손 사각형을 지운다
+  } else if (step === 2) {
+    dragStart = p; dragBox = null;
+  } else if (step === 3) {
+    const k = canvas.width / canvas.getBoundingClientRect().width;
+    const hit = input.corners.findIndex((c) => Math.hypot(c[0] - p[0], c[1] - p[1]) <= 12 * k);
+    if (hit >= 0) { dragCorner = { i: hit, from: input.corners[hit] }; return; } // 찍은 점을 끌어서 고친다
+    if (input.corners.length === 4) return;
+    if (input.corners.some((c) => c[0] === p[0] && c[1] === p[1])) return;
+    input.front = null; input.edges = [];
+    input.corners.push(p);
+    if (input.corners.length === 4 && twisted(input.corners)) {
+      resetCorners();
+      notice = "모서리를 차 둘레를 따라 차례로 찍어주세요.";
+    }
+  } else if (step === 4) {
+    input.front = nearestEdge(p);
+  } else if (step === 5) {
+    const i = nearestEdge(p);
+    if (input.edges.includes(i)) input.edges = input.edges.filter((v) => v !== i);
+    else if (input.edges.length === 1 && adjacent(input.edges[0], i)) input.edges.push(i);
+    else input.edges = [i]; // 이웃하지 않은 변이나 세 번째 변은 새로 고른 것으로 바꾼다
+  }
+  refresh();
+};
+canvas.onmousemove = (e) => {
+  if (idx < 0) return;
+  const p = pos(e);
+  if (step === 0) { hover = hitsAt(p)[0] || null; draw(); }
+  else if (dragCorner) { input.corners[dragCorner.i] = p; draw(); }
+  else if (dragStart) {
+    const s = dragStart;
+    dragBox = [Math.min(s[0], p[0]), Math.min(s[1], p[1]), Math.max(s[0], p[0]), Math.max(s[1], p[1])];
+    draw();
+  }
+};
+window.onmouseup = () => {
+  if (dragCorner) {
+    const c = input.corners, d = dragCorner;
+    dragCorner = null;
+    const same = c.some((q, j) => j !== d.i && q[0] === c[d.i][0] && q[1] === c[d.i][1]);
+    if (same || (c.length === 4 && twisted(c))) { // 꼬이거나 겹치면 끌기 전 자리로 되돌린다
+      c[d.i] = d.from;
+      notice = "모서리를 차 둘레를 따라 차례로 찍어주세요.";
+    }
+    refresh();
+    return;
+  }
+  if (!dragStart) return;
+  if (dragBox && dragBox[2] > dragBox[0] && dragBox[3] > dragBox[1]) input.damage = dragBox;
+  dragStart = dragBox = null;
+  refresh();
+};
+
+// ---------- 버튼 ----------
+$("visYes").onclick = () => { input.visible = true; refresh(); };
+$("visNo").onclick = () => { input.visible = false; refresh(); };
+$("redo").onclick = () => { if (step === 2) input.damage = null; else resetCorners(); refresh(); };
+$("desc").oninput = () => { input.desc = $("desc").value; };
+$("prev").onclick = () => goTo(step - 1);
+$("next").onclick = () => { if (stepDone(step)) goTo(step + 1); };
+$("copyPrev").onclick = async () => {
+  let src = lastSaved;
+  if (!src) {
+    try { // 앞 클립의 탐지 번호는 이 클립과 다르므로 파손 입력만 가져온다
+      const d = (await readJson(saveDir, clips[idx - 1].name)).damage;
+      src = { visible: d.visible, damage: d.damage_bbox, corners: d.floor_corners, front: d.front_edge, edges: d.damage_edges, desc: d.description || "" };
+    } catch (e) { notice = `앞 클립의 JSON을 읽지 못했습니다: ${e.message}`; refresh(); return; }
+  }
+  input = { ...structuredClone({ ...src, det: null }), det: input.det };
+  goTo(7);
+};
+$("save").onclick = async () => {
+  if (idx < 0 || step !== 7) return;
+  const clip = clips[idx];
+  try { await writeJson(clip.name, toJson(input)); }
+  catch (e) { notice = `저장하지 못했습니다: ${e.message}`; refresh(); return; }
+  clip.done = true;
+  lastSaved = structuredClone({ ...input, det: null });
+  let next = clips.findIndex((c, i) => i > idx && !c.done);
+  if (next < 0) next = clips.findIndex((c) => !c.done);
+  if (next < 0) { renderList(); notice = "모든 클립의 입력을 마쳤습니다."; refresh(); return; }
+  await openClip(next);
+};
+
+window.onkeydown = (e) => {
+  if (idx < 0) return;
+  if (e.key === "Enter") { e.preventDefault(); (step === 7 ? $("save") : $("next")).click(); return; }
+  if (e.target === $("desc")) return;
+  if (e.key === " ") { e.preventDefault(); $("play").click(); }
+  else if (e.key === "Home") { e.preventDefault(); toStart(); }
+  else if (e.key === "ArrowLeft") { e.preventDefault(); seekBy((e.shiftKey ? -FPS : -1) / FPS); }
+  else if (e.key === "ArrowRight") { e.preventDefault(); seekBy((e.shiftKey ? FPS : 1) / FPS); }
+};
+window.onresize = draw;
+
+if (!window.showDirectoryPicker) {
+  notice = "이 브라우저는 폴더 선택을 지원하지 않습니다. Chrome 또는 Edge에서 열어 주세요.";
+  $("pickVideo").disabled = $("pickDet").disabled = $("pickSave").disabled = true;
+}
+refresh();
+</script>
+</body>
+</html>
