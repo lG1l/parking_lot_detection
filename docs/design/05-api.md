@@ -333,6 +333,7 @@ Set-Cookie: oauth_state=<43자>; HttpOnly; Path=/api/auth/kakao; Max-Age=600; Sa
 | 409 | `LOGIN_ID_TAKEN` | 이미 있는 아이디 |
 | 422 | `VALIDATION_FAILED` | 입력 규칙에 어긋남 |
 | 429 | `TOO_MANY_ATTEMPTS` | 같은 IP로 35·38번을 합쳐 1시간에 20회 초과. `Retry-After`(초) |
+| 503 | `KAKAO_NOT_CONFIGURED` | 서버에 카카오 키가 없음(로컬에서 키를 넣지 않은 경우). 프론트는 "지금은 가입할 수 없습니다"를 보인다 |
 
 ### 36. `GET /api/auth/kakao/callback?code=&state=` 카카오 콜백
 
@@ -341,10 +342,11 @@ Set-Cookie: oauth_state=<43자>; HttpOnly; Path=/api/auth/kakao; Max-Age=600; Sa
 - 가입(`signup`) 성공: `users` 행을 만들고 `sid` 쿠키(1번과 같음)를 내린 뒤 `/`로 보낸다.
 - 비밀번호 바꾸기(`reset`) 성공: 회원번호로 찾은 계정의 세션을 모두 지운다(채팅 WebSocket도 닫는다, D-290과 같다). 그다음 `password_reset_until = now + 10분`인 새 `sid`를 내리고 새 비밀번호 화면으로 보낸다.
 - 두 경우 모두 `oauth_state` 쿠키를 지우고 `access_logs`에 `login`을 남긴다.
-- 실패: 주소에 `error=<code>`를 붙여 보낸다. 보내는 곳은 다음과 같다.
-  - 가입이면 가입 화면
-  - 재설정이면, 로그인 중에 시작했을 때(대기 행에 `user_id` 있음) [설정] 화면, 아니면 로그인 화면
-  - 대기 행을 찾지 못했으면 로그인 화면
+- 실패: 주소에 `error=<code>`를 붙여 보낸다 (예: `/#/signup?error=KAKAO_ALREADY_USED`). 보내는 곳은 다음과 같다.
+  - 가입이면 가입 화면 `/#/signup`
+  - 재설정이면, 로그인 중에 시작했을 때(대기 행에 `user_id` 있음) [설정] 화면, 아니면 로그인 화면 `/#/login`
+  - `state`가 `oauth_state` 쿠키와 다르거나 대기 행을 찾지 못했으면 로그인 화면 `/#/login`
+- 화면 주소는 프론트 라우트와 같아야 한다. 팀원 1이 다른 주소를 고르면 이 줄과 백엔드 상수(`app/kakao.py`)를 같이 바꾼다.
 
 | `code` | 언제 |
 |---|---|
@@ -1562,6 +1564,7 @@ flowchart TD
 | `LOGIN_FAILED` | 401 | 1 | "아이디 또는 비밀번호가 틀렸다" 안내. 로그인 화면에 머문다 |
 | `TOO_MANY_ATTEMPTS` | 429 | 1·35·38 | `Retry-After`만큼 기다리라고 안내. 입력값은 그대로 둔다 |
 | `LOGIN_ID_TAKEN` | 409 | 35 | "이미 쓰는 아이디" 안내. 아이디 칸으로 |
+| `KAKAO_NOT_CONFIGURED` | 503 | 35 | "지금은 가입할 수 없습니다" 안내. 가입 화면에 머문다 |
 | `PASSWORD_RESET_REQUIRED` | 403 | 37 | "다시 카카오 인증을 해 달라" 안내. 38번부터 다시 |
 | (36번 `error=`) | 302 | 36 | 보내진 화면(가입·로그인·설정)에서 코드별 안내 (36번 표) |
 | `ROLE_NOT_ALLOWED` | 403 | 역할이 정해진 API (5.2) | 역할에 맞는 첫 화면으로 (5.1) |
