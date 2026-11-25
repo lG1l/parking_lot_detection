@@ -45,7 +45,8 @@ class _SupervisionDialogState extends State<_SupervisionDialog> {
       contentPadding: const EdgeInsets.fromLTRB(40, 32, 40, 8),
       actionsPadding: const EdgeInsets.fromLTRB(40, 8, 40, 32),
       content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
+        // 서약 문장(16px 굵게)이 한 줄에 들어가는 너비. 화면이 좁으면 줄바꿈된다.
+        constraints: const BoxConstraints(maxWidth: 700),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -79,18 +80,22 @@ class _SupervisionDialogState extends State<_SupervisionDialog> {
                   ),
                 ),
               const SizedBox(height: 20),
-              const Text('아래 문장을 그대로 입력해야 열 수 있습니다.', style: body),
-              const SizedBox(height: 6),
+              const Text('아래 문장을 그대로 입력해야 열 수 있습니다.', style: TextStyle(fontSize: 14, height: 1.4)),
+              const SizedBox(height: 2),
               const Text(
                 supervisionPledge,
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: inkColor, height: 1.6),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: inkColor, height: 1.6),
               ),
               const SizedBox(height: 10),
               TextField(
                 key: const Key('supervision-pledge'),
                 autofocus: true,
-                minLines: 1,
-                maxLines: 3,
+                // 엔터는 줄바꿈이 아니라 [동의하고 열람]. 문장이 다르면 아무 일도 없이 입력칸에 남는다 (D-352).
+                maxLines: 1,
+                textInputAction: TextInputAction.done,
+                onEditingComplete: () {
+                  if (_matched) Navigator.pop(context, true);
+                },
                 // 붙여넣기로 넘기지 않게 선택·붙여넣기 메뉴를 끈다 (D-326)
                 enableInteractiveSelection: false,
                 onChanged: (v) => setState(() => _typed = v),

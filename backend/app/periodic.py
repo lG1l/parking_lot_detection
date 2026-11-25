@@ -6,7 +6,7 @@ import time
 import boto3
 from sqlalchemy import text
 
-from app import jobs
+from app import jobs, push
 from app.chats import CHAT_DAYS
 from app.config import get_settings
 from app.db import get_engine
@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 TICK_SECONDS = 5  # GPU 켜기 점검·재전송 주기 (D-42, D-56)
 HOURLY_SECONDS = 3600  # 파기·동의 기록 정리 주기 (D-106)
+PUSH_SECONDS = 15  # 웹 푸시 확인 주기 (D-358)
 AGREEMENT_DAYS = 90  # 동의 기록 보관 기간 (04장 upload_agreements)
 
 # 대기 상태별로 다시 넣을 메시지 (04장 4.6 표, D-107)
@@ -47,6 +48,12 @@ def delete_old_agreements() -> None:
             ),
             {"d": AGREEMENT_DAYS},
         )
+
+
+def delete_expired_kakao_pending() -> None:
+    """카카오 인증을 마치지 않고 10분이 지난 대기 행을 지운다. 비밀번호 해시가 들어 있다 (D-356)."""
+    with get_engine().begin() as conn:
+        conn.execute(text("DELETE FROM kakao_pending WHERE expires_at <= now()"))
 
 
 def delete_old_chat_messages() -> None:
@@ -140,6 +147,7 @@ def _safely(task) -> None:
 def run() -> None:
     gpu = GpuCheck()
     last_hourly = None
+    last_push = None
     while True:
         now = time.monotonic()
         if (
@@ -149,6 +157,10 @@ def run() -> None:
             _safely(mark_expired)
             _safely(delete_old_agreements)
             _safely(delete_old_chat_messages)
+            _safely(delete_expired_kakao_pending)
+        if last_push is None or now - last_push >= PUSH_SECONDS:
+            last_push = now
+            _safely(push.send_pending)
         _safely(requeue_stalled)
         _safely(gpu.tick)
         time.sleep(TICK_SECONDS)

@@ -25,6 +25,9 @@ const maxDescriptionLength = 500;
 /// 채팅 메시지 최대 글자 수 (01장 1.6, 05장 31번 초안, D-290).
 const maxMessageLength = 1000;
 
+/// 후보 묶음 하나의 최대 후보 수 (01장 1.6). 전체 묶음 수를 셀 때 쓴다.
+const batchSize = 10;
+
 /// 사용자 재시도 최대 횟수 (D-112). 문구에만 쓰고 남은 횟수는 서버 값을 쓴다.
 const maxUserRetries = 3;
 

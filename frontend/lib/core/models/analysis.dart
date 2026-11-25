@@ -58,6 +58,7 @@ class ListSummary {
     required this.remaining,
     required this.done,
     required this.unavailable,
+    this.total,
   });
 
   factory ListSummary.fromJson(Map<String, dynamic> j) => ListSummary(
@@ -65,12 +66,16 @@ class ListSummary {
     remaining: j['remaining'] as int,
     done: j['done'] as bool,
     unavailable: j['unavailable'] as int? ?? 0,
+    total: j['total'] as int?,
   );
 
   final int? latestBatchNo;
   final int remaining;
   final bool done;
   final int unavailable;
+
+  /// 그 목록의 전체 후보 수(열람 불가 포함). 아직 서버가 주지 않아 null이면 화면이 계산한다 (C-20).
+  final int? total;
 }
 
 Map<String, ListSummary> listsFromJson(Map<String, dynamic> j) => {

@@ -32,7 +32,7 @@
 
 | 대상 | 방법 | 실패 |
 |---|---|---|
-| 로그인을 뺀 모든 API | 세션 쿠키 (D-30) | 401 `UNAUTHENTICATED` |
+| 로그인(1번)·가입(35·36번)·비밀번호 재설정 시작(38번)을 뺀 모든 API | 세션 쿠키 (D-30) | 401 `UNAUTHENTICATED` |
 
 - **역할**: 계정은 관리자·피해자 두 종류이고, API마다 부를 수 있는 역할이 정해져 있다 (5.2, [08장 8.7](08-auth.md#87-다른-사건-접근과-역할-차단)). 맞지 않으면 403 `ROLE_NOT_ALLOWED`다 (D-204).
 - `/api/videos/{video_id}/...`는 요청마다 영상의 사건(`videos.case_id` → `cases`)에 로그인한 계정이 묶여 있는지 확인한다. 아니면 없는 영상과 똑같이 404 `VIDEO_NOT_FOUND`를 돌려준다. `video_id`는 순서대로 매기는 번호라 추측할 수 있기 때문이다 (D-39, D-204).
@@ -148,13 +148,17 @@ GPU EC2 켜기 요청
 
 인증 방법은 5.1의 표를 따른다. "전이"는 04장 4.3 전이 표의 번호다.
 
-**계정** (세션 쿠키. 1은 로그인 전에 부른다. 회원가입은 없고 계정은 스크립트로 만든다, D-44)
+**계정** (세션 쿠키. 1·35·36·38은 로그인 전에 부른다. 계정은 가입 화면이나 스크립트로 만든다, D-356)
 
 | # | 메서드·주소 | 하는 일 | 관련 |
 |---|---|---|---|
 | 1 | `POST /api/auth/login` | 로그인. 세션 쿠키를 내려준다 | D-30 |
 | 2 | `POST /api/auth/logout` | 로그아웃. `sessions` 행을 지운다 | D-30 |
 | 3 | `GET /api/auth/me` | 지금 로그인한 사용자. 프론트가 처음 열릴 때 로그인 여부를 확인한다 | |
+| 35 | `POST /api/auth/signup/start` | 가입 시작. 입력을 검사·보관하고 카카오 인증 주소를 돌려준다 | D-356 |
+| 36 | `GET /api/auth/kakao/callback` | 카카오가 돌려보내는 주소. 가입이면 계정을 만들고, 비밀번호 바꾸기면 그 계정으로 다시 로그인시킨다 | D-356, D-357 |
+| 37 | `PUT /api/auth/password` | 새 비밀번호 저장. 카카오 재인증 뒤 10분 안에만 받는다 | D-357 |
+| 38 | `POST /api/auth/password-reset/start` | 비밀번호 바꾸기·재설정 시작. 카카오 인증 주소를 돌려준다 | D-357 |
 
 **사건** (세션 쿠키)
 
@@ -219,9 +223,16 @@ GPU EC2 켜기 요청
 | 34 | `PUT /api/chats/{peer_user_id}/notices-seen` | 알림 본 시각 저장 | D-338 |
 | 33 | `GET /api/chats/ws` (WebSocket) | 새 메시지 받기. 서버에서 화면으로만 보낸다 | D-286 |
 
+**웹 푸시** (세션 쿠키. 두 계정 모두 부른다, D-358. 5.13)
+
+| # | 메서드·주소 | 하는 일 | 관련 |
+|---|---|---|---|
+| 39 | `GET /api/push/public-key` | VAPID 공개 키. 브라우저가 구독을 만들 때 쓴다 | D-358 |
+| 40 | `PUT /api/push/subscription` | 이 세션의 웹 푸시 구독 저장 | D-358 |
+
 ## 5.3 계정 API
 
-회원가입은 없다. 데모는 스크립트로 만든 **관리자 계정과 피해자 계정**으로 로그인한다 (D-44, D-204).
+계정은 가입 화면(35·36번, 카카오 인증)이나 스크립트로 만든다. 로그인은 어느 쪽이든 아이디·비밀번호로 한다 (D-356, D-204).
 
 ### 1. `POST /api/auth/login` 로그인
 
@@ -242,7 +253,7 @@ Set-Cookie: sid=Jx3k...(랜덤 문자열); HttpOnly; Path=/; Max-Age=604800
 ```
 
 - `sessions` 행을 새로 만든다. 행에는 토큰의 SHA-256 해시를 넣고(D-59), 평문 토큰을 쿠키 `sid`로 내려준다. 유효 시간은 01장 1.6(7일, 연장 없음)이고 `Max-Age`도 같은 값이다.
-- 쿠키 속성: `HttpOnly`는 켜고 `Secure`는 켜지 않는다(HTTPS 없음, D-31). `SameSite`는 `Lax`다 (D-60, [08장 8.5](08-auth.md#85-로그인-세션과-쿠키)).
+- 쿠키 속성: `HttpOnly`는 켜고, `Secure`는 배포(`APP_MODE=aws`)에서만 켠다 (D-340). `SameSite`는 `Lax`다 (D-60, [08장 8.5](08-auth.md#85-로그인-세션과-쿠키)).
 - 비밀번호는 bcrypt 해시로 확인한다 (D-58, [08장 8.3](08-auth.md#83-비밀번호-저장-d-58)).
 - 이미 로그인한 상태에서 다시 불러도 에러가 아니다. 새 세션을 만든다.
 - 같은 계정으로 여러 브라우저에서 동시에 로그인할 수 있다. 세션은 브라우저마다 한 행이다.
@@ -254,6 +265,7 @@ Set-Cookie: sid=Jx3k...(랜덤 문자열); HttpOnly; Path=/; Max-Age=604800
 |---|---|---|
 | 401 | `LOGIN_FAILED` | 아이디가 없거나 비밀번호가 틀림. **둘을 구분하지 않는다.** 어느 쪽이 틀렸는지 알려주면 아이디가 있는지 확인하는 데 쓰일 수 있다 |
 | 422 | `VALIDATION_FAILED` | `login_id`나 `password`가 없거나 빈 문자열 |
+| 429 | `TOO_MANY_ATTEMPTS` | 같은 IP·같은 아이디로 15분에 실패 5회, 또는 같은 IP로 15분에 실패 30회. 15분 동안 막고 `Retry-After`(초)를 준다. 성공하면 그 IP·아이디의 실패 수를 지운다 (D-356) |
 
 - `LOGIN_FAILED`는 공통 코드 `UNAUTHENTICATED`와 다르다. `UNAUTHENTICATED`를 받으면 프론트는 로그인 화면으로 보내지만, 로그인 화면에서 받은 `LOGIN_FAILED`는 "아이디 또는 비밀번호가 틀렸다"는 안내를 보여준다.
 
@@ -290,6 +302,100 @@ Set-Cookie: sid=; HttpOnly; Path=/; Max-Age=0
 - 프론트는 처음 열릴 때 이 API를 불러 로그인 여부를 확인한다. `200`이면 영상 목록으로, `401`이면 로그인 화면으로 간다.
 - `role`은 `admin` 또는 `victim`이다. 프론트는 이 값으로 첫 화면을 나눈다 (D-204).
 - `password_hash`는 어떤 응답에도 넣지 않는다.
+
+### 35. `POST /api/auth/signup/start` 가입 시작
+
+요청
+
+```json
+{"login_id": "parkadmin1", "password": "Parking2026!", "name": "김관리", "role": "admin"}
+```
+
+성공: `200`
+
+```http
+Set-Cookie: oauth_state=<43자>; HttpOnly; Path=/api/auth/kakao; Max-Age=600; SameSite=Lax
+```
+
+```json
+{"authorize_url": "https://kauth.kakao.com/oauth/authorize?client_id=...&redirect_uri=...&response_type=code&state=<43자>"}
+```
+
+- 입력 규칙은 D-356 5번이다. 비밀번호를 bcrypt로 해시해 `kakao_pending`에 `purpose=signup`으로 넣는다(10분). 평문 `state`는 쿠키와 `authorize_url`에만 있다.
+- 프론트는 `authorize_url`로 페이지를 옮긴다(새 창이 아니다).
+- `oauth_state`의 `Secure`는 `sid`와 같은 규칙이다 (배포에서만).
+- `oauth_state`의 `Path`는 콜백(36번)에만 붙도록 `/api/auth/kakao`로 좁힌다.
+
+실패
+
+| HTTP | `code` | 언제 |
+|---|---|---|
+| 409 | `LOGIN_ID_TAKEN` | 이미 있는 아이디 |
+| 422 | `VALIDATION_FAILED` | 입력 규칙에 어긋남 |
+| 429 | `TOO_MANY_ATTEMPTS` | 같은 IP로 35·38번을 합쳐 1시간에 20회 초과. `Retry-After`(초) |
+| 503 | `KAKAO_NOT_CONFIGURED` | 서버에 카카오 키가 없음(로컬에서 키를 넣지 않은 경우). 프론트는 "지금은 가입할 수 없습니다"를 보인다 |
+
+### 36. `GET /api/auth/kakao/callback?code=&state=` 카카오 콜백
+
+카카오가 브라우저를 이 주소로 돌려보낸다. JSON이 아니라 **페이지 이동(302)**으로 답한다. 대기 행(`kakao_pending`)의 `purpose`로 나눈다.
+
+- 가입(`signup`) 성공: `users` 행을 만들고 `sid` 쿠키(1번과 같음)를 내린 뒤 `/`로 보낸다.
+- 비밀번호 바꾸기(`reset`) 성공: 회원번호로 찾은 계정의 세션을 모두 지운다(채팅 WebSocket도 닫는다, D-290과 같다). 그다음 `password_reset_until = now + 10분`인 새 `sid`를 내리고 새 비밀번호 화면으로 보낸다.
+- 두 경우 모두 `oauth_state` 쿠키를 지우고 `access_logs`에 `login`을 남긴다.
+- 실패: 주소에 `error=<code>`를 붙여 보낸다 (예: `/#/signup?error=KAKAO_ALREADY_USED`). 보내는 곳은 다음과 같다.
+  - 가입이면 가입 화면 `/#/signup`
+  - 재설정이면, 로그인 중에 시작했을 때(대기 행에 `user_id` 있음) [설정] 화면, 아니면 로그인 화면 `/#/login`
+  - `state`가 `oauth_state` 쿠키와 다르거나 대기 행을 찾지 못했으면 로그인 화면 `/#/login`
+- 화면 주소는 프론트 라우트와 같아야 한다. 팀원 1이 다른 주소를 고르면 이 줄과 백엔드 상수(`app/kakao.py`)를 같이 바꾼다.
+
+| `code` | 언제 |
+|---|---|
+| `KAKAO_EXPIRED` | `state`가 쿠키와 다르거나, `kakao_pending`에 없거나, 10분이 지남. 처음부터 다시 |
+| `KAKAO_CANCELLED` | 카카오 동의 화면에서 취소함(카카오가 `error`를 붙여 돌려보냄) |
+| `KAKAO_FAILED` | code 교환이나 회원번호 조회가 실패함 |
+| `KAKAO_ALREADY_USED` | (가입) 그 카카오 계정으로 이미 만든 계정이 있음 |
+| `LOGIN_ID_TAKEN` | (가입) 35번 뒤에 다른 사람이 같은 아이디로 먼저 가입함 |
+| `KAKAO_NOT_LINKED` | (재설정) 그 카카오 계정으로 가입한 계정이 없거나, 로그인 중인 계정의 카카오 계정이 아님 |
+
+- `state`가 맞으면 `kakao_pending` 행을 **먼저 지운다**. 뒤에서 실패해도 같은 `state`로 다시 시도할 수 없다.
+- code 교환은 백엔드가 카카오와 직접 한다. client secret을 쓴다 (D-356 7번).
+
+### 37. `PUT /api/auth/password` 새 비밀번호 저장
+
+요청
+
+```json
+{"new_password": "NewPass2026!"}
+```
+
+성공: `204` (본문 없음)
+
+- 새 비밀번호 규칙은 D-356 5번이다. 해시는 bcrypt (D-58).
+- 이 세션의 `password_reset_until`이 지금보다 뒤일 때만 받는다. 바꾸면 그 값을 비운다.
+- 다른 세션은 36번이 이미 모두 지웠다.
+- 새 비밀번호 화면은 3번으로 아이디를 보인다.
+
+실패
+
+| HTTP | `code` | 언제 |
+|---|---|---|
+| 401 | `UNAUTHENTICATED` | 로그인하지 않음 |
+| 403 | `PASSWORD_RESET_REQUIRED` | 카카오 재인증 세션이 아니거나 10분이 지남. 38번부터 다시 |
+| 422 | `VALIDATION_FAILED` | 새 비밀번호가 규칙에 어긋남 |
+
+### 38. `POST /api/auth/password-reset/start` 비밀번호 바꾸기·재설정 시작
+
+요청 본문 없음. 로그인 전(로그인 화면 [비밀번호 재설정])과 로그인 상태([설정] 화면 [비밀번호 변경]) 모두 부른다.
+
+성공: `200`. 응답과 `oauth_state` 쿠키는 35번과 같다.
+
+- `kakao_pending`에 `purpose=reset` 행을 넣는다. 세션 쿠키가 유효하면 그 계정 id를 `user_id`에 적는다.
+
+실패
+
+| HTTP | `code` | 언제 |
+|---|---|---|
+| 429 | `TOO_MANY_ATTEMPTS` | 같은 IP로 35·38번을 합쳐 1시간에 20회 초과. `Retry-After`(초) |
 
 ## 5.4 사건·업로드 API
 
@@ -979,8 +1085,8 @@ DB는 `payload`의 내용을 검사하지 않는다. 아래를 백엔드(Pydanti
      "clip_url": "https://<prefix>-masked.s3.ap-northeast-2.amazonaws.com/videos/17/clips/1188.mp4?X-Amz-Algorithm=..."}
   ],
   "lists": {
-    "main":         {"latest_batch_no": 1, "remaining": 20, "done": false, "unavailable": 0},
-    "parse_failed": {"latest_batch_no": 1, "remaining": 0,  "done": false, "unavailable": 0}
+    "main":         {"latest_batch_no": 1, "remaining": 20, "done": false, "unavailable": 0, "total": 30},
+    "parse_failed": {"latest_batch_no": 1, "remaining": 0,  "done": false, "unavailable": 0, "total": 3}
   }
 }
 ```
@@ -1000,6 +1106,7 @@ DB는 `payload`의 내용을 검사하지 않는다. 아래를 백엔드(Pydanti
 | `lists.*.remaining` | 그 목록에서 [다음 묶음 받기]를 누르면 더 볼 수 있는 후보 수. 어느 묶음을 보든 같은 값이다. `0`이면 마지막 묶음까지 왔다 |
 | `lists.*.done` | 그 목록의 후보를 끝까지 다 넘겼는지(`unseen` 후보가 0개). 다 넘겨도 묶음 번호는 그대로라(D-99) `remaining`이 `0`인 것만으로는 "마지막 묶음을 아직 안 넘김"과 구분되지 않는다. 비어 있는 목록도 `true`다 |
 | `lists.*.unavailable` | 그 목록 전체에서 열람 불가인 후보 수 (D-109) |
+| `lists.*.total` | 그 목록의 전체 후보 수(열람 불가 포함). 후보는 2단계 끝에 모두 만들어지므로 [다음]을 눌러도 바뀌지 않는다. 목록이 비어 있으면 `0`. 화면은 탭 숫자로 쓴다 (C-20, 07장) |
 
 - **[다음 묶음 받기]는 `status`가 `ready`이고, 보고 있는 묶음이 그 목록의 `latest_batch_no`이고, 그 목록의 `done`이 `false`일 때 보인다.** 13번에는 그 목록과 묶음 번호를 보낸다 (D-82, D-99).
 - **종료를 위한 예외(D-203)**: `status = ready`인데 두 목록의 `done`이 모두 `true`인 경우에도, 현재 보고 있는 목록의 최신 묶음에는 [다음 묶음 받기]를 표시한다. 전부 열람 불가이면 `unseen`이 없어 `done`이 먼저 `true`가 되기 때문이다. 동일한 13번에 `list`·`batch_no`를 보내 기존 처리로 `exhausted`까지 진행한다. 응답이 아직 `ready`이면 갱신된 최신 묶음에서 같은 규칙을 적용한다. 새 종료 API나 자동 종료 전이는 추가하지 않는다.
@@ -1020,7 +1127,7 @@ SELECT DISTINCT ON (d.id)
 ```
 
 - **열람 불가 후보(`unavailable`)는 `candidates` 배열에 넣지 않고 `unavailable`로 수만 알린다 (D-109).** 묶음이 10건이 아니라 9건으로 보일 수 있고, 화면은 "이 묶음에 열람 불가 N건"을 보인다. 묶음 전체가 열람 불가이면 배열이 비어 있을 수 있다.
-- `remaining`은 그 목록에서 지금 보여주는 묶음 뒤에 남은 후보 수다. 미리 준비해 둔 묶음과 아직 묶음에 들어가지 않은 후보를 함께 센다. 이번 묶음의 후보는 세지 않는다 (D-82). `done`은 그 목록에 `unseen` 후보가 하나도 없는지다. 두 목록을 한 번에 센다.
+- `remaining`은 그 목록에서 지금 보여주는 묶음 뒤에 남은 후보 수다. 미리 준비해 둔 묶음과 아직 묶음에 들어가지 않은 후보를 함께 센다. 이번 묶음의 후보는 세지 않는다 (D-82). `done`은 그 목록에 `unseen` 후보가 하나도 없는지다. `total`은 판단과 상관없이 그 목록의 후보를 모두 센다. 두 목록을 한 번에 센다.
 
 ```sql
 SELECT list_kind,
@@ -1029,10 +1136,11 @@ SELECT list_kind,
                           WHEN 'main' THEN :current_batch_no
                           ELSE :current_failed_batch_no END)) AS remaining,
        count(*) FILTER (WHERE verdict = 'unseen') AS unseen,           -- 0이면 done
-       count(*) FILTER (WHERE verdict = 'unavailable') AS unavailable  -- D-109
+       count(*) FILTER (WHERE verdict = 'unavailable') AS unavailable, -- D-109
+       count(*) AS total                                               -- C-20
   FROM candidates
- WHERE analysis_job_id = :job_id AND verdict IN ('unseen', 'unavailable')
- GROUP BY list_kind;               -- 행이 없는 목록은 remaining 0, done true
+ WHERE analysis_job_id = :job_id
+ GROUP BY list_kind;               -- 행이 없는 목록은 remaining 0, done true, total 0
 ```
 
 - **후보가 0건인 작업에는 이 API를 부를 수 없다.** 후보가 0건이면 워커가 `ready`를 거치지 않고 바로 `exhausted`로 보내므로(04장 전이 14), 이 API는 409를 돌려준다. 화면은 9번의 `status`와 `candidate_total`을 보고 "후보 구간이 탐지되지 않았다"를 띄운다. 사건이 없다는 뜻이 아니다 (PRD 3.5, D-50).
@@ -1072,8 +1180,8 @@ SELECT list_kind,
 ```json
 {"status": "ready",
  "lists": {
-   "main":         {"latest_batch_no": 2, "remaining": 10, "done": false, "unavailable": 0},
-   "parse_failed": {"latest_batch_no": 1, "remaining": 0,  "done": false, "unavailable": 0}}}
+   "main":         {"latest_batch_no": 2, "remaining": 10, "done": false, "unavailable": 0, "total": 30},
+   "parse_failed": {"latest_batch_no": 1, "remaining": 0,  "done": false, "unavailable": 0, "total": 3}}}
 ```
 
 - **보통 `ready`가 온다.** 워커가 다음 묶음을 미리 만들어 두므로 곧바로 12번으로 다음 묶음을 연다 (D-68). 준비가 끝나기 전에 누르면 `batch_running`이 오고, 화면은 9번으로 `ready`가 될 때까지 기다린다.
@@ -1442,6 +1550,7 @@ flowchart TD
 | 사건 시간 (피해자, 끝 상태) | 25 | | |
 | 메뉴 배지 (채팅) | 29 (메뉴를 이동할 때) | | |
 | 알림 (채팅) | 29, 33 연결 | 30 상대를 고를 때·위로 스크롤(`?before_id=`), 31 [보내기], 32 대화를 보인 뒤 | 없음. 33번이 끊겼다 다시 이어지면 30 (`?after_id=`) |
+| 알림 허용 (로그인 뒤, 시점은 07장) | 39 | 브라우저 허용 → 구독 → 40 | |
 
 - **주기 조회는 9번 하나뿐이다.** 끝 상태(`finished`·`exhausted`·`failed`)에서는 멈춘다. 19번이 접수되면 다시 시작한다. 사용자가 움직여야만 바뀌는 상태(`ready`)에서도 멈출지는 07장에서 정한다. 다른 API를 주기적으로 부르지 않는다 (D-19).
 
@@ -1453,6 +1562,11 @@ flowchart TD
 |---|---|---|---|
 | `UNAUTHENTICATED` | 401 | 로그인을 뺀 모든 API | 로그인 화면으로 |
 | `LOGIN_FAILED` | 401 | 1 | "아이디 또는 비밀번호가 틀렸다" 안내. 로그인 화면에 머문다 |
+| `TOO_MANY_ATTEMPTS` | 429 | 1·35·38 | `Retry-After`만큼 기다리라고 안내. 입력값은 그대로 둔다 |
+| `LOGIN_ID_TAKEN` | 409 | 35 | "이미 쓰는 아이디" 안내. 아이디 칸으로 |
+| `KAKAO_NOT_CONFIGURED` | 503 | 35 | "지금은 가입할 수 없습니다" 안내. 가입 화면에 머문다 |
+| `PASSWORD_RESET_REQUIRED` | 403 | 37 | "다시 카카오 인증을 해 달라" 안내. 38번부터 다시 |
+| (36번 `error=`) | 302 | 36 | 보내진 화면(가입·로그인·설정)에서 코드별 안내 (36번 표) |
 | `ROLE_NOT_ALLOWED` | 403 | 역할이 정해진 API (5.2) | 역할에 맞는 첫 화면으로 (5.1) |
 | `SUPERVISION_AGREEMENT_REQUIRED` | 403 | 12·13·14·15·17 | 관리·감독 안내창을 다시 띄운다 (5.1, D-205) |
 | `CASE_NOT_FOUND` | 404 | 6 | 사건·영상 목록으로 |
@@ -1461,7 +1575,7 @@ flowchart TD
 | `NO_PINNED_INCIDENTS` | 409 | 17 | 12번을 다시 불러 화면을 새로 그린다 (D-110) |
 | `RETRY_NOT_ALLOWED` | 409 | 19 | 9번을 다시 불러 화면을 새로 그린다. 파일 확인·재업로드 안내가 나온다 (D-112) |
 | `RETRY_LIMIT_REACHED` | 409 | 19 | 9번을 다시 불러 화면을 새로 그린다. 버튼 없이 문의 안내가 나온다 (D-112) |
-| `VALIDATION_FAILED` | 422 | 1·6·11·12·13·14·18·30·31·32 | 입력을 다시 받는다. 12번이면 쿼리 없이 다시 부른다 |
+| `VALIDATION_FAILED` | 422 | 1·6·11·12·13·14·18·30·31·32·40 | 입력을 다시 받는다. 12번이면 쿼리 없이 다시 부른다 |
 | `INVITEE_INVALID` | 422 | 21·24 | 아이디를 다시 받는다 (D-206) |
 | `AGREEMENT_REQUIRED` | 422 | 6 | 동의 화면으로 돌아간다. 버전이 달랐으면 새로고침해 새 문구를 보인다 (D-147) |
 | `INTERNAL_ERROR` | 500 | 7·11·13·19 | 아무것도 바뀌지 않았다. 잠시 후 다시 보낸다 |
@@ -1666,6 +1780,65 @@ flowchart TD
 | 4408 | 같은 계정의 연결이 3개를 넘어 가장 오래된 연결을 닫음 | 다시 연결하지 않는다. "다른 창에서 열렸다"는 안내는 07장에서 정한다 |
 | 그 밖 (네트워크 끊김, 서버 재시작) | | 몇 초 뒤 다시 연결하고, 30번을 `?after_id=(마지막으로 받은 id)`로 불러 빠진 메시지를 채운다 |
 
+## 5.13 웹 푸시 API
+
+로그인한 브라우저가 알림을 허용하면 구독을 등록한다. 보내는 쪽은 주기 작업이다(02장 2.2, D-358). 알림을 허용해 달라고 묻는 시점은 07장에서 정한다.
+
+### 39. `GET /api/push/public-key` VAPID 공개 키
+
+성공: `200`
+
+```json
+{"public_key": "BNcRd...(base64url 87자)"}
+```
+
+- 브라우저의 `pushManager.subscribe({applicationServerKey})`에 넣는 값이다. 공개 키라 비밀이 아니다.
+- 서버에 VAPID 키가 설정되지 않았으면 `{"public_key": null}`이다. 프론트는 알림 허용을 묻지 않는다.
+
+### 40. `PUT /api/push/subscription` 구독 저장
+
+요청: 브라우저의 `PushSubscription.toJSON()` 그대로
+
+```json
+{
+  "endpoint": "https://fcm.googleapis.com/fcm/send/dXk...",
+  "keys": {"p256dh": "BOr...(base64url)", "auth": "k2...(base64url)"}
+}
+```
+
+성공: `204` (본문 없음)
+
+- `endpoint`가 이미 있으면 그 행의 `session_id`를 지금 세션으로 바꾼다. 없으면 새로 만든다 (04장 `push_subscriptions`).
+- 로그아웃(2번)이나 비밀번호 바꾸기(36번)로 세션이 지워지면 구독도 함께 지워진다. 구독을 지우는 API는 따로 두지 않는다.
+- **`endpoint` 검사**: `https://`이고, 호스트가 다음 중 하나일 때만 받는다. `fcm.googleapis.com`, `updates.push.services.mozilla.com`, `*.notify.windows.com`, `web.push.apple.com`. 서버가 이 주소로 요청을 보내므로 내부 주소를 넣지 못하게 막는다 (SSRF, 08장).
+- `p256dh`는 디코딩해 65바이트, `auth`는 16바이트여야 한다.
+
+실패
+
+| HTTP | `code` | 언제 |
+|---|---|---|
+| 401 | `UNAUTHENTICATED` | 로그인하지 않음 |
+| 422 | `VALIDATION_FAILED` | `endpoint`가 허용한 푸시 서버가 아님, 키 길이가 틀림 |
+
+### 푸시 내용 (서버 → Service Worker)
+
+주기 작업이 보내는 푸시의 본문이다. Service Worker는 `title`·`body`로 알림을 띄우고, 알림을 누르면 `url`을 연다 (D-358).
+
+```json
+{"title": "분석이 끝났습니다", "body": "결과를 확인해 주세요.", "url": "/#/videos/123"}
+```
+
+| 일 | 받는 사람 | `title` | `body` |
+|---|---|---|---|
+| `done` | 관리자 | 분석이 끝났습니다 | 결과를 확인해 주세요. |
+| `done` | 피해자 | 분석이 끝났습니다 | 관리자와 함께 결과를 확인할 수 있습니다. |
+| `failed` | 관리자 | 영상을 분석하지 못했습니다 | 영상 상태 화면에서 다시 시도해 주세요. |
+| `failed` | 피해자 | 영상을 분석하지 못했습니다 | 관리자가 다시 시도할 수 있습니다. |
+| `upload_unconfirmed` | 관리자 | 업로드가 확인되지 않습니다 | 같은 사건에 다시 올려 주세요. |
+
+- `url`은 영상 상태 화면이다. 열린 탭이 있으면 그 탭을 이 주소로 옮기고, 없으면 새 탭을 연다.
+- 사건 이름·파일 이름은 넣지 않는다. 영상 번호는 `url`에만 있고 알림 화면에는 보이지 않는다.
+
 ## 관련 결정·조건
 
 - 불변 조건 1(원본 재생 URL 미노출), 8(다운로드 기능 없음): [02장 2.4](02-architecture.md#24-이중-경로와-불변-조건)
@@ -1703,3 +1876,4 @@ flowchart TD
 - 원본·트랙 파기와 `raw_deleted`·`RAW_EXPIRED`: D-52, D-64 / 열람·파기 기록: D-53
 - 마스킹본 파기와 `masked_deleted`·`MASKED_EXPIRED`: D-57 / 파기 시점은 업로드 완료 30일 뒤 하나: D-64, D-80
 - 부하 대응(무거운 일 금지, 조회 주기, 무상태): D-19, [02장 2.12](02-architecture.md#212-부하-대응)
+- 분석 완료·실패와 업로드 확인 안 됨을 웹 푸시로 알림, 구독은 세션에 묶음, `endpoint`는 알려진 푸시 서버만: D-358

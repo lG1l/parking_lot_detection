@@ -94,10 +94,14 @@ def test_local_routes_absent_in_aws_mode(monkeypatch):
         s3_bucket_prefix="p",
         sqs_queue_url="q",
         gpu_instance_id="i",
+        origin_verify_secret="s" * 32,
     )
     monkeypatch.setattr(main, "get_settings", lambda: aws)
     app = main.create_app()
-    r = TestClient(app).put(signed_path("videos/1/original.mp4"), content=b"x")
+    # 비밀 헤더를 붙여 origin_guard를 통과시킨 뒤에도 경로가 없어야 한다
+    r = TestClient(app).put(
+        signed_path("videos/1/original.mp4"), content=b"x", headers={"X-Origin-Verify": "s" * 32}
+    )
     assert r.status_code == 404
     assert not any(getattr(r, "path", "").startswith("/_local") for r in app.routes)
 

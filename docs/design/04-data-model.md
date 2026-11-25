@@ -50,7 +50,7 @@
 DB는 백엔드 EC2의 PostgreSQL이다. 백엔드와 GPU 워커가 같은 DB에 접속한다. (D-17)
 
 ```
-users ──┬──< sessions        (로그인 세션)
+users ──┬──< sessions ──< push_subscriptions   (로그인 세션, 웹 푸시 구독 D-358)
         │
         ├──< cases     (관리자 1 + 피해자 1, D-204)
         │       │
@@ -62,8 +62,11 @@ users ──┬──< sessions        (로그인 세션)
         │
         ├──< chat_reads      (채팅 읽은 위치, D-289)
         │
+kakao_pending                 (카카오 인증 대기: 가입·비밀번호 바꾸기, 10분, D-356·D-357)
+
 videos ──┬── upload_agreements  (위탁계약 동의 D-147)
         ├──< viewing_agreements  (관리·감독 안내 동의, D-204)
+        ├──< push_events         (웹 푸시 보낸 기록, D-358)
         └──1:1── analysis_jobs
                                   │
                                   ├──  still_frames        (정지 장면 1장, 마스킹본)
@@ -95,7 +98,7 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 
 ### users
 
-계정은 **관리자와 피해자 두 종류**다. 역할 칼럼으로 나누고, 계정을 만들 때 정한다. (D-204, D-28 대체) 비밀번호 해시 방식(bcrypt, D-58)과 쿠키 속성(`SameSite=Lax`, D-60)은 [08장](08-auth.md)에서 정했다.
+계정은 **관리자와 피해자 두 종류**다. 역할 칼럼으로 나누고, 계정을 만들 때 정한다. (D-204, D-28 대체) 계정은 가입 화면(카카오 인증 후, 가입자가 역할을 고른다)이나 스크립트로 만든다 (D-356). 비밀번호 해시 방식(bcrypt, D-58)과 쿠키 속성(`SameSite=Lax`, D-60)은 [08장](08-auth.md)에서 정했다.
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
@@ -104,6 +107,7 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 | `password_hash` | text | bcrypt 해시 문자열 60자. 평문 비밀번호를 저장하지 않는다 (D-58, [08장 8.3](08-auth.md#83-비밀번호-저장-d-58)) |
 | `role` | text | `admin` 또는 `victim`. 바뀌지 않는다 (D-204) |
 | `name` | text | 화면 표시용 이름 |
+| `kakao_id` | bigint UNIQUE, NULL 허용 | 카카오 회원번호. 가입 화면으로 만든 계정만 있다. 카카오 계정 하나에 계정 하나 (D-356). 스크립트 계정은 비어 있다 |
 | `created_at` | timestamptz | |
 
 ### sessions
@@ -116,11 +120,51 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 | `token_hash` | text UNIQUE | 쿠키에 담기는 랜덤 문자열(43자)의 SHA-256 해시 64자. 평문은 저장하지 않는다 (D-59, [08장 8.4](08-auth.md#84-랜덤-토큰-만들기-d-59)) |
 | `user_id` | bigint FK → users | 누구의 세션인가 |
 | `expires_at` | timestamptz | 이 시각이 지나면 만료. 연장하지 않는다 |
+| `password_reset_until` | timestamptz, NULL 허용 | 카카오 재인증(비밀번호 바꾸기·재설정)으로 만든 세션만 있다. 이 시각 전에만 37번으로 새 비밀번호를 넣을 수 있다. 만든 뒤 10분, 바꾸면 비운다 (D-357) |
 | `created_at` | timestamptz | 로그인한 시각 |
 
 - 로그인에 성공하면 행을 만들고 평문 토큰을 **HttpOnly 쿠키**로 내려준다. 표에는 해시만 남는다. 요청마다 쿠키 값을 해시해 이 표를 찾고, `expires_at > now()`이면 통과시킨다.
-- **로그아웃은 행을 지우는 것**이다. 유출된 세션도 같은 방법으로 즉시 끊을 수 있다. HTTPS가 없는 상태(02장 2.11)에서 이것이 JWT 대신 DB 세션을 고른 이유다. (D-30)
+- **로그아웃은 행을 지우는 것**이다. 유출된 세션도 같은 방법으로 즉시 끊을 수 있다. 이것이 JWT 대신 DB 세션을 고른 이유다. CloudFront↔EC2 구간은 아직 평문이다 (02장 2.11). (D-30)
 - 만료된 행을 지우는 정리 작업은 두지 않는다. 데모 규모에서는 쌓여도 문제가 없다.
+
+### kakao_pending
+
+카카오 인증이 끝날 때까지 잠시 둔다. 가입(`signup`)이면 입력한 값을 두고, 비밀번호 바꾸기·재설정(`reset`)이면 `state`와 로그인 중이던 계정만 둔다. 콜백(36번)이 끝나면 지운다. (D-356, D-357)
+
+- **인증을 마치지 않은 행도 지운다.** 비밀번호 해시가 들어 있어서다. 백엔드 주기 작업(켤 때 1번, 그 뒤 1시간마다)이 `expires_at <= now()`인 행을 `DELETE`한다. 그래서 만료된 행은 최대 1시간 남는다.
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `id` | bigserial PK | |
+| `state_hash` | text UNIQUE | 카카오로 보낸 `state`(무작위 43자)의 SHA-256 해시. 평문은 `oauth_state` 쿠키에만 있다 (D-59와 같은 방식) |
+| `purpose` | text | `signup` 또는 `reset`. 콜백이 이 값으로 나눈다 (D-357) |
+| `user_id` | bigint FK → users, NULL 허용 | `reset`을 로그인 중에 시작했으면 그 계정. 콜백에서 카카오로 찾은 계정과 다르면 거부한다 (D-357) |
+| `login_id` | text, NULL 허용 | 입력한 아이디. 계정을 만들 때 다시 중복을 검사한다. `reset`이면 비어 있다 |
+| `password_hash` | text, NULL 허용 | 입력한 비밀번호의 bcrypt 해시. 평문은 저장하지 않는다 (D-58). `reset`이면 비어 있다 |
+| `name` | text, NULL 허용 | 입력한 이름. `reset`이면 비어 있다 |
+| `role` | text, NULL 허용 | `admin` 또는 `victim`. 가입자가 고른 값. `reset`이면 비어 있다 |
+| `expires_at` | timestamptz | 만든 뒤 10분. 지나면 콜백이 거부한다 |
+| `created_at` | timestamptz | |
+
+- 콜백(36번)은 `state`가 맞으면 행을 **먼저 지우고** 진행한다. 같은 `state`로 두 번 쓸 수 없다.
+- 만료된 행을 지우는 정리 작업은 두지 않는다 (`sessions`와 같다).
+
+### push_subscriptions
+
+브라우저 하나가 "알림 허용"을 눌러 만든 웹 푸시 구독. 로그인 세션에 붙는다. (D-358)
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `id` | bigserial PK | |
+| `session_id` | bigint FK → sessions | 이 구독을 등록한 세션. 세션이 지워지면(로그아웃, 비밀번호 바꾸기 D-357) 함께 지워진다 |
+| `endpoint` | text UNIQUE | 푸시를 보낼 주소. 브라우저마다 하나다. 알려진 푸시 서버 주소만 받는다 (08장) |
+| `p256dh` | text | 브라우저 공개 키. 알림 내용을 암호화하는 데 쓴다 (RFC 8291) |
+| `auth` | text | 브라우저가 만든 인증용 비밀값. 암호화에 함께 쓴다 |
+| `created_at` | timestamptz | 등록하거나 새 세션으로 옮긴 시각 |
+
+- 같은 `endpoint`가 다시 오면 새 행을 만들지 않고 `session_id`를 지금 세션으로 바꾼다. 같은 브라우저에서 다시 로그인한 경우다.
+- 보낼 때는 `sessions.expires_at > now()`인 세션의 구독만 쓴다. 만료된 세션을 지우는 정리 작업이 없기 때문이다 (sessions 참고).
+- 푸시 서버가 404·410을 돌려주면 행을 지운다. 사용자가 브라우저에서 알림을 끈 경우다.
 
 ### cases
 
@@ -478,6 +522,21 @@ ROI 안에서 움직임이 있던 시간대를 자른 클립 하나 (D-245). 2�
 
 - 행이 없으면 하나도 읽지 않은 것이다.
 - `last_read_message_id`에는 FK를 걸지 않는다. 가리키는 메시지가 30일 뒤 지워져도(D-288) 읽은 위치는 남아야 한다.
+
+### push_events
+
+주기 작업이 보낸 웹 푸시 하나. 같은 일을 두 번 보내지 않기 위해 둔다. (D-358)
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `video_id` | bigint FK → videos | 어느 영상의 일인가 |
+| `kind` | text | `done`(분석 완료), `failed`(분석 실패), `upload_unconfirmed`(업로드 확인 안 됨) |
+| `event_at` | timestamptz | 그 일의 시각. `done`은 `analysis_jobs.stage2_ended_at`, `failed`는 `analysis_jobs.status_changed_at`, `upload_unconfirmed`는 `videos.created_at` + 30분 |
+| `sent_at` | timestamptz | 보낸 시각 |
+
+- PK는 `(video_id, kind, event_at)`이다. 주기 작업은 행을 먼저 넣고(`ON CONFLICT DO NOTHING`), 넣었을 때만 보낸다.
+- 재시도(전이 16) 뒤 다시 실패하면 `status_changed_at`이 달라 새 행이 된다. 묶음 [다음]으로 `ready`가 반복되어도 `stage2_ended_at`은 그대로라 다시 보내지 않는다.
+- 주기 작업은 `event_at`이 10분 안인 일만 찾는다. 서버를 다시 켰을 때 지난 일이 한꺼번에 나가지 않게 하기 위해서다.
 
 ### access_logs
 
@@ -898,6 +957,7 @@ CREATE TABLE users (
   password_hash text        NOT NULL,
   role          text        NOT NULL,          -- admin | victim (D-204)
   name          text        NOT NULL,
+  kakao_id      bigint      UNIQUE,            -- 카카오 회원번호. 스크립트 계정은 NULL (D-356)
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 
@@ -906,6 +966,29 @@ CREATE TABLE sessions (
   token_hash text        NOT NULL UNIQUE,   -- HttpOnly 쿠키에 담기는 랜덤 문자열의 SHA-256 (64자)
   user_id    bigint      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   expires_at timestamptz NOT NULL,
+  password_reset_until timestamptz,          -- 카카오 재인증 세션만, 10분 (D-357)
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE kakao_pending (                 -- D-356, D-357
+  id            bigserial PRIMARY KEY,
+  state_hash    text        NOT NULL UNIQUE,
+  purpose       text        NOT NULL,        -- signup | reset
+  user_id       bigint      REFERENCES users(id) ON DELETE CASCADE,
+  login_id      text,
+  password_hash text,
+  name          text,
+  role          text,
+  expires_at    timestamptz NOT NULL,
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE push_subscriptions (            -- D-358
+  id         bigserial PRIMARY KEY,
+  session_id bigint      NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  endpoint   text        NOT NULL UNIQUE,
+  p256dh     text        NOT NULL,
+  auth       text        NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -1057,6 +1140,14 @@ CREATE TABLE chat_reads (                    -- D-289
   PRIMARY KEY (user_id, peer_user_id)
 );
 
+CREATE TABLE push_events (                   -- D-358
+  video_id bigint      NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  kind     text        NOT NULL,             -- done | failed | upload_unconfirmed
+  event_at timestamptz NOT NULL,
+  sent_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (video_id, kind, event_at)
+);
+
 -- 법정 기록. 지우지 않는다 (D-53)
 CREATE TABLE access_logs (
   id           bigserial PRIMARY KEY,
@@ -1113,6 +1204,7 @@ CREATE INDEX idx_chat_pair           ON chat_messages (admin_user_id, victim_use
 | `analysis_jobs` 아래 테이블의 FK | 모두 `ON DELETE CASCADE` | 영상 1건을 지울 때 관련 행이 함께 지워진다. S3에서 `videos/{video_id}/` 접두사 하나만 지우면 되는 것(4.9)과 짝이 맞는다 |
 | `videos → cases`, `cases → users` FK | CASCADE를 걸지 **않는다**(기본 동작) | 사용자를 지웠다고 영상과 분석 결과가 사라지면 안 된다. 참조가 남아 있으면 삭제가 거부된다 |
 | `sessions → users` FK | CASCADE를 건다 | 세션은 짧게 살고 만료되는 임시 값이라 계정과 함께 사라져도 된다 (D-30) |
+| `push_subscriptions → sessions`, `push_events → videos` FK | CASCADE를 건다 | 구독은 세션과 함께 끊겨야 한다. 보낸 기록은 영상이 지워지면 필요 없다 (D-358) |
 | `pinned_incidents → candidate_clips` FK | CASCADE를 걸지 **않는다** | 고정한 클립 행만 따로 지워지면 사건 지점이 사라진다. 분석 작업째 지울 때는 위의 CASCADE로 함께 지워진다 (D-32) |
 | `access_logs`의 FK 2개 | `ON DELETE SET NULL` | 법정 기록이라 사용자나 영상이 지워져도 행이 남아야 한다. CASCADE면 함께 지워지고, 기본 동작(RESTRICT)이면 영상을 못 지운다. 둘 다 곤란해서 SET NULL을 쓴다 (D-53) |
 | `updated_at` 갱신 | 트리거를 쓰지 않고 **UPDATE 문에 직접 쓴다** | 상태를 바꾸는 UPDATE는 4.4처럼 `WHERE status = ...`가 붙은 조건부 문장이다. 같은 문장에서 함께 쓰는 편이 읽기 쉽고, 트리거가 숨어서 도는 것보다 추적하기 낫다 |

@@ -71,8 +71,9 @@ def _lists(conn, job) -> dict:
                 "CASE list_kind WHEN 'main' THEN coalesce(:cur, 0) ELSE coalesce(:cur_failed, 0) END)) "
                 "AS remaining, "
                 "count(*) FILTER (WHERE verdict = 'unseen') AS unseen, "
-                "count(*) FILTER (WHERE verdict = 'unavailable') AS unavailable "
-                "FROM candidates WHERE analysis_job_id = :j AND verdict IN ('unseen', 'unavailable') "
+                "count(*) FILTER (WHERE verdict = 'unavailable') AS unavailable, "
+                "count(*) AS total "
+                "FROM candidates WHERE analysis_job_id = :j "
                 "GROUP BY list_kind"
             ),
             {"j": job.id, "cur": job.current_batch_no, "cur_failed": job.current_failed_batch_no},
@@ -86,6 +87,7 @@ def _lists(conn, job) -> dict:
             "remaining": row.remaining if row else 0,
             "done": (row.unseen == 0) if row else True,
             "unavailable": row.unavailable if row else 0,
+            "total": row.total if row else 0,
         }
     return result
 

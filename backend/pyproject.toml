@@ -12,6 +12,8 @@ dependencies = [
     "pydantic-settings",
     "boto3",
     "websockets>=17.4",
+    "pywebpush>=2.5.0",
+    "requests>=2.34.2",
 ]
 
 [dependency-groups]

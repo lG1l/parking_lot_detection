@@ -4,6 +4,7 @@ import logging
 from fastapi import Request
 from sqlalchemy import text
 
+from app.config import get_settings
 from app.db import get_engine
 
 logger = logging.getLogger(__name__)
@@ -20,8 +21,13 @@ VIEW_INCIDENT_TIMES = "view_incident_times"
 
 
 def client_ip(request: Request) -> str | None:
-    # 프록시 헤더(X-Forwarded-For)는 위조할 수 있어 믿지 않고 접속한 쪽 주소를 쓴다
-    host = request.client.host if request.client else None
+    # X-Forwarded-For는 브라우저가 보낸 값이 남아 위조할 수 있어 쓰지 않는다
+    if get_settings().app_mode == "aws":
+        # 접속한 쪽은 CloudFront다. CloudFront가 붙인 "IP:포트"에서 IP만 꺼낸다.
+        # 비밀 헤더가 맞는 요청만 여기까지 오므로 이 헤더를 믿는다 (origin_guard, D-340)
+        host = request.headers.get("cloudfront-viewer-address", "").rpartition(":")[0]
+    else:
+        host = request.client.host if request.client else None
     try:
         return str(ipaddress.ip_address(host)) if host else None
     except ValueError:

@@ -113,7 +113,7 @@ class _ResultsPageState extends ConsumerState<ResultsPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (!_admin) ...[
-                  const SmallText('고정된 장면의 시각만 볼 수 있습니다. 장면 영상은 주차장 관리자 화면에서 관리자와 함께 확인합니다.'),
+                  const SmallText('고정된 장면의 시각만 볼 수 있습니다. 장면 영상은 관리자 화면에서 관리자와 함께 확인합니다.'),
                   const SizedBox(height: 16),
                 ],
                 if (d.status == VideoStatus.exhausted && (d.candidateUnavailable ?? 0) > 0) ...[

@@ -44,11 +44,21 @@ void main() {
     expect(needsLastBatchConfirm({'main': s(3, 5, false), 'parse_failed': s(null, 0, true)}, 'main'), isFalse);
   });
 
-  test('비어 있는 점수 미산출 탭은 (0)으로 막는다', () {
+  test('비어 있는 점수 미산출 탭은 0으로 보이고 막는다', () {
     final lists = {'main': s(1, 20, false), 'parse_failed': s(null, 0, true)};
     expect(tabEnabled(lists, 'parse_failed'), isFalse);
-    expect(tabLabel(lists, 'parse_failed'), '점수 미산출 (0)');
-    expect(tabLabel(lists, 'main'), '후보 20');
+    expect(tabLabel(lists, 'parse_failed'), '점수 미산출 0');
+    expect(tabLabel(lists, 'main'), '후보'); // 마지막 묶음 크기를 모르면 이름만
+    expect(tabLabel(lists, 'main', latestSizes: {'main': 10}), '후보 30');
+  });
+
+  test('탭 수는 전체 후보 수: 서버 total이 있으면 그 값, 없으면 묶음으로 센다 (C-20)', () {
+    expect(tabTotal(s(1, 4, false), 10), 14); // 처음 묶음 10 + 남은 4
+    expect(tabTotal(s(2, 0, false), 4), 14); // [다음] 뒤에도 같다
+    expect(tabTotal(s(2, 0, false), 3), 13); // 마지막 묶음 3개(열람 불가 포함)
+    expect(tabTotal(s(2, 0, false), null), isNull);
+    final withTotal = ListSummary(latestBatchNo: 1, remaining: 4, done: false, unavailable: 0, total: 15);
+    expect(tabTotal(withTotal, null), 15);
   });
 
   test('한 탭을 다 넘기고 다른 탭이 남았을 때 안내', () {
@@ -63,9 +73,19 @@ void main() {
     expect(tabDoneMessage({'main': s(2, 0, true), 'parse_failed': s(null, 0, true)}, 'main'), isNull);
   });
 
-  test('열람 불가 수는 탭 줄의 "볼 수 없는 후보 N" (D-109)', () {
-    expect(unavailableLabel(batch(1)), isNull);
-    expect(unavailableLabel(batch(1, unavailable: 2)), '볼 수 없는 후보 2');
-    expect(unavailableLabel(batch(1, unavailable: 3, count: 0)), '볼 수 없는 후보 3');
+  test('전체 묶음 수는 받은 묶음 + 남은 후보를 10개씩 묶은 수', () {
+    expect(totalBatches(s(1, 20, false), 1), 3);
+    expect(totalBatches(s(1, 15, false), 1), 3);
+    expect(totalBatches(s(2, 10, false), 1), 3); // 앞 묶음을 보고 있어도 같다
+    expect(totalBatches(s(3, 0, false), 3), 3);
+  });
+
+  test('열람 불가 수는 탭 줄의 "볼 수 없는 후보 N"이고, N은 두 목록 합계라 묶음과 상관없다 (D-109)', () {
+    expect(unavailableLabel({'main': s(2, 5, false), 'parse_failed': s(null, 0, true)}), isNull);
+    expect(unavailableLabel({'main': s(2, 5, false, unavailable: 2), 'parse_failed': s(null, 0, true)}), '볼 수 없는 후보 2');
+    expect(
+      unavailableLabel({'main': s(3, 0, true, unavailable: 2), 'parse_failed': s(1, 1, false, unavailable: 1)}),
+      '볼 수 없는 후보 3',
+    );
   });
 }

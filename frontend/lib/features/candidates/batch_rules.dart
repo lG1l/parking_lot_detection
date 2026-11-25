@@ -1,3 +1,4 @@
+import '../../core/constants.dart';
 import '../../core/models/analysis.dart';
 import '../../core/models/video.dart';
 
@@ -6,6 +7,13 @@ import '../../core/models/video.dart';
 /// 두 탭이 모두 끝났는데([otherDone]) ready면 13번으로 끝내도록 버튼을 남긴다. 전부 열람 불가일 때 이 길로 끝난다 (D-203).
 bool canFetchNext(Batch batch, ListSummary tab, String status, {bool otherDone = false}) =>
     status == VideoStatus.ready && batch.batchNo == tab.latestBatchNo && (!tab.done || otherDone);
+
+/// 이 탭의 전체 묶음 수: 받은 묶음 수 + 남은 후보를 10개씩 묶은 수.
+/// [다음 ▶]으로 받기 전부터 "묶음 1 / 3"처럼 끝 번호를 보인다.
+int totalBatches(ListSummary tab, int currentBatchNo) {
+  final received = tab.latestBatchNo ?? currentBatchNo;
+  return received + (tab.remaining + batchSize - 1) ~/ batchSize;
+}
 
 /// 이 탭의 마지막 페이지인지: 받을 후보가 더 없고(remaining 0) 마지막 묶음을 보고 있으며 아직 넘기지 않았다.
 /// 이때는 [다음 ▶]을 막고 [확인 끝내기]로 이 탭을 끝낸다(13번) (D-190).
@@ -20,11 +28,24 @@ bool needsLastBatchConfirm(Map<String, ListSummary> lists, String tab) =>
 bool tabEnabled(Map<String, ListSummary> lists, String tab) =>
     tab == CandidateList.main || lists[tab]?.latestBatchNo != null;
 
-/// 탭 이름: "후보 20", "점수 미산출 3", 비었으면 "점수 미산출 (0)".
-String tabLabel(Map<String, ListSummary> lists, String tab) {
+/// 그 탭의 전체 후보 수(열람 불가 포함). 서버의 `total`이 있으면 그 값이다(C-20).
+/// 없으면 앞 묶음은 10개씩 차 있다고 보고 (받은 묶음 수 − 1) × 10 + 마지막 묶음 크기 + 남은 후보로 센다.
+/// 마지막 묶음 크기([latestSize], 카드 + 열람 불가)를 아직 모르면 null.
+int? tabTotal(ListSummary tab, int? latestSize) {
+  if (tab.total != null) return tab.total;
+  final latest = tab.latestBatchNo;
+  if (latest == null) return 0;
+  if (latestSize == null) return null;
+  return (latest - 1) * batchSize + latestSize + tab.remaining;
+}
+
+/// 탭 이름: 그 탭의 전체 후보 수 "후보 14", "점수 미산출 3". 비었으면 "점수 미산출 0"(누를 수 없음), 수를 아직 모르면 이름만.
+/// [latestSizes]: 탭별 마지막 묶음 크기.
+String tabLabel(Map<String, ListSummary> lists, String tab, {Map<String, int> latestSizes = const {}}) {
   final name = tab == CandidateList.main ? '후보' : '점수 미산출';
-  if (!tabEnabled(lists, tab)) return '$name (0)';
-  return '$name ${lists[tab]!.remaining}';
+  if (!tabEnabled(lists, tab)) return '$name 0'; // 비었으면 0. 누를 수 없게 막는 것은 tabEnabled가 한다
+  final total = tabTotal(lists[tab]!, latestSizes[tab]);
+  return total == null ? name : '$name $total';
 }
 
 /// 한 탭을 다 넘겼고 다른 탭에 남았을 때의 안내 (07장 2.7). 아니면 null.
@@ -40,5 +61,12 @@ String? tabDoneMessage(Map<String, ListSummary> lists, String tab) {
       : '이 목록의 후보를 모두 확인했습니다. 후보에 확인할 후보가 남아 있습니다.';
 }
 
-/// 묶음의 열람 불가 수를 탭 줄 오른쪽에 누를 수 없는 연한 글자로 보인다 (D-109). 없으면 null.
-String? unavailableLabel(Batch batch) => batch.unavailable == 0 ? null : '볼 수 없는 후보 ${batch.unavailable}';
+/// 영상 전체(두 목록 합계)의 열람 불가 수를 탭 줄 오른쪽에 누를 수 없는 연한 글자로 보인다 (D-109).
+/// 묶음이 아니라 전체 수라서 어느 묶음·탭에서도 같은 글자가 고정된다. 0건이면 null.
+String? unavailableLabel(Map<String, ListSummary> lists) {
+  final total = lists.values.fold<int>(0, (sum, l) => sum + l.unavailable);
+  return total == 0 ? null : '볼 수 없는 후보 $total';
+}
+
+/// "볼 수 없는 후보 N"에 마우스를 올리면 보이는 안내.
+const unavailableTooltip = '비식별화 영상을 만들지 못해 볼 수 없는 후보입니다. 목록에는 보이지 않습니다.';

@@ -6,8 +6,10 @@ import 'package:http/http.dart' as http;
 
 import 'package:parking_lot_frontend/core/api/chat_socket.dart';
 import 'package:parking_lot_frontend/core/constants.dart';
+import 'package:parking_lot_frontend/core/widgets/common.dart';
 import 'package:parking_lot_frontend/core/models/message.dart';
 import 'package:parking_lot_frontend/core/settings.dart';
+import 'package:parking_lot_frontend/features/candidates/batch_rules.dart';
 import 'package:parking_lot_frontend/features/damage_input/still_canvas.dart';
 import 'package:parking_lot_frontend/features/video_status/supervision_dialog.dart';
 
@@ -27,8 +29,8 @@ Map<String, Object?> video(String status, {Map<String, Object?> extra = const {}
   ...extra,
 };
 
-Map<String, Object?> lists({int mainRemaining = 10, bool pfEmpty = true}) => {
-  'main': {'latest_batch_no': 1, 'remaining': mainRemaining, 'done': false, 'unavailable': 0},
+Map<String, Object?> lists({int mainRemaining = 10, bool pfEmpty = true, int mainUnavailable = 0}) => {
+  'main': {'latest_batch_no': 1, 'remaining': mainRemaining, 'done': false, 'unavailable': mainUnavailable},
   'parse_failed': pfEmpty
       ? {'latest_batch_no': null, 'remaining': 0, 'done': true, 'unavailable': 0}
       : {'latest_batch_no': 1, 'remaining': 2, 'done': false, 'unavailable': 0},
@@ -211,9 +213,11 @@ void main() {
     expect(find.text('동의하고 영상 선택하기'), findsOneWidget);
   });
 
-  testWidgets('피해자 계정은 영상 없는 사건을 [업로드 중] 줄로 보고 누를 수 없다 (2.2, D-226)', (tester) async {
+  testWidgets('피해자 계정은 영상 없는 사건을 [업로드 대기] 줄로 보고, 누르면 진행 표시 없는 대기 화면이다. 영상이 생기면 상태 화면으로 간다 (2.2, D-312)', (tester) async {
+    var uploaded = false;
     final backend = FakeBackend({
-      'GET /api/videos': (_) => json([]),
+      'GET /api/videos': (_) => json(uploaded ? [video('uploading')] : []),
+      'GET /api/videos/7': (_) => json(video('uploading')),
       'GET /api/cases': (_) => json({
         'items': [case3()],
       }),
@@ -221,13 +225,22 @@ void main() {
     await pumpApp(tester, backend, '/videos');
     expect(find.text('아직 올라온 영상이 없습니다'), findsNothing);
     expect(find.text('사건 1건'), findsOneWidget); // 제목은 줄 수다
-    expect(find.text('업로드 중'), findsOneWidget);
+    expect(find.text('업로드 대기'), findsOneWidget);
     expect(find.text('parking_admin'), findsOneWidget);
 
-    await tester.tap(find.text('업로드 중'));
+    await tester.tap(find.text('업로드 대기'));
     await settle(tester);
     expect(find.text('CCTV 영상 올리기'), findsNothing);
-    expect(find.text('업로드 중'), findsOneWidget);
+    expect(find.text('관리자가 영상을 올리기를 기다리고 있습니다.'), findsOneWidget);
+    expect(find.byType(BigSpinner), findsNothing);
+    expect(find.text('01 업로드 중'), findsOneWidget);
+
+    // 관리자가 업로드를 시작하면 다음 조회에서 그 영상의 상태 화면으로 간다
+    uploaded = true;
+    await tester.pump(pollInterval);
+    await settle(tester);
+    expect(find.text('관리자가 영상을 올리고 있습니다.'), findsOneWidget);
+    await unmount(tester);
   });
 
   testWidgets('피해자는 알림에서 초대를 수락하면 그 사건 영상이 목록에 보인다 (2.11, D-233)', (tester) async {
@@ -1080,8 +1093,16 @@ void main() {
     await tester.enterText(find.byKey(const Key('supervision-pledge')), '본인은 서약합니다');
     await tester.pump();
     expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '동의하고 열람')).onPressed, isNull);
+    // 문장이 다르면 엔터를 눌러도 창이 그대로다
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(find.text('피해자와 함께 열람하고, 함께 고정합니다'), findsOneWidget);
 
-    await agreeSupervision(tester);
+    // 문장이 맞으면 엔터가 [동의하고 열람]과 같다
+    await tester.enterText(find.byKey(const Key('supervision-pledge')), supervisionPledge);
+    await tester.pump();
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await settle(tester);
     expect(backend.calls, contains('POST /api/videos/7/viewing-agreement'));
     expect(find.text('점수: 87'), findsOneWidget);
   });
@@ -1285,19 +1306,20 @@ void main() {
             'clip_url': 'http://x/1187.mp4',
           },
         ],
-        'lists': lists(),
+        'lists': lists(mainUnavailable: 1),
       }),
       'GET /api/videos/7/pin': (_) => json([]),
       'POST /api/videos/7/pin': (_) => json([pinned1187()]),
     });
     await pumpApp(tester, backend, '/videos/7/candidates');
     expect(find.text('점수: 87'), findsOneWidget);
-    expect(find.text('후보 10'), findsOneWidget);
-    expect(find.text('점수 미산출 (0)'), findsOneWidget);
+    expect(find.text('후보 12'), findsOneWidget); // 전체 후보 수: 이 묶음 카드 1 + 열람 불가 1 + 남은 10 (C-20)
+    expect(find.text('점수 미산출 0'), findsOneWidget);
     expect(find.text('2026-11-19 10:00까지 열람 가능'), findsOneWidget); // 제목 위 작은 글자 (캔버스 2.7)
     // 점수 미산출 옆 연한 글자. 누를 수 없다
     expect(find.text('볼 수 없는 후보 1'), findsOneWidget);
     expect(find.ancestor(of: find.text('볼 수 없는 후보 1'), matching: find.byType(InkWell)), findsNothing);
+    expect(find.byTooltip(unavailableTooltip), findsOneWidget); // 마우스를 올리면 안내
     expect(find.text('다음'), findsOneWidget); // 새 묶음을 받는 버튼도 이름은 [다음 ▶] (D-190)
     expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '확인 끝내기')).onPressed, isNull); // 늘 보이지만 막힘
 
@@ -1305,7 +1327,13 @@ void main() {
     await settle(tester);
     expect(find.byType(AlertDialog), findsNothing); // 확인창 없이 바로 고정 (D-190)
     expect(find.text('확정됨'), findsOneWidget);
-    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '확인 끝내기')).onPressed, isNotNull);
+    // 고정 뒤에는 확인창이 뜨고 맨 위에 고정한 장면 수를 보인다
+    await tester.tap(find.widgetWithText(FilledButton, '확인 끝내기'));
+    await settle(tester);
+    expect(find.text('확인을 종료할까요?'), findsOneWidget);
+    expect(find.textContaining('고정한 장면 1개', findRichText: true), findsOneWidget);
+    await tester.tap(find.widgetWithText(OutlinedButton, '취소'));
+    await settle(tester);
     expect(backend.calls, contains('POST /api/videos/7/pin'));
   });
 
@@ -1343,6 +1371,49 @@ void main() {
     await unmount(tester);
   });
 
+  testWidgets('[다음 ▶]으로 다른 묶음을 열면 화면이 맨 위로 올라간다 (2.7)', (tester) async {
+    Map<String, Object?> page(int no) => {
+      'list': 'main',
+      'batch_no': no,
+      'unavailable': 0,
+      'candidates': [
+        for (var i = 1; i <= 10; i++)
+          {
+            'candidate_clip_id': no * 100 + i,
+            'rank': (no - 1) * 10 + i,
+            'vlm_score': 90 - i,
+            'start_sec': 100.0 * i,
+            'end_sec': 100.0 * i + 30,
+            'clip_url': 'http://x/$no-$i.mp4',
+          },
+      ],
+      'lists': {
+        'main': {'latest_batch_no': 2, 'remaining': 0, 'done': false, 'unavailable': 0},
+        'parse_failed': {'latest_batch_no': null, 'remaining': 0, 'done': true, 'unavailable': 0},
+      },
+    };
+    final backend = FakeBackend({
+      'GET /api/videos/7': (_) => json(video('ready')),
+      'GET /api/videos/7/batch': (req) => json(page(int.parse(req.url.queryParameters['batch_no'] ?? '1'))),
+      'GET /api/videos/7/pin': (_) => json([]),
+    });
+    await pumpApp(tester, backend, '/videos/7/candidates');
+    expect(find.text('묶음 1 / 2'), findsOneWidget);
+
+    // 아래로 내려 [다음 ▶]을 누르면 맨 위에서 다음 묶음을 본다
+    ScrollPosition position() =>
+        tester.state<ScrollableState>(find.ancestor(of: find.text('묶음 1 / 2'), matching: find.byType(Scrollable)).first).position;
+    final pos = position();
+    pos.jumpTo(pos.maxScrollExtent);
+    await tester.pump();
+    expect(pos.pixels, greaterThan(0));
+    await tester.tap(find.widgetWithText(OutlinedButton, '다음'));
+    await settle(tester);
+    expect(find.text('묶음 2 / 2'), findsOneWidget);
+    expect(pos.pixels, 0);
+    await unmount(tester);
+  });
+
   testWidgets('전부 열람 불가로 두 탭이 끝났으면 [다음 ▶]으로 확인창 뒤 끝낸다 (2.7, D-203)', (tester) async {
     final done = {
       'main': {'latest_batch_no': 1, 'remaining': 0, 'done': true, 'unavailable': 3},
@@ -1361,7 +1432,7 @@ void main() {
       'POST /api/videos/7/batch/next': (_) => json({'status': 'exhausted', 'lists': done}),
     });
     await pumpApp(tester, backend, '/videos/7/candidates');
-    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '확인 끝내기')).onPressed, isNull);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '확인 끝내기')).onPressed, isNull); // 늘 보이지만 막힘
 
     await tester.tap(find.widgetWithText(OutlinedButton, '다음'));
     await settle(tester);
