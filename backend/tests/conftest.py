@@ -25,7 +25,8 @@ STORAGE = Path(os.environ.setdefault("LOCAL_STORAGE_DIR", tempfile.mkdtemp(prefi
 BACKEND = Path(__file__).resolve().parent.parent
 TABLES = (
     "users, sessions, cases, upload_agreements, viewing_agreements, videos, analysis_jobs, still_frames, "
-    "vehicle_selections, damage_inputs, candidates, candidate_clips, pinned_incidents, access_logs, chat_messages, chat_reads"
+    "vehicle_selections, damage_inputs, candidates, candidate_clips, pinned_incidents, access_logs, chat_messages, chat_reads, "
+    "kakao_pending, push_subscriptions, push_events"
 )
 
 
