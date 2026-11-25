@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     sqs_queue_url: str = ""
     gpu_instance_id: str = ""
     requeue_after_minutes: int = 10  # 멈춘 작업 재전송 기준 시간 (D-153)
+    # 웹 푸시 (D-348). 셋 중 하나라도 비면 보내지 않고 39번은 null을 준다
+    vapid_private_key: str = ""
+    vapid_public_key: str = ""
+    vapid_subject: str = ""
 
     @model_validator(mode="after")
     def _check_mode_keys(self) -> Self:

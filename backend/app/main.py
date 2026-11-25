@@ -3,7 +3,19 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app import auth, batches, cases, chats, inputs, local_routes, pins, retry, uploads, videos
+from app import (
+    auth,
+    batches,
+    cases,
+    chats,
+    inputs,
+    local_routes,
+    pins,
+    push,
+    retry,
+    uploads,
+    videos,
+)
 from app.config import get_settings
 from app.errors import install_error_handlers
 from app.log_filter import install_log_filter
@@ -26,6 +38,7 @@ def create_app() -> FastAPI:
     app.include_router(batches.router)
     app.include_router(pins.router)
     app.include_router(retry.router)
+    app.include_router(push.router)
     if settings.app_mode == "local":  # 배포 서버에는 로컬 파일 경로를 열지 않는다 (D-158)
         app.include_router(local_routes.router)
         app.add_middleware(local_routes.LocalCors)
