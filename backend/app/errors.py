@@ -13,20 +13,23 @@ _CODE_BY_STATUS = {
 
 
 class ApiError(Exception):
-    def __init__(self, status: int, code: str, message: str):
+    def __init__(self, status: int, code: str, message: str, headers: dict | None = None):
         self.status = status
         self.code = code
         self.message = message
+        self.headers = headers
 
 
-def _body(status: int, code: str, message: str) -> JSONResponse:
-    return JSONResponse({"error": {"code": code, "message": message}}, status_code=status)
+def _body(status: int, code: str, message: str, headers: dict | None = None) -> JSONResponse:
+    return JSONResponse(
+        {"error": {"code": code, "message": message}}, status_code=status, headers=headers
+    )
 
 
 def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApiError)
     def _api_error(_: Request, exc: ApiError):
-        return _body(exc.status, exc.code, exc.message)
+        return _body(exc.status, exc.code, exc.message, exc.headers)
 
     @app.exception_handler(StarletteHTTPException)
     def _http_error(_: Request, exc: StarletteHTTPException):

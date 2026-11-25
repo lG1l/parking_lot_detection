@@ -55,6 +55,13 @@ def _clean_tables(_database):
 
 
 @pytest.fixture(autouse=True)
+def _reset_rate_limit():
+    from app import rate_limit
+
+    rate_limit.reset()
+
+
+@pytest.fixture(autouse=True)
 def _clean_storage():
     yield
     for child in STORAGE.iterdir():

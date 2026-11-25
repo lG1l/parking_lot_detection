@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     sqs_queue_url: str = ""
     gpu_instance_id: str = ""
     requeue_after_minutes: int = 10  # 멈춘 작업 재전송 기준 시간 (D-153)
+    # 카카오 인증 (D-346). 셋 중 하나라도 비면 가입 시작(35번)이 503을 준다
+    kakao_rest_api_key: str = ""
+    kakao_client_secret: str = ""
+    kakao_redirect_uri: str = ""
     # 웹 푸시 (D-348). 셋 중 하나라도 비면 보내지 않고 39번은 null을 준다
     vapid_private_key: str = ""
     vapid_public_key: str = ""

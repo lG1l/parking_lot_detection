@@ -50,6 +50,12 @@ def delete_old_agreements() -> None:
         )
 
 
+def delete_expired_kakao_pending() -> None:
+    """카카오 인증을 마치지 않고 10분이 지난 대기 행을 지운다. 비밀번호 해시가 들어 있다 (D-346)."""
+    with get_engine().begin() as conn:
+        conn.execute(text("DELETE FROM kakao_pending WHERE expires_at <= now()"))
+
+
 def delete_old_chat_messages() -> None:
     """보낸 지 30일이 지난 채팅 메시지를 지운다 (D-288)."""
     with get_engine().begin() as conn:
@@ -151,6 +157,7 @@ def run() -> None:
             _safely(mark_expired)
             _safely(delete_old_agreements)
             _safely(delete_old_chat_messages)
+            _safely(delete_expired_kakao_pending)
         if last_push is None or now - last_push >= PUSH_SECONDS:
             last_push = now
             _safely(push.send_pending)
