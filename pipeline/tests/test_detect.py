@@ -17,10 +17,10 @@ def test_box_becomes_original_pixels_rounded_outward():
 
 def test_threshold_differs_by_class():
     box = [10, 10, 30, 30]
-    raw = [_raw(0, 0.19, box), _raw(0, 0.20, box), _raw(1, 0.19, box), _raw(1, 0.20, box)]
+    raw = [_raw(0, 0.19, box), _raw(0, 0.20, box), _raw(1, 0.09, box), _raw(1, 0.10, box)]
     dets = to_dets(raw, CROP)
     # 같은 자리여도 클래스가 다르면 합치지 않는다
-    assert [(det["cls"], det["conf"]) for det in dets] == [("face", 0.2), ("plate", 0.2)]
+    assert [(det["cls"], det["conf"]) for det in dets] == [("face", 0.2), ("plate", 0.1)]
 
 
 def test_box_is_cut_at_crop_edge_and_dropped_when_outside():
