@@ -33,3 +33,19 @@ def test_aws_requires_aws_keys():
 
 def test_local_ok():
     assert make(app_mode="local", database_url=DB, local_url_secret="a" * 64).app_mode == "local"
+
+
+AWS = {
+    "app_mode": "aws",
+    "database_url": DB,
+    "aws_region": "ap-northeast-2",
+    "s3_bucket_prefix": "p",
+    "sqs_queue_url": "q",
+    "gpu_instance_id": "i",
+}
+
+
+def test_aws_requires_long_origin_secret():
+    with pytest.raises(ValidationError):
+        make(**AWS, origin_verify_secret="short")
+    assert make(**AWS, origin_verify_secret="a" * 32).app_mode == "aws"

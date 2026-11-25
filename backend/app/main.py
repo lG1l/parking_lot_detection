@@ -11,6 +11,7 @@ from app import (
     inputs,
     kakao,
     local_routes,
+    origin_guard,
     pins,
     push,
     retry,
@@ -44,6 +45,8 @@ def create_app() -> FastAPI:
     if settings.app_mode == "local":  # 배포 서버에는 로컬 파일 경로를 열지 않는다 (D-158)
         app.include_router(local_routes.router)
         app.add_middleware(local_routes.LocalCors)
+    else:  # CloudFront를 거치지 않은 요청은 화면·API·채팅 모두 막는다 (D-340)
+        app.add_middleware(origin_guard.OriginGuard, secret=settings.origin_verify_secret)
 
     @app.get("/api/health")
     def health():

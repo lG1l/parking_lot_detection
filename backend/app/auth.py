@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from app import access_log, chat_hub, rate_limit
+from app.config import get_settings
 from app.db import get_engine
 from app.errors import ApiError
 from app.security import dummy_hash, new_token, token_hash, verify_password
@@ -66,6 +67,11 @@ def current_victim(request: Request) -> dict:
     return user
 
 
+def cookie_secure() -> bool:
+    """배포는 CloudFront가 HTTPS를 맡으므로 Secure를 켠다. 로컬은 HTTP라 끈다 (D-340)."""
+    return get_settings().app_mode == "aws"
+
+
 def start_session(request: Request, response: Response, user_id: int) -> None:
     """세션 행을 만들고 sid 쿠키를 내린다. 로그인과 카카오 가입(36번)이 같이 쓴다."""
     token = new_token()
@@ -79,9 +85,14 @@ def start_session(request: Request, response: Response, user_id: int) -> None:
         )
     access_log.write_access_log(access_log.LOGIN, request, user_id=user_id)
 
-    # Secure는 HTTPS가 없어 켜지 않는다 (D-31, D-60)
     response.set_cookie(
-        COOKIE_NAME, token, max_age=COOKIE_MAX_AGE, path="/", httponly=True, samesite="lax"
+        COOKIE_NAME,
+        token,
+        max_age=COOKIE_MAX_AGE,
+        path="/",
+        httponly=True,
+        secure=cookie_secure(),
+        samesite="lax",
     )
 
 
@@ -120,7 +131,9 @@ def logout(request: Request):
         # 열린 탭에 메시지가 더 가지 않게 그 세션의 채팅 연결을 닫는다 (D-290)
         chat_hub.close_session_from_thread(token_hash(sid))
     response = Response(status_code=204)
-    response.delete_cookie(COOKIE_NAME, path="/", httponly=True, samesite="lax")
+    response.delete_cookie(
+        COOKIE_NAME, path="/", httponly=True, secure=cookie_secure(), samesite="lax"
+    )
     return response
 
 

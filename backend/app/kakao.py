@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import text
 
 from app import access_log, rate_limit
-from app.auth import start_session
+from app.auth import cookie_secure, start_session
 from app.config import get_settings
 from app.db import get_engine
 from app.errors import ApiError
@@ -106,13 +106,13 @@ def signup_start(body: SignupBody, request: Request, response: Response):
                 "m": PENDING_MINUTES,
             },
         )
-    # Secure는 sid와 같은 규칙이다. HTTPS가 없어 아직 켜지 않는다 (D-340)
     response.set_cookie(
         STATE_COOKIE,
         state,
         max_age=PENDING_MINUTES * 60,
         path=STATE_COOKIE_PATH,
         httponly=True,
+        secure=cookie_secure(),  # sid와 같은 규칙 (D-340)
         samesite="lax",
     )
     return {"authorize_url": authorize_url(state)}
@@ -165,7 +165,13 @@ def kakao_user_id(code: str) -> int | None:
 
 def _redirect(url: str) -> RedirectResponse:
     response = RedirectResponse(url, status_code=302)
-    response.delete_cookie(STATE_COOKIE, path=STATE_COOKIE_PATH, httponly=True, samesite="lax")
+    response.delete_cookie(
+        STATE_COOKIE,
+        path=STATE_COOKIE_PATH,
+        httponly=True,
+        secure=cookie_secure(),
+        samesite="lax",
+    )
     return response
 
 

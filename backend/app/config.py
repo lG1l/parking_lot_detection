@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     vapid_private_key: str = ""
     vapid_public_key: str = ""
     vapid_subject: str = ""
+    # CloudFront가 원본 요청에 붙이는 비밀 헤더 X-Origin-Verify 값 (D-340). aws일 때 필수
+    origin_verify_secret: str = ""
 
     @model_validator(mode="after")
     def _check_mode_keys(self) -> Self:
@@ -36,6 +38,8 @@ class Settings(BaseSettings):
             for key in ("aws_region", "s3_bucket_prefix", "sqs_queue_url", "gpu_instance_id"):
                 if not getattr(self, key):
                     raise ValueError(f"{key.upper()} is required in aws mode")
+            if len(self.origin_verify_secret) < 32:
+                raise ValueError("ORIGIN_VERIFY_SECRET must be at least 32 characters in aws mode")
         return self
 
 

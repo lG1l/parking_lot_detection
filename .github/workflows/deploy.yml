@@ -44,6 +44,7 @@ jobs:
           S3_BUCKET_PREFIX: ${{ secrets.S3_BUCKET_PREFIX }}
           SQS_QUEUE_URL: ${{ secrets.SQS_QUEUE_URL }}
           GPU_INSTANCE_ID: ${{ secrets.GPU_INSTANCE_ID }}
+          ORIGIN_VERIFY_SECRET: ${{ secrets.ORIGIN_VERIFY_SECRET }}
         run: |
           {
             echo "APP_MODE=aws"
@@ -52,6 +53,7 @@ jobs:
             echo "S3_BUCKET_PREFIX=$S3_BUCKET_PREFIX"
             echo "SQS_QUEUE_URL=$SQS_QUEUE_URL"
             echo "GPU_INSTANCE_ID=$GPU_INSTANCE_ID"
+            echo "ORIGIN_VERIFY_SECRET=$ORIGIN_VERIFY_SECRET"
           } | ssh backend 'umask 077 && cat > /home/ubuntu/app/backend/.env'
 
       - name: 갱신 스크립트 실행
