@@ -190,7 +190,7 @@
 
 | KPI | 연결된 핵심 목표 | 데이터셋 |
 |---|---|---|
-| 비식별화 누락률 | 우선순위 1 개인정보 보호 | AI Hub 공공데이터 (얼굴·사람 / 번호판 따로) ⚠️ |
+| 비식별화 누락률 | 우선순위 1 개인정보 보호 | 사람: AI Hub 공공데이터 ⚠️ / 번호판: AGH Parking Database (AI Hub 보조) |
 | 사고 클립 후보 검출 누락률 | 우선순위 3 시점 미상 대응 | Kaggle RC카 뺑소니 데이터셋 |
 | VLM 정렬 품질 (AUC) | 우선순위 4 후보순 정렬 | Kaggle RC카 뺑소니 데이터셋 |
 
@@ -210,10 +210,10 @@
 - 사람과 번호판이 한 프레임에 함께 라벨링된 데이터셋이 없어 따로 측정한다. 비식별화는 프레임 단위로 처리하므로 분리 측정해도 유효하다. 목표 판정은 두 결과의 정답 bbox를 합쳐 계산한다.
 - 데이터셋 (AI Hub는 내국인만 신청 가능)
   - 사람: [AI Hub 유동 인구 분석을 위한 CCTV 영상 데이터](https://aihub.or.kr/aihubdata/data/view.do?currMenu=115&topMenu=100&aihubDataSe=realm&dataSetSn=489) — 국내 CCTV mp4(FHD, 3fps, 3분 클립 6,600개), 사람 bbox JSON
-  - 번호판: [AI Hub 자동차 차종/연식/번호판 인식용 영상](https://aihub.or.kr/aihubdata/data/view.do?currMenu=115&topMenu=100&aihubDataSe=data&dataSetSn=172) — 주차장 포함 국내 CCTV, 한국 번호판. 기본 제공은 크롭 이미지이며 v1.2에서 원본 이미지가 추가됐다. 원본 이미지 기준 번호판 좌표가 없으면 크롭 이미지로는 측정할 수 없으므로 [Kaggle Car License Plate Detection](https://www.kaggle.com/datasets/andrewmvd/car-plate-detection)(전체 이미지 433장, 번호판 bbox, 해외 번호판)으로 대체한다.
-  - 번호판(AI Hub 좌표가 없을 때의 대체): [AGH Parking Database](https://qoe.agh.edu.pl/parking-database/) — 폴란드 AGH 대학이 주차장 카메라로 찍은 번호판 인식용 영상과 영상별 번호판 4점 정답 좌표. 폴더 3개(`annotated_frames` 프레임 이미지, `annotations` 좌표 txt, `annotationsVideos` 주석 영상)를 [Google Drive](https://drive.google.com/drive/folders/1HJD6VGWXz8b27TlEtH9588fVNCwpmP0q)에서 받았다. 연구용 무료이며 페이지와 논문(Leszczuk 외, 2011; 좌표는 Leszczuk 외, Electronics 12(23), 2023)을 인용하는 조건이다. 폴란드 번호판이고, 평가에만 쓴다.
-    - 좌표 파일 읽는 법: 한 줄이 프레임 한 장이다. `이미지번호.jpg X1 Y1 X2 Y2 X3 Y3 X4 Y4` 순서로 공백으로 나뉘고 값은 픽셀이다. 점은 번호판의 왼쪽 위(1), 오른쪽 위(2), 오른쪽 아래(3), 왼쪽 아래(4) 순서다. 예: `1.jpg 511 137 582 136 582 154 512 154`는 1번 프레임의 번호판이 약 71×18px이라는 뜻이다. 우리 평가는 사각형(bbox)을 쓰므로 네 점의 x·y 최솟값과 최댓값으로 바꿔 쓴다.
-  - ⚠️ 확인 필요: AI Hub 번호판 데이터셋 v1.2 원본 이미지에 원본 기준 번호판 좌표가 있는지 확인한다.
+  - 번호판(평가용, D-348): [AGH Parking Database](https://qoe.agh.edu.pl/parking-database/) — 폴란드 AGH 대학이 주차장 카메라로 찍은 번호판 인식용 영상과 영상별 번호판 4점 정답 좌표. 폴더 3개(`annotated_frames` 프레임 이미지, `annotations` 좌표 txt, `annotationsVideos` 주석 영상)를 [Google Drive](https://drive.google.com/drive/folders/1HJD6VGWXz8b27TlEtH9588fVNCwpmP0q)에서 받았다. 연구용 무료이며 페이지와 논문(Leszczuk 외, 2011; 좌표는 Leszczuk 외, Electronics 12(23), 2023)을 인용하는 조건이다. 폴란드 번호판이고, 평가에만 쓴다. 영상 22개, 약 15,500프레임이며 **프레임마다 목표 차량의 번호판 1개만 정답에 있다** (한계는 09장 9.6).
+    - 좌표 파일 읽는 법: 한 줄이 프레임 한 장이다. `이미지번호.jpg X1 Y1 X2 Y2 X3 Y3 X4 Y4` 순서로 공백으로 나뉘고 값은 픽셀이다. 점은 번호판의 왼쪽 위(1), 오른쪽 위(2), 오른쪽 아래(3), 왼쪽 아래(4) 순서다. 예: `1.jpg 511 137 582 136 582 154 512 154`는 1번 프레임의 번호판이 약 71×18px이라는 뜻이다. 우리 평가는 사각형(bbox)을 쓰므로 네 점의 x·y 최솟값과 최댓값으로 바꿔 쓴다. 좌표가 모두 0인 프레임(완전히 가려짐)은 넣지 않는다.
+  - 번호판(보조, AGH로 측정할 수 없을 때): [AI Hub 자동차 차종/연식/번호판 인식용 영상](https://aihub.or.kr/aihubdata/data/view.do?currMenu=115&topMenu=100&aihubDataSe=data&dataSetSn=172) — 주차장 포함 국내 CCTV, 한국 번호판. 기본 제공은 크롭 이미지이며 v1.2에서 원본 이미지가 추가됐다. 원본 이미지 기준 번호판 좌표가 없으면 크롭 이미지로는 측정할 수 없으므로 [Kaggle Car License Plate Detection](https://www.kaggle.com/datasets/andrewmvd/car-plate-detection)(전체 이미지 433장, 번호판 bbox, 해외 번호판)으로 대체한다.
+  - ⚠️ 확인 필요: AGH 데이터를 받은 뒤 영상별 서로 다른 차량 수와 해상도를 센다. AI Hub 번호판(보조)을 쓰게 되면 v1.2 원본 이미지에 원본 기준 번호판 좌표가 있는지 확인한다.
   - ⚠️ 확인 필요: 사람 데이터셋에 **얼굴** bbox 라벨이 있는지 확인한다. 없으면 위의 "얼굴 라벨이 없는 경우" 방식으로 잰다. 다른 얼굴 데이터셋을 쓸지는 팀장이 다시 살펴본다.
 
 **2. 사고 클립 후보 검출 누락률**
