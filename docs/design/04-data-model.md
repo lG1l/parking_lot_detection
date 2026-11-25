@@ -46,7 +46,7 @@
 DB는 백엔드 EC2의 PostgreSQL이다. 백엔드와 GPU 워커가 같은 DB에 접속한다. (D-17)
 
 ```
-users ──┬──< sessions        (로그인 세션)
+users ──┬──< sessions ──< push_subscriptions   (로그인 세션, 웹 푸시 구독 D-348)
         │
         ├──< cases     (관리자 1 + 피해자 1, D-204)
         │       │
@@ -62,6 +62,7 @@ kakao_pending                 (카카오 인증 대기: 가입·비밀번호 바
 
 videos ──┬── upload_agreements  (위탁계약 동의 D-147)
         ├──< viewing_agreements  (관리·감독 안내 동의, D-204)
+        ├──< push_events         (웹 푸시 보낸 기록, D-348)
         └──1:1── analysis_jobs
                                   │
                                   ├──  still_frames        (정지 장면 1장, 마스킹본)
@@ -141,6 +142,23 @@ videos ──┬── upload_agreements  (위탁계약 동의 D-147)
 
 - 콜백(36번)은 `state`가 맞으면 행을 **먼저 지우고** 진행한다. 같은 `state`로 두 번 쓸 수 없다.
 - 만료된 행을 지우는 정리 작업은 두지 않는다 (`sessions`와 같다).
+
+### push_subscriptions
+
+브라우저 하나가 "알림 허용"을 눌러 만든 웹 푸시 구독. 로그인 세션에 붙는다. (D-348)
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `id` | bigserial PK | |
+| `session_id` | bigint FK → sessions | 이 구독을 등록한 세션. 세션이 지워지면(로그아웃, 비밀번호 바꾸기 D-347) 함께 지워진다 |
+| `endpoint` | text UNIQUE | 푸시를 보낼 주소. 브라우저마다 하나다. 알려진 푸시 서버 주소만 받는다 (08장) |
+| `p256dh` | text | 브라우저 공개 키. 알림 내용을 암호화하는 데 쓴다 (RFC 8291) |
+| `auth` | text | 브라우저가 만든 인증용 비밀값. 암호화에 함께 쓴다 |
+| `created_at` | timestamptz | 등록하거나 새 세션으로 옮긴 시각 |
+
+- 같은 `endpoint`가 다시 오면 새 행을 만들지 않고 `session_id`를 지금 세션으로 바꾼다. 같은 브라우저에서 다시 로그인한 경우다.
+- 보낼 때는 `sessions.expires_at > now()`인 세션의 구독만 쓴다. 만료된 세션을 지우는 정리 작업이 없기 때문이다 (sessions 참고).
+- 푸시 서버가 404·410을 돌려주면 행을 지운다. 사용자가 브라우저에서 알림을 끈 경우다.
 
 ### cases
 
@@ -498,6 +516,21 @@ ROI 안에서 움직임이 있던 시간대를 자른 클립 하나 (D-245). 2�
 
 - 행이 없으면 하나도 읽지 않은 것이다.
 - `last_read_message_id`에는 FK를 걸지 않는다. 가리키는 메시지가 30일 뒤 지워져도(D-288) 읽은 위치는 남아야 한다.
+
+### push_events
+
+주기 작업이 보낸 웹 푸시 하나. 같은 일을 두 번 보내지 않기 위해 둔다. (D-348)
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `video_id` | bigint FK → videos | 어느 영상의 일인가 |
+| `kind` | text | `done`(분석 완료), `failed`(분석 실패), `upload_unconfirmed`(업로드 확인 안 됨) |
+| `event_at` | timestamptz | 그 일의 시각. `done`은 `analysis_jobs.stage2_ended_at`, `failed`는 `analysis_jobs.status_changed_at`, `upload_unconfirmed`는 `videos.created_at` + 30분 |
+| `sent_at` | timestamptz | 보낸 시각 |
+
+- PK는 `(video_id, kind, event_at)`이다. 주기 작업은 행을 먼저 넣고(`ON CONFLICT DO NOTHING`), 넣었을 때만 보낸다.
+- 재시도(전이 16) 뒤 다시 실패하면 `status_changed_at`이 달라 새 행이 된다. 묶음 [다음]으로 `ready`가 반복되어도 `stage2_ended_at`은 그대로라 다시 보내지 않는다.
+- 주기 작업은 `event_at`이 10분 안인 일만 찾는다. 서버를 다시 켰을 때 지난 일이 한꺼번에 나가지 않게 하기 위해서다.
 
 ### access_logs
 
@@ -897,6 +930,15 @@ CREATE TABLE kakao_pending (                 -- D-346, D-347
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE push_subscriptions (            -- D-348
+  id         bigserial PRIMARY KEY,
+  session_id bigint      NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  endpoint   text        NOT NULL UNIQUE,
+  p256dh     text        NOT NULL,
+  auth       text        NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE cases (                         -- D-204
   id             bigserial PRIMARY KEY,
   admin_user_id  bigint      NOT NULL REFERENCES users(id),
@@ -1045,6 +1087,14 @@ CREATE TABLE chat_reads (                    -- D-289
   PRIMARY KEY (user_id, peer_user_id)
 );
 
+CREATE TABLE push_events (                   -- D-348
+  video_id bigint      NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  kind     text        NOT NULL,             -- done | failed | upload_unconfirmed
+  event_at timestamptz NOT NULL,
+  sent_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (video_id, kind, event_at)
+);
+
 -- 법정 기록. 지우지 않는다 (D-53)
 CREATE TABLE access_logs (
   id           bigserial PRIMARY KEY,
@@ -1101,6 +1151,7 @@ CREATE INDEX idx_chat_pair           ON chat_messages (admin_user_id, victim_use
 | `analysis_jobs` 아래 테이블의 FK | 모두 `ON DELETE CASCADE` | 영상 1건을 지울 때 관련 행이 함께 지워진다. S3에서 `videos/{video_id}/` 접두사 하나만 지우면 되는 것(4.9)과 짝이 맞는다 |
 | `videos → cases`, `cases → users` FK | CASCADE를 걸지 **않는다**(기본 동작) | 사용자를 지웠다고 영상과 분석 결과가 사라지면 안 된다. 참조가 남아 있으면 삭제가 거부된다 |
 | `sessions → users` FK | CASCADE를 건다 | 세션은 짧게 살고 만료되는 임시 값이라 계정과 함께 사라져도 된다 (D-30) |
+| `push_subscriptions → sessions`, `push_events → videos` FK | CASCADE를 건다 | 구독은 세션과 함께 끊겨야 한다. 보낸 기록은 영상이 지워지면 필요 없다 (D-348) |
 | `pinned_incidents → candidate_clips` FK | CASCADE를 걸지 **않는다** | 고정한 클립 행만 따로 지워지면 사건 지점이 사라진다. 분석 작업째 지울 때는 위의 CASCADE로 함께 지워진다 (D-32) |
 | `access_logs`의 FK 2개 | `ON DELETE SET NULL` | 법정 기록이라 사용자나 영상이 지워져도 행이 남아야 한다. CASCADE면 함께 지워지고, 기본 동작(RESTRICT)이면 영상을 못 지운다. 둘 다 곤란해서 SET NULL을 쓴다 (D-53) |
 | `updated_at` 갱신 | 트리거를 쓰지 않고 **UPDATE 문에 직접 쓴다** | 상태를 바꾸는 UPDATE는 4.4처럼 `WHERE status = ...`가 붙은 조건부 문장이다. 같은 문장에서 함께 쓰는 편이 읽기 쉽고, 트리거가 숨어서 도는 것보다 추적하기 낫다 |
