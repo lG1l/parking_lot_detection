@@ -41,13 +41,18 @@ resource "aws_security_group" "gpu" {
   vpc_id      = data.aws_vpc.default.id
 }
 
-# 백엔드 인바운드: uvicorn 8000·SSH는 전체, 5432는 GPU 보안 그룹에서만 (D-17, D-133)
+# CloudFront가 원본에 접속할 때 쓰는 IP 대역 (AWS 관리형 prefix list)
+data "aws_ec2_managed_prefix_list" "cloudfront" {
+  name = "com.amazonaws.global.cloudfront.origin-facing"
+}
+
+# 백엔드 인바운드: uvicorn 8000은 CloudFront 대역에서만, SSH는 전체, 5432는 GPU 보안 그룹에서만 (D-17, D-133, D-340)
 resource "aws_vpc_security_group_ingress_rule" "backend_http" {
   security_group_id = aws_security_group.backend.id
   ip_protocol       = "tcp"
   from_port         = 8000
   to_port           = 8000
-  cidr_ipv4         = "0.0.0.0/0"
+  prefix_list_id    = data.aws_ec2_managed_prefix_list.cloudfront.id
 }
 
 resource "aws_vpc_security_group_ingress_rule" "backend_ssh" {
@@ -125,12 +130,12 @@ resource "aws_s3_bucket_lifecycle_configuration" "data" {
   }
 }
 
-# 원본 버킷 CORS: 브라우저가 presigned URL로 S3에 직접 PUT한다. 허용 출처 *는 데모 한정 (D-22, D-100)
+# 원본 버킷 CORS: 브라우저가 presigned URL로 S3에 직접 PUT한다. 허용 출처는 CloudFront 주소 하나 (D-22, D-100, D-340)
 resource "aws_s3_bucket_cors_configuration" "raw" {
   bucket = aws_s3_bucket.data["raw"].id
 
   cors_rule {
-    allowed_origins = ["*"]
+    allowed_origins = ["https://${aws_cloudfront_distribution.main.domain_name}"]
     allowed_methods = ["PUT"]
     allowed_headers = ["Content-Type", "If-None-Match"]
   }
@@ -243,4 +248,67 @@ resource "aws_instance" "gpu" {
 # 백엔드 role의 ec2:StartInstances 대상으로 관리자에게 전달한다 (02장 2.9)
 output "gpu_instance_arn" {
   value = aws_instance.gpu.arn
+}
+
+# 사용자 접속: CloudFront 기본 도메인으로 HTTPS (D-340)
+variable "origin_verify_secret" {
+  description = "CloudFront가 원본 요청에 붙이는 X-Origin-Verify 값. 백엔드 .env의 ORIGIN_VERIFY_SECRET(GitHub Secrets)과 같은 값. terraform.tfvars에만 둔다"
+  type        = string
+  sensitive   = true
+}
+
+resource "aws_cloudfront_distribution" "main" {
+  enabled = true
+
+  # 만들 때만 현재 퍼블릭 DNS를 쓴다. 켤 때마다 바뀌므로 이후에는 update_origin.sh로 바꾼다 (D-339)
+  origin {
+    origin_id   = "backend"
+    domain_name = aws_instance.backend.public_dns
+
+    custom_origin_config {
+      http_port              = 8000
+      https_port             = 443
+      origin_protocol_policy = "http-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+
+    custom_header {
+      name  = "X-Origin-Verify"
+      value = var.origin_verify_secret
+    }
+  }
+
+  # 관리형 정책은 조회 권한 없이 ID로 지정한다
+  default_cache_behavior {
+    target_origin_id         = "backend"
+    viewer_protocol_policy   = "redirect-to-https"
+    allowed_methods          = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    cached_methods           = ["GET", "HEAD"]
+    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # CachingDisabled
+    origin_request_policy_id = "b689b0a8-53d0-40ab-baf2-68738e2966ac" # AllViewerAndCloudFrontHeaders-2022-06
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = true
+  }
+
+  # apply가 원본을 옛 주소로 되돌리지 않게 한다 (D-339)
+  lifecycle {
+    ignore_changes = [origin]
+  }
+}
+
+# update_origin.sh 인자, 카카오 리다이렉트·VAPID 주소에 쓴다
+output "cloudfront_distribution_id" {
+  value = aws_cloudfront_distribution.main.id
+}
+
+output "cloudfront_domain" {
+  value = aws_cloudfront_distribution.main.domain_name
 }
