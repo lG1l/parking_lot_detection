@@ -41,6 +41,9 @@ _MODEL_SCRIPT = "scripts/anonymize.py"
 _MODEL_CONFIG = "dfine_x_1408/config.yml"
 _MODEL_WEIGHTS = "dfine_x_1408/model.pth"
 
+# torch가 가중치 파일에서 텐서만 읽게 하는 환경 변수 (나-2)
+_WEIGHTS_ONLY_ENV = "TORCH_FORCE_WEIGHTS_ONLY_LOAD"
+
 # 모델이 주는 클래스 번호 → 탐지 파일에 쓰는 이름
 CLASS_NAMES = {0: "face", 1: "plate"}
 # 클래스별 임계값. 이 점수보다 낮은 박스는 버린다.
@@ -146,9 +149,6 @@ def load_detector(model_dir: str):
     저자 코드와 torch는 이 함수 안에서만 불러온다. 모델이 없는 곳(CI)에서도
     이 파일의 다른 함수를 불러 쓸 수 있어야 하기 때문이다. 9단계도 이 함수를 불러 쓴다.
     """
-    # 저자 코드는 가중치 파일을 "안에 든 코드까지 실행하는" 방식으로 읽는다.
-    # 이 환경 변수를 켜면 torch가 텐서만 읽는다 (나-2). torch를 불러오기 전에 켠다
-    os.environ["TORCH_FORCE_WEIGHTS_ONLY_LOAD"] = "1"
     import torch
 
     sys.path.insert(0, os.path.join(model_dir, "scripts"))
@@ -161,12 +161,26 @@ def load_detector(model_dir: str):
         device = "mps"
     else:
         device = "cpu"
-    detector = Detector(
-        os.path.join(model_dir, _MODEL_CONFIG),
-        os.path.join(model_dir, _MODEL_WEIGHTS),
-        device,
-        MODEL_INPUT_SIZE,
-    )
+
+    # 저자 코드는 가중치 파일을 "안에 든 코드까지 실행하는" 방식으로 읽는다.
+    # 이 환경 변수를 켜면 torch가 텐서만 읽는다 (나-2). torch는 파일을 읽을 때마다 이 값을 본다.
+    # 모델을 여는 동안만 켜고 원래 값으로 되돌린다. 켜 둔 채로 두면 같은 프로세스에서
+    # 나중에 여는 YOLO 가중치(모델 구조가 함께 든 파일)가 읽히지 않는다 (D-359 가-1)
+    before = os.environ.get(_WEIGHTS_ONLY_ENV)
+    os.environ[_WEIGHTS_ONLY_ENV] = "1"
+    try:
+        detector = Detector(
+            os.path.join(model_dir, _MODEL_CONFIG),
+            os.path.join(model_dir, _MODEL_WEIGHTS),
+            device,
+            MODEL_INPUT_SIZE,
+        )
+    finally:
+        # 여는 데 실패해도 되돌린다
+        if before is None:
+            del os.environ[_WEIGHTS_ONLY_ENV]
+        else:
+            os.environ[_WEIGHTS_ONLY_ENV] = before
     return detector, device
 
 

@@ -47,9 +47,6 @@ CANDIDATES_NAME = "candidates.jsonl"
 DEID_BOXES_NAME = "deid_boxes.jsonl"
 MASK_BOXES_NAME = "mask_boxes.jsonl"
 
-# 비식별화 모델을 여는 함수가 켜는 torch 환경 변수 (deidentify/detect.py의 load_detector)
-WEIGHTS_ONLY_ENV = "TORCH_FORCE_WEIGHTS_ONLY_LOAD"
-
 # 여덟 명령의 진입점이 각자 잡던 오류를 모았다. 이 밖의 오류는 버그라 잡지 않는다
 CHAIN_ERRORS = (
     InputError,
@@ -67,20 +64,9 @@ CHAIN_ERRORS = (
 )
 
 
-def _allow_yolo_load() -> None:
-    """비식별화 모델을 연 뒤에 부른다. 다음에 여는 YOLO 가중치가 읽히게 한다.
-
-    비식별화 모델을 여는 함수(load_detector)는 "텐서만 읽기" 환경 변수를 켜고 끄지 않는다.
-    명령을 따로 돌릴 때는 프로세스가 끝나 문제가 없었지만, 한 프로세스에서 이으면
-    그 뒤에 여는 YOLO 가중치(모델 구조가 함께 든 파일)가 읽히지 않는다.
-    """
-    os.environ.pop(WEIGHTS_ONLY_ENV, None)
-
-
 def run_still_job(video_path: str, weights_path: str, model_dir: str, out_dir: str) -> None:
     """작업 1: 정지 장면. 입력 JSON 없이 돈다 (실제 서비스에서는 입력보다 먼저다)."""
     run_still(video_path, weights_path, model_dir, os.path.join(out_dir, DIR_STILL))
-    _allow_yolo_load()
 
 
 def run_analysis_job(video_path: str, input_path: str, weights_path: str, out_dir: str) -> None:
@@ -127,7 +113,6 @@ def run_masking_job(
     # 기존 명령은 후보 번호를 "1,2,3" 꼴의 글로 받는다
     numbers_text = ",".join(str(n) for n in numbers)
     run_detect(video_path, input_path, candidates_path, model_dir, deid_dir, numbers_text)
-    _allow_yolo_load()
     run_track(video_path, model_dir, boxes_path, mask_boxes_path)
     run_mask(
         video_path,
