@@ -12,6 +12,8 @@ dependencies = [
     "openai>=3.55.1",
     "tensorboard>=2.21.0",
     "faster-coco-eval>=1.8.1",
+    "sqlalchemy>=2.1.9",
+    "psycopg[binary]>=3.3.9",
 ]
 
 [dependency-groups]
