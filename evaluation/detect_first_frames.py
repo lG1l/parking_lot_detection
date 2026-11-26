@@ -1,16 +1,17 @@
-"""평가 영상마다 첫 프레임의 차량 탐지 목록을 만들어 evaluation/kaggle_detections/에 쓴다.
+"""사고 영상(local_storage/evaluation/accident/)마다 첫 프레임의 차량 탐지 목록을 만들어
+evaluation/kaggle_detections/에 쓴다. 비사고 영상(non_accident/)은 탐지하지 않는다.
 
 입력 도구(evaluation/input_tool)가 차량을 고를 때 읽는 파일이다.
 탐지는 9단계 정지 장면(pipeline.still, D-351)과 같은 함수로 하므로 서비스의 탐지 목록과 같다.
 
 파일 이름 규칙
     영상 `<이름>.mp4` → 탐지 목록 `<이름>.json`. 입력 도구가 이 이름으로 영상과 맞춘다.
-    영상 폴더는 하위 폴더까지 찾고, 탐지 목록은 폴더 구분 없이 한 곳에 쓴다.
+    사고 폴더는 하위 폴더까지 찾고, 탐지 목록은 폴더 구분 없이 한 곳에 쓴다.
     그래서 서로 다른 폴더에 같은 이름의 영상이 있으면 아무것도 쓰지 않고 멈춘다.
     이미 탐지 목록이 있는 영상은 건너뛴다. 다시 만들려면 그 json을 지우고 돌린다.
 
 실행 (pipeline/ 폴더에서):
-    uv run python ../evaluation/detect_first_frames.py <영상 폴더> <YOLO 가중치>
+    uv run python ../evaluation/detect_first_frames.py <YOLO 가중치>
 """
 
 import json
@@ -27,7 +28,9 @@ from pipeline.still import (
     sort_left_to_right,
 )
 
-OUT_DIR = Path(__file__).resolve().parent / "kaggle_detections"
+ROOT = Path(__file__).resolve().parent.parent
+VIDEO_DIR = ROOT / "local_storage" / "evaluation" / "accident"
+OUT_DIR = ROOT / "evaluation" / "kaggle_detections"
 
 
 def find_videos(video_dir: Path) -> dict[str, Path]:
@@ -44,10 +47,10 @@ def find_videos(video_dir: Path) -> dict[str, Path]:
     return videos
 
 
-def main(video_dir: str, weights_path: str) -> None:
-    videos = find_videos(Path(video_dir))
+def main(weights_path: str) -> None:
+    videos = find_videos(VIDEO_DIR)
     if not videos:
-        sys.exit(f"오류: 영상 폴더에 .mp4 파일이 없습니다: {video_dir}")
+        sys.exit(f"오류: 사고 폴더에 .mp4 파일이 없습니다: {VIDEO_DIR}")
 
     skipped, empty, failed = 0, [], []
     for name, path in videos.items():
@@ -76,10 +79,10 @@ def main(video_dir: str, weights_path: str) -> None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("사용법: python ../evaluation/detect_first_frames.py <영상 폴더> <YOLO 가중치>")
+    if len(sys.argv) != 2:
+        print("사용법: python ../evaluation/detect_first_frames.py <YOLO 가중치>")
         sys.exit(2)
     try:
-        main(sys.argv[1], sys.argv[2])
+        main(sys.argv[1])
     except StillError as e:  # YOLO 가중치 파일이 없을 때
         sys.exit(f"오류: {e}")
