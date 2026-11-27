@@ -211,7 +211,8 @@ function toJson(inp) {
     damage_edges: inp.edges,
   };
   if (inp.desc.trim()) damage.description = inp.desc.trim(); // 값이 없으면 키를 뺀다 (04장)
-  return { vehicle: { bbox: inp.det.bbox }, damage }; // 고른 탐지의 bbox가 본인 차량 영역이다 (D-65)
+  // 고른 탐지의 bbox가 본인 차량 영역이다 (D-65). det_id는 로컬 입력 파일과 같게 함께 쓴다
+  return { vehicle: { det_id: inp.det.det_id, bbox: inp.det.bbox }, damage };
 }
 function fromJson(data) {
   const det = dets.find((d) => d.bbox.join() === data.vehicle.bbox.join());
